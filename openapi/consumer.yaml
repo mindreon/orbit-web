@@ -1,0 +1,27 @@
+# orbit-web consumes orbit-control's OpenAPI. This file does not define an API.
+# Control owns the spec. W0 does not generate a client or call endpoints.
+
+consumer: orbit-web
+provider: orbit-control
+role: openapi-consumer
+wave: W0
+status: placeholder
+
+spec:
+  repository: https://github.com/mindreon/orbit-control
+  # Control-owned contract. Web must not fork or re-specify these paths.
+  path: openapi/openapi.yaml
+  url: https://github.com/mindreon/orbit-control/blob/main/openapi/openapi.yaml
+  # Optional sibling checkout when both repos are cloned side by side.
+  local: ../orbit-control/openapi/openapi.yaml
+
+forbidden_from_browser:
+  - temporal
+  - llm-sdks
+  - model-provider-direct
+  - any-url-not-in-control-openapi
+
+notes:
+  - Do not generate or wire a client in W0.
+  - Later waves generate types from the control spec only.
+  - The browser never talks to Temporal or LLM runtimes.
