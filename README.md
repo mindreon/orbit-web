@@ -2,7 +2,7 @@
 
 Orbit web UI shell. W0 is **docs + empty navigation** only: no auth, no chat send, no HITL actions, no real API calls.
 
-The browser talks to **orbit-control** only. Temporal and LLM runtimes stay behind control — they are never imported or called from this app.
+The browser talks to **orbit-control** only. Temporal, dsh, and LLM runtimes stay behind control — they are never imported or called from this app.
 
 ## W0 scope
 
@@ -34,4 +34,4 @@ npm run build
 
 ## Non-goals (W0)
 
-Real chat, HITL UI beyond an empty Approvals list stub, design tokens / visual polish, authentication, and any Temporal or LLM SDK in the browser.
+Real chat, HITL UI beyond an empty Approvals list stub, design tokens / visual polish, authentication, and any Temporal, dsh, or LLM SDK in the browser.

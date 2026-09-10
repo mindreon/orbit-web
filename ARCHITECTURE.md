@@ -1,18 +1,29 @@
-# Architecture (W0)
+# Architecture
 
-orbit-web is the Orbit browser shell. It is a **consumer** of orbit-control. It is not an orchestrator, model host, or workflow worker.
+orbit-web is the Orbit browser shell. It is a **consumer** of orbit-control. It is not an orchestrator, model host, workflow worker, or dsh frontend.
+
+## Product surfaces
+
+| Nav | Product | Later behavior (still via control only) |
+| --- | --- | --- |
+| **Rooms** | Super single-agent (`solo`) and multi-agent (`collab`) | Chat, steer, abort, subagent catalog, live WS |
+| **Approvals** | HITL | Decide allow/reject; unread badge from pending count |
+| **Agents** | Personas + **Cloud Agent** jobs | Persona CRUD; Cloud Job cards become runnable in W2 |
+| **Settings** | Secrets metadata, account | Never plaintext secrets; no dsh credential UI |
+
+dsh's own `web` profile is not used. The browser never loads a dsh origin.
 
 ## Boundary
 
 ```
 [ browser: orbit-web ]
-        |  HTTP / future WS  (control OpenAPI only)
+        |  HTTP / WS  (control OpenAPI only)
         v
 [ orbit-control ]
         |  (server-side only)
-        +--> Temporal
-        +--> LLM / model providers
-        +--> other backends
+        +--> Temporal (orbit-orch)
+        +--> worker grants + event ingest
+             (worker hosts dsh --profile acp)
 ```
 
 **Allowed from the browser:** orbit-control endpoints published in control's OpenAPI spec.
@@ -20,7 +31,8 @@ orbit-web is the Orbit browser shell. It is a **consumer** of orbit-control. It 
 **Forbidden from the browser (and from this repo's client bundle):**
 
 - Temporal client / worker / task-queue APIs
-- Direct LLM or model-provider SDKs (OpenAI, Anthropic, Gemini, local runtimes, etc.)
+- Direct LLM or model-provider SDKs
+- dsh web / SDK / ACP endpoints
 - Ad-hoc URLs that skip control
 - Secrets that belong on the control side
 
@@ -32,7 +44,7 @@ Control **owns** the contract. Web **consumes** it.
 
 | Role | Repo | Artifact |
 | --- | --- | --- |
-| Provider | [mindreon/orbit-control](https://github.com/mindreon/orbit-control) | `openapi/openapi.yaml` (control-owned) |
+| Provider | [mindreon/orbit-control](https://github.com/mindreon/orbit-control) | `docs/openapi.yaml` (control-owned) |
 | Consumer | this repo | [`openapi/consumer.yaml`](./openapi/consumer.yaml) |
 
 W0 only **links** that spec (`openapi/consumer.yaml` and `src/lib/control-openapi.ts`). There is no generated client, no `fetch` to control, and no mock business payloads.
@@ -48,10 +60,12 @@ When a later wave needs types, generate them from the control spec. Do not inven
 - Approvals is an empty list plus a nav unread-badge placeholder
 - Agents keeps **Cloud** as its own type (Cloud Job card), not mixed into persona cards
 
+Information architecture: [`docs/ia-w0.md`](./docs/ia-w0.md).
+
 ## Auth
 
 None in W0.
 
 ## What lands in later waves
 
-Chat send, live rooms, HITL actions, Cloud Job (`W2`), settings persistence, and a generated control client. Those features still enter the browser only through orbit-control.
+Chat send, live rooms, collab agent pane, HITL actions, Cloud Job (`W2`), settings persistence, and a generated control client. Those features still enter the browser only through orbit-control.

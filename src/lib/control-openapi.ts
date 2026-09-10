@@ -6,7 +6,7 @@
 export const CONTROL_OPENAPI = {
   provider: "orbit-control",
   repository: "https://github.com/mindreon/orbit-control",
-  specPath: "openapi/openapi.yaml",
+  specPath: "docs/openapi.yaml",
   specUrl:
-    "https://github.com/mindreon/orbit-control/blob/main/openapi/openapi.yaml",
+    "https://github.com/mindreon/orbit-control/blob/main/docs/openapi.yaml",
 } as const;

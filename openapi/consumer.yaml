@@ -10,18 +10,21 @@ status: placeholder
 spec:
   repository: https://github.com/mindreon/orbit-control
   # Control-owned contract. Web must not fork or re-specify these paths.
-  path: openapi/openapi.yaml
-  url: https://github.com/mindreon/orbit-control/blob/main/openapi/openapi.yaml
+  path: docs/openapi.yaml
+  url: https://github.com/mindreon/orbit-control/blob/main/docs/openapi.yaml
   # Optional sibling checkout when both repos are cloned side by side.
-  local: ../orbit-control/openapi/openapi.yaml
+  local: ../orbit-control/docs/openapi.yaml
 
 forbidden_from_browser:
   - temporal
   - llm-sdks
   - model-provider-direct
+  - dsh-web
+  - dsh-sdk
+  - dsh-acp
   - any-url-not-in-control-openapi
 
 notes:
   - Do not generate or wire a client in W0.
   - Later waves generate types from the control spec only.
-  - The browser never talks to Temporal or LLM runtimes.
+  - The browser never talks to Temporal, dsh, or LLM runtimes.
