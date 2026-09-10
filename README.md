@@ -1,24 +1,25 @@
 # orbit-web
 
-Orbit web UI shell. W0 is **docs + empty navigation** only: no auth, no chat send, no HITL actions, no real API calls.
+Orbit web UI. The browser talks to **orbit-control** only (`NEXT_PUBLIC_CONTROL_URL`, default `http://127.0.0.1:8080`). Temporal, dsh, and LLM runtimes stay behind control.
 
-The browser talks to **orbit-control** only. Temporal, dsh, and LLM runtimes stay behind control — they are never imported or called from this app.
+W1 Rooms can create a room, send a turn, subscribe to SSE, and decide HITL approvals. Approvals is a live list of the same records.
 
-## W0 scope
+## Nav
 
-- Locked nav: **Agents / Rooms / Approvals / Settings**
+- Locked destinations: **Agents / Rooms / Approvals / Settings**
 - Default landing: **Rooms**
-- Approvals unread badge is a static placeholder
-- Agents: empty persona region + a separate grey **Cloud Job** card (`「W2」`, disabled, not clickable)
-- Consumer link to the orbit-control OpenAPI spec (no generated client yet)
+- Agents: empty persona region + a separate grey **Cloud Job** card (`「W2」`, disabled)
+- Consumer link to the orbit-control OpenAPI spec
 
 ## Docs
 
 - [ARCHITECTURE.md](./ARCHITECTURE.md) — process boundary and forbidden browser dependencies
-- [docs/ia-w0.md](./docs/ia-w0.md) — wireframe-level information architecture (Aura-aligned, no design tokens)
+- [docs/ia-w0.md](./docs/ia-w0.md) — wireframe-level information architecture
 - [openapi/consumer.yaml](./openapi/consumer.yaml) — OpenAPI consumer declaration
 
 ## Run
+
+Start orbit-worker (`npm run start:host`) and orbit-control first, then:
 
 ```bash
 npm install
@@ -32,6 +33,6 @@ npm run lint
 npm run build
 ```
 
-## Non-goals (W0)
+## Non-goals (W1)
 
-Real chat, HITL UI beyond an empty Approvals list stub, design tokens / visual polish, authentication, and any Temporal, dsh, or LLM SDK in the browser.
+Design tokens / visual polish, authentication, and any Temporal, dsh, or LLM SDK in the browser. Cloud Agent jobs stay a grey card until W2.
