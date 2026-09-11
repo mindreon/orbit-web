@@ -2,10 +2,10 @@ const CAPABILITIES = [
   { name: "对话任务", detail: "Room、历史消息、SSE", status: "可用" },
   { name: "运行策略", detail: "dsh / ACP、进程隔离、权限预设", status: "可用" },
   { name: "审批与审计", detail: "HITL 与执行轨迹", status: "可用" },
-  { name: "Persona / Skill", detail: "版本、发布与执行快照", status: "待补齐" },
-  { name: "企业工具 / MCP", detail: "审核目录与 Cordis 编译", status: "待补齐" },
-  { name: "数据与知识", detail: "连接器、索引和数据权限", status: "待补齐" },
-  { name: "成果物", detail: "文件、报告和来源追踪", status: "待补齐" },
+  { name: "Persona / MCP / Grant", detail: "元数据 API + worker Cordis patch（无密钥落盘）", status: "可用" },
+  { name: "服务间认证 / 环境最小化", detail: "ORBIT_INTERNAL_TOKEN + dsh env allowlist", status: "可用" },
+  { name: "审计持久化 / 会话恢复", detail: "ORBIT_DATA_DIR JSON/JSONL + session checkpoint", status: "可用" },
+  { name: "bwrap 强隔离", detail: "可选 bubblewrap；缺省 process 并标记降级", status: "部分" },
   { name: "Cloud Agent", detail: "clone、执行、push 与 PR", status: "W2" },
 ] as const;
 
