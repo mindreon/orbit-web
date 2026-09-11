@@ -1,8 +1,9 @@
 FROM node:22.19-bookworm-slim
 WORKDIR /app
-COPY package.json package-lock.json tsconfig.json next.config.ts next-env.d.ts postcss.config.mjs ./
+COPY package.json package-lock.json tsconfig.json next.config.ts postcss.config.mjs ./
 COPY src ./src
 # Empty = same-origin through the Caddy edge (recommended for Compose).
+# next-env.d.ts is gitignored; Next generates it during `npm run build`.
 ARG NEXT_PUBLIC_CONTROL_URL=
 ENV NEXT_PUBLIC_CONTROL_URL=$NEXT_PUBLIC_CONTROL_URL
 RUN npm ci && npm run build
