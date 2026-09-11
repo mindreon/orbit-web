@@ -11,6 +11,12 @@ send or steer a turn, subscribe to SSE, inspect the normalized execution
 timeline, and decide HITL approvals. Approvals is a live list of the same
 records.
 
+## Container image
+
+Pushes to `main` publish `ghcr.io/mindreon/orbit-web` (`main`, `latest`, short SHA)
+with same-origin `/v1` baked in for the Caddy edge. `orbit-infra` pulls it by
+configurable `ORBIT_IMAGE_TAG`.
+
 ## Nav
 
 - Locked destinations: **Agents / Rooms / Approvals / Settings**
