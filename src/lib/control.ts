@@ -1,12 +1,21 @@
 export const CONTROL_URL =
   process.env.NEXT_PUBLIC_CONTROL_URL ?? "http://127.0.0.1:8080";
 
+export type PermissionPreset = "workspace-write" | "danger-full-access";
+
 export type Room = {
   id: string;
-  kind: string;
+  kind: "solo" | "collab";
   title: string;
   state: string;
+  permissionPreset: PermissionPreset;
+  runtime: {
+    kernel: "dsh";
+    protocol: "acp";
+    isolation: "process";
+  };
   sessionId?: string;
+  createdAt: string;
 };
 
 export type ChatMessage = {
@@ -26,6 +35,43 @@ export type Approval = {
   decision?: string;
 };
 
+export type ActivityEvent = {
+  id: string;
+  sequence: number;
+  type:
+    | "session.status"
+    | "assistant.message"
+    | "tool.call"
+    | "tool.result"
+    | "approval.asked"
+    | "agent.started"
+    | "agent.finished"
+    | "usage"
+    | "room.steered";
+  roomId: string;
+  sessionId?: string;
+  turnId?: string;
+  source: "control" | "worker";
+  runtime?: "dsh";
+  protocol?: "acp";
+  role?: string;
+  text?: string;
+  toolName?: string;
+  callId?: string;
+  approvalId?: string;
+  approvalRequestId?: string;
+  reason?: string;
+  status?: string;
+  permissionPreset?: PermissionPreset;
+  occurredAt: string;
+};
+
+export type CreateRoomInput = {
+  title: string;
+  kind: "solo" | "collab";
+  permissionPreset: PermissionPreset;
+};
+
 async function api<T>(path: string, init?: RequestInit): Promise<T> {
   const res = await fetch(`${CONTROL_URL}${path}`, {
     ...init,
@@ -41,10 +87,10 @@ async function api<T>(path: string, init?: RequestInit): Promise<T> {
 export const control = {
   health: () => api<{ status: string }>("/health"),
   listRooms: () => api<{ items: Room[] }>("/v1/rooms"),
-  createRoom: (title: string) =>
+  createRoom: (input: CreateRoomInput) =>
     api<Room>("/v1/rooms", {
       method: "POST",
-      body: JSON.stringify({ kind: "solo", title }),
+      body: JSON.stringify(input),
     }),
   getRoom: (id: string) => api<Room>(`/v1/rooms/${id}`),
   listMessages: (id: string) =>
@@ -56,6 +102,13 @@ export const control = {
     }),
   abortRoom: (id: string) =>
     api<{ aborted: boolean }>(`/v1/rooms/${id}/abort`, { method: "POST" }),
+  steerRoom: (id: string, instruction: string) =>
+    api<{ accepted: boolean }>(`/v1/rooms/${id}/steer`, {
+      method: "POST",
+      body: JSON.stringify({ instruction }),
+    }),
+  listActivity: (id: string) =>
+    api<{ items: ActivityEvent[] }>(`/v1/rooms/${id}/activity`),
   listApprovals: () => api<{ items: Approval[] }>("/v1/approvals"),
   decide: (id: string, decision: "allow" | "reject") =>
     api<Approval>(`/v1/approvals/${id}/decide`, {

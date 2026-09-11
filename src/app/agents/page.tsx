@@ -10,8 +10,9 @@ export default function AgentsPage() {
         <h2 id="personas-title" className="mb-3 text-sm font-medium text-zinc-700">
           Personas
         </h2>
-        <div className="rounded-md border border-dashed border-zinc-300 px-4 py-8 text-sm text-zinc-500">
-          Empty. No persona cards in W0.
+        <div className="rounded-xl border border-dashed border-zinc-300 px-4 py-8 text-sm text-zinc-500">
+          Persona 与 Skill 目录尚未接通。后续由 control 管理版本，worker 编译为
+          dsh session composition。
         </div>
       </div>
 
@@ -28,7 +29,7 @@ export default function AgentsPage() {
             <p className="text-sm font-medium text-zinc-600">Cloud Job</p>
             <span className="shrink-0 text-xs text-zinc-500">「W2」</span>
           </div>
-          <p className="mt-2 text-xs">Disabled placeholder. Not clickable.</p>
+          <p className="mt-2 text-xs">等待 clone / run / push / PR 执行链与隔离环境。</p>
         </article>
       </div>
     </section>

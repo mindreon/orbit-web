@@ -13,6 +13,11 @@ orbit-web is the Orbit browser shell. It is a **consumer** of orbit-control. It 
 
 dsh's own `web` profile is not used. The browser never loads a dsh origin.
 
+W1 Rooms expose an explicit runtime snapshot (`dsh` + `acp` + per-session
+process isolation) and a permission preset. The UI sends the selected preset
+to control; it never sets dsh environment variables or writes Cordis patches
+itself.
+
 ## Boundary
 
 ```
@@ -36,7 +41,9 @@ dsh's own `web` profile is not used. The browser never loads a dsh origin.
 - Ad-hoc URLs that skip control
 - Secrets that belong on the control side
 
-W0 does not perform those calls. The rule is documented now so later waves do not grow a second backend from the UI.
+W1 performs live Room, approval, steer, activity-history and SSE calls through
+control only. The rule prevents later waves from growing a second backend from
+the UI.
 
 ## OpenAPI consumer
 
@@ -47,24 +54,27 @@ Control **owns** the contract. Web **consumes** it.
 | Provider | [mindreon/orbit-control](https://github.com/mindreon/orbit-control) | `docs/openapi.yaml` (control-owned) |
 | Consumer | this repo | [`openapi/consumer.yaml`](./openapi/consumer.yaml) |
 
-W0 only **links** that spec (`openapi/consumer.yaml` and `src/lib/control-openapi.ts`). There is no generated client, no `fetch` to control, and no mock business payloads.
+The hand-written W1 client consumes only paths declared in that spec. A later
+wave should generate the types; until then contract changes must update
+control's OpenAPI first.
 
 When a later wave needs types, generate them from the control spec. Do not invent parallel request shapes in the UI.
 
-## App shape (W0)
+## App shape (W1)
 
 - Next.js App Router shell
 - Four locked destinations: Agents, Rooms, Approvals, Settings
 - Default route: Rooms (`/` → `/rooms`)
-- Empty page stubs only; Rooms has no composer / send
-- Approvals is an empty list plus a nav unread-badge placeholder
+- Rooms creates `solo|collab` tasks with a pinned permission preset, sends
+  turns, steers, aborts and renders a normalized execution timeline
+- Approvals lists live HITL records and decides allow-once or reject
 - Agents keeps **Cloud** as its own type (Cloud Job card), not mixed into persona cards
 
 Information architecture: [`docs/ia-w0.md`](./docs/ia-w0.md).
 
 ## Auth
 
-None in W0.
+None in W1. This is not a production authorization boundary.
 
 ## What lands in later waves
 
