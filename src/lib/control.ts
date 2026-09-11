@@ -1,5 +1,14 @@
-export const CONTROL_URL =
-  process.env.NEXT_PUBLIC_CONTROL_URL ?? "http://127.0.0.1:8080";
+/**
+ * Base URL for orbit-control.
+ * - unset → local `next dev` default (control on :8080)
+ * - empty string → same-origin (Compose + Caddy on one port)
+ * - absolute URL → direct control (bypass gateway)
+ */
+export const CONTROL_URL = (() => {
+  const raw = process.env.NEXT_PUBLIC_CONTROL_URL;
+  if (raw === undefined) return "http://127.0.0.1:8080";
+  return raw.replace(/\/$/, "");
+})();
 
 export type PermissionPreset = "workspace-write" | "danger-full-access";
 

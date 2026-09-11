@@ -2,7 +2,8 @@ FROM node:22.19-bookworm-slim
 WORKDIR /app
 COPY package.json package-lock.json tsconfig.json next.config.ts next-env.d.ts postcss.config.mjs ./
 COPY src ./src
-ARG NEXT_PUBLIC_CONTROL_URL=http://localhost:8080
+# Empty = same-origin through the Caddy edge (recommended for Compose).
+ARG NEXT_PUBLIC_CONTROL_URL=
 ENV NEXT_PUBLIC_CONTROL_URL=$NEXT_PUBLIC_CONTROL_URL
 RUN npm ci && npm run build
 ENV NODE_ENV=production

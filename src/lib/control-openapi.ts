@@ -9,5 +9,8 @@ export const CONTROL_OPENAPI = {
   specPath: "docs/openapi.yaml",
   specUrl:
     "https://github.com/mindreon/orbit-control/blob/main/docs/openapi.yaml",
-  runtimeUrl: process.env.NEXT_PUBLIC_CONTROL_URL ?? "http://127.0.0.1:8080",
+  runtimeUrl:
+    process.env.NEXT_PUBLIC_CONTROL_URL === undefined
+      ? "http://127.0.0.1:8080"
+      : process.env.NEXT_PUBLIC_CONTROL_URL.replace(/\/$/, "") || "(same-origin)",
 } as const;
