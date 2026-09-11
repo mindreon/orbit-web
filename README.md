@@ -1,6 +1,10 @@
 # orbit-web
 
-Orbit web UI. The browser talks to **orbit-control** only (`NEXT_PUBLIC_CONTROL_URL`, default `http://127.0.0.1:8080`). Temporal, dsh, and LLM runtimes stay behind control.
+Orbit web UI. The browser talks to **orbit-control** only.
+
+- Local `next dev`: set `NEXT_PUBLIC_CONTROL_URL` (default `http://127.0.0.1:8080`).
+- Compose one-click: leave `NEXT_PUBLIC_CONTROL_URL` empty so the UI uses
+  same-origin `/v1` through the Caddy edge on a single host port.
 
 W1 Rooms can create a `solo|collab` task with a pinned dsh permission preset,
 send or steer a turn, subscribe to SSE, inspect the normalized execution
