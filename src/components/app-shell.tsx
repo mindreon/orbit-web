@@ -1,36 +1,62 @@
+"use client";
+
 import type { ReactNode } from "react";
+import { usePathname } from "next/navigation";
 import { AppNav } from "@/components/app-nav";
 
+/**
+ * Baize-aligned platform shell: cold-gray sidebar + white main.
+ * Rooms uses a fullscreen task shell (no enterprise chrome).
+ */
 export function AppShell({ children }: { children: ReactNode }) {
+  const pathname = usePathname();
+  const isRooms = pathname === "/rooms" || pathname.startsWith("/rooms/");
+
+  if (isRooms) {
+    return (
+      <div className="flex h-dvh min-h-0 flex-col bg-background text-foreground">
+        {children}
+      </div>
+    );
+  }
+
   return (
-    <div className="flex min-h-screen bg-slate-50 text-zinc-900">
-      <aside className="flex w-60 shrink-0 flex-col bg-slate-950 p-4 text-white">
-        <div className="mb-8 rounded-2xl bg-gradient-to-br from-blue-500 to-violet-600 p-4">
-          <p className="text-lg font-semibold tracking-wide">Orbit</p>
-          <p className="mt-1 text-xs text-blue-100">企业 AI 工作台</p>
+    <div className="flex min-h-screen bg-sidebar text-foreground">
+      <aside className="flex w-60 shrink-0 flex-col border-r border-sidebar-border bg-sidebar p-4">
+        <div className="mb-6 px-1">
+          <p className="text-[17px] font-semibold leading-[1.35] text-foreground">
+            Orbit
+          </p>
+          <p className="mt-1 text-xs text-muted-foreground">企业 AI 工作台</p>
         </div>
         <AppNav />
-        <div className="mt-auto rounded-xl border border-white/10 bg-white/5 p-3">
-          <p className="text-xs font-medium text-slate-200">Runtime</p>
-          <p className="mt-1 text-xs text-slate-400">dsh · ACP · process isolation</p>
+        <div className="mt-auto rounded-lg border border-sidebar-border bg-background p-3">
+          <p className="text-xs font-semibold text-foreground">Runtime</p>
+          <p className="mt-1 text-xs text-muted-foreground">
+            dsh · ACP · process isolation
+          </p>
         </div>
       </aside>
-      <div className="min-w-0 flex-1">
-        <header className="flex items-center justify-between border-b border-slate-200 bg-white px-8 py-4">
+      <div className="flex min-w-0 flex-1 flex-col bg-sidebar">
+        <header className="flex h-14 shrink-0 items-center justify-between border-b border-sidebar-border bg-sidebar px-6">
           <div>
-            <p className="text-sm font-semibold">企业 AI 工作台</p>
-            <p className="text-xs text-zinc-500">任务、能力与治理统一入口</p>
+            <p className="text-sm font-semibold text-foreground">企业 AI 工作台</p>
+            <p className="text-xs text-muted-foreground">
+              任务、能力与治理统一入口
+            </p>
           </div>
           <div className="flex gap-2 text-xs">
-            <span className="rounded-full bg-emerald-50 px-3 py-1.5 text-emerald-700">
+            <span className="inline-flex h-6 items-center rounded-full bg-green-100 px-2.5 font-medium text-green-600">
               dsh runtime
             </span>
-            <span className="rounded-full bg-amber-50 px-3 py-1.5 text-amber-700">
+            <span className="inline-flex h-6 items-center rounded-full bg-yellow-100 px-2.5 font-medium text-yellow-700">
               W1 · 内存模式
             </span>
           </div>
         </header>
-        <main className="p-8">{children}</main>
+        <main className="min-h-0 flex-1 overflow-auto rounded-tl-lg border-l border-t border-border bg-background p-6 lg:p-10">
+          {children}
+        </main>
       </div>
     </div>
   );

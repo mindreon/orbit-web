@@ -1,5 +1,139 @@
 @import "tailwindcss";
 
+/*
+  Baize-aligned tokens for orbit-web.
+  Spec: Project store docs/baize-design-system.md
+  Primary #2F73F6 · cold sidebar · white main workspace
+*/
+
+:root {
+  --background: #ffffff;
+  --foreground: #111318;
+  --body: #313746;
+  --muted: #5d6472;
+  --muted-foreground: #5d6472;
+  --card: #ffffff;
+  --card-foreground: #111318;
+  --popover: #ffffff;
+  --popover-foreground: #111318;
+  --primary: #2f73f6;
+  --primary-foreground: #ffffff;
+  --primary-hover: #1f5fe0;
+  --primary-deep: #184bc2;
+  --primary-soft: #eaf1ff;
+  --primary-softer: #f4f8ff;
+  --secondary: #f8fafc;
+  --secondary-foreground: #313746;
+  --accent: #e5efff;
+  --accent-foreground: #1f5fe0;
+  --destructive: #e84d5f;
+  --destructive-foreground: #ffffff;
+  --border: #e7ebf1;
+  --input: #e7ebf1;
+  --ring: #2f73f6;
+  --sidebar: #f8f9fb;
+  --sidebar-foreground: #313746;
+  --sidebar-border: #dde4ee;
+  --sidebar-accent: #e5efff;
+  --sidebar-accent-foreground: #1f5fe0;
+  --sidebar-primary: #2f73f6;
+  --sidebar-primary-foreground: #ffffff;
+  --success: #20a974;
+  --success-soft: #ddf7ea;
+  --success-foreground: #168b5f;
+  --danger: #e84d5f;
+  --danger-soft: #ffe3e6;
+  --danger-foreground: #d33448;
+  --warning: #ec7620;
+  --warning-soft: #ffe9c8;
+  --warning-foreground: #c85a18;
+  --attention: #f5c500;
+  --attention-soft: #fff4c6;
+  --attention-foreground: #a67a00;
+  --info: #15a5d3;
+  --info-soft: #ddf6ff;
+  --info-foreground: #0d84b0;
+  --advanced: #7654e8;
+  --advanced-soft: #f2eafe;
+  --advanced-foreground: #6240d0;
+  --surface-muted: #f8fafc;
+  --radius: 0.5rem;
+  --font-sans: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto,
+    "Helvetica Neue", Arial, "Noto Sans", sans-serif;
+  --font-mono: "Cascadia Mono", ui-monospace, SFMono-Regular, Menlo, Consolas,
+    monospace;
+}
+
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-body: var(--body);
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-card: var(--card);
+  --color-card-foreground: var(--card-foreground);
+  --color-popover: var(--popover);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-primary-hover: var(--primary-hover);
+  --color-primary-deep: var(--primary-deep);
+  --color-primary-soft: var(--primary-soft);
+  --color-primary-softer: var(--primary-softer);
+  --color-primary-100: var(--primary-soft);
+  --color-primary-600: var(--primary-hover);
+  --color-secondary: var(--secondary);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-accent: var(--accent);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-destructive: var(--destructive);
+  --color-destructive-foreground: var(--destructive-foreground);
+  --color-border: var(--border);
+  --color-input: var(--input);
+  --color-ring: var(--ring);
+  --color-sidebar: var(--sidebar);
+  --color-sidebar-foreground: var(--sidebar-foreground);
+  --color-sidebar-border: var(--sidebar-border);
+  --color-sidebar-accent: var(--sidebar-accent);
+  --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
+  --color-sidebar-primary: var(--sidebar-primary);
+  --color-sidebar-primary-foreground: var(--sidebar-primary-foreground);
+  --color-success: var(--success);
+  --color-success-soft: var(--success-soft);
+  --color-success-foreground: var(--success-foreground);
+  --color-danger: var(--danger);
+  --color-danger-soft: var(--danger-soft);
+  --color-danger-foreground: var(--danger-foreground);
+  --color-warning: var(--warning);
+  --color-warning-soft: var(--warning-soft);
+  --color-warning-foreground: var(--warning-foreground);
+  --color-attention-soft: var(--attention-soft);
+  --color-attention-foreground: var(--attention-foreground);
+  --color-info: var(--info);
+  --color-info-soft: var(--info-soft);
+  --color-info-foreground: var(--info-foreground);
+  --color-advanced-soft: var(--advanced-soft);
+  --color-advanced-foreground: var(--advanced-foreground);
+  --color-surface-muted: var(--surface-muted);
+  --color-green-100: var(--success-soft);
+  --color-green-600: var(--success-foreground);
+  --color-red-100: var(--danger-soft);
+  --color-red-600: var(--danger-foreground);
+  --color-amber-100: var(--warning-soft);
+  --color-amber-600: var(--warning-foreground);
+  --color-yellow-100: var(--attention-soft);
+  --color-yellow-700: var(--attention-foreground);
+  --color-cyan-100: var(--info-soft);
+  --color-cyan-600: var(--info-foreground);
+  --color-violet-100: var(--advanced-soft);
+  --color-violet-600: var(--advanced-foreground);
+  --radius-lg: var(--radius);
+  --radius-md: calc(var(--radius) - 2px);
+  --radius-sm: calc(var(--radius) - 4px);
+  --font-sans: var(--font-sans);
+  --font-mono: var(--font-mono);
+}
+
 html,
 body {
   min-height: 100%;
@@ -7,4 +141,16 @@ body {
 
 body {
   margin: 0;
+  font-family: var(--font-sans);
+  font-size: 14px;
+  line-height: 1.5715;
+  color: var(--foreground);
+  background: var(--background);
+  font-feature-settings: "tnum";
+  letter-spacing: 0;
+  -webkit-font-smoothing: antialiased;
+}
+
+* {
+  border-color: var(--border);
 }
