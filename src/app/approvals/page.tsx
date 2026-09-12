@@ -45,16 +45,16 @@ export default function ApprovalsPage() {
       <h1 id="approvals-title" className="text-xl font-semibold">
         Approvals
       </h1>
-      <p className="mt-1 text-sm text-zinc-500">{pending} pending</p>
-      {error ? <p className="mt-2 text-sm text-red-600">{error}</p> : null}
+      <p className="mt-1 text-sm text-muted-foreground">{pending} pending</p>
+      {error ? <p className="mt-2 text-sm text-danger-foreground">{error}</p> : null}
       <ul className="mt-6 list-none space-y-3 p-0">
         {items.length === 0 ? (
-          <li className="text-sm text-zinc-500">Empty list.</li>
+          <li className="text-sm text-muted-foreground">Empty list.</li>
         ) : (
           items.map((item) => (
-            <li key={item.id} className="rounded-md border border-zinc-200 bg-white p-4">
+            <li key={item.id} className="rounded-md border border-border bg-background p-4">
               <p className="text-sm font-medium">{item.toolName || "tool"}</p>
-              <p className="text-xs text-zinc-500">
+              <p className="text-xs text-muted-foreground">
                 {item.status}
                 {item.decision ? ` · ${item.decision}` : ""} · room {item.roomId}
               </p>
@@ -64,7 +64,7 @@ export default function ApprovalsPage() {
                   <button
                     type="button"
                     disabled={busy}
-                    className="rounded bg-zinc-900 px-3 py-1 text-sm text-white"
+                    className="rounded-md bg-primary px-3 py-1 text-sm text-primary-foreground"
                     onClick={() => void decide(item.id, "allow")}
                   >
                     Allow
@@ -72,7 +72,7 @@ export default function ApprovalsPage() {
                   <button
                     type="button"
                     disabled={busy}
-                    className="rounded border border-zinc-300 px-3 py-1 text-sm"
+                    className="rounded border border-border px-3 py-1 text-sm"
                     onClick={() => void decide(item.id, "reject")}
                   >
                     Reject

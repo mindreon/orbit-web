@@ -16,32 +16,32 @@ export default function SettingsPage() {
         <h1 id="settings-title" className="text-xl font-semibold">
           能力与治理
         </h1>
-        <p className="mt-1 text-sm text-zinc-500">
+        <p className="mt-1 text-sm text-muted-foreground">
           展示当前真实能力，尚未接通的模块不会伪装成可用入口。
         </p>
       </div>
       <div className="mt-6 grid gap-4 md:grid-cols-2 xl:grid-cols-4">
         {CAPABILITIES.map((item) => (
-          <article key={item.name} className="rounded-2xl border border-zinc-200 bg-white p-4">
+          <article key={item.name} className="rounded-2xl border border-border bg-background p-4">
             <div className="flex items-start justify-between gap-3">
               <h2 className="text-sm font-semibold">{item.name}</h2>
               <span
                 className={`rounded-full px-2 py-1 text-xs ${
                   item.status === "可用"
-                    ? "bg-emerald-50 text-emerald-700"
-                    : "bg-zinc-100 text-zinc-500"
+                    ? "bg-green-100 text-green-600"
+                    : "bg-surface-muted text-muted-foreground"
                 }`}
               >
                 {item.status}
               </span>
             </div>
-            <p className="mt-3 text-xs leading-5 text-zinc-500">{item.detail}</p>
+            <p className="mt-3 text-xs leading-5 text-muted-foreground">{item.detail}</p>
           </article>
         ))}
       </div>
-      <div className="mt-6 rounded-2xl border border-amber-200 bg-amber-50 p-4 text-sm">
-        <p className="font-medium text-amber-900">安全边界</p>
-        <p className="mt-1 text-amber-800">
+      <div className="mt-6 rounded-2xl border border-amber-200 bg-warning-soft p-4 text-sm">
+        <p className="font-medium text-warning-foreground">安全边界</p>
+        <p className="mt-1 text-warning-foreground">
           浏览器只连接 orbit-control；dsh、Temporal、worker 和凭据明文都不会暴露到前端。
         </p>
       </div>
