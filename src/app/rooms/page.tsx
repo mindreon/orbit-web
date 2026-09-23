@@ -12,6 +12,7 @@ import { TaskComposer } from "@/components/rooms/task-composer";
 import {
   CONTROL_URL,
   control,
+  permissionLabel,
   type ActivityEvent,
   type Approval,
   type ChatMessage,
@@ -364,7 +365,7 @@ export default function RoomsPage() {
                     >
                       {active.kind === "collab" ? "协作" : "单 Agent"}
                     </Tag>
-                    <Tag color="processing">{active.permissionPreset}</Tag>
+                    <Tag color="processing">{permissionLabel(active.permissionPreset)}</Tag>
                     <span className="tabular-nums">{active.state}</span>
                   </div>
                 </div>
@@ -495,8 +496,9 @@ export default function RoomsPage() {
                     onChange={setDraft}
                     mode={composerMode}
                     onModeChange={setComposerMode}
-                    permissionPreset={permissionPreset}
+                    permissionPreset={active.permissionPreset}
                     onPermissionChange={setPermissionPreset}
+                    permissionLocked
                     collabIntent={active.kind === "collab" || collabIntent}
                     onCollabIntentChange={setCollabIntent}
                     running={running}

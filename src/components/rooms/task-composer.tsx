@@ -19,6 +19,8 @@ type Props = {
   onModeChange: (mode: ComposerMode) => void;
   permissionPreset: PermissionPreset;
   onPermissionChange: (preset: PermissionPreset) => void;
+  /** Existing rooms keep the preset chosen at create time. */
+  permissionLocked?: boolean;
   collabIntent: boolean;
   onCollabIntentChange: (value: boolean) => void;
   running: boolean;
@@ -37,6 +39,7 @@ export function TaskComposer({
   onModeChange,
   permissionPreset,
   onPermissionChange,
+  permissionLocked,
   collabIntent,
   onCollabIntentChange,
   running,
@@ -102,13 +105,15 @@ export function TaskComposer({
         <select
           aria-label="权限预设"
           value={permissionPreset}
-          disabled={disabled || busy}
+          disabled={disabled || busy || permissionLocked}
+          title={permissionLocked ? "权限在创建这个房间时已经确定" : "这个房间的权限"}
           onChange={(event) =>
             onPermissionChange(event.target.value as PermissionPreset)
           }
           className="h-7 rounded-md border border-input bg-background px-2 text-xs text-foreground"
         >
           <option value="workspace-write">工作区可写</option>
+          <option value="read-only">只读</option>
           <option value="danger-full-access">完全访问</option>
         </select>
         <span className="inline-flex items-center gap-1 text-xs text-muted-foreground">
@@ -140,9 +145,14 @@ export function TaskComposer({
           </Button>
         </div>
       </div>
+      {permissionPreset === "read-only" ? (
+        <p className="mt-2 text-xs text-muted-foreground">
+          只读只作用于这个房间：可以查看，不会改文件。
+        </p>
+      ) : null}
       {permissionPreset === "danger-full-access" ? (
         <p className="mt-2 rounded-md bg-warning-soft px-2 py-1.5 text-xs text-warning-foreground">
-          完全访问会关闭默认审批，仅用于明确授权的受控环境。
+          完全访问只作用于这个房间，会关闭默认审批，仅用于明确授权的受控环境。
         </p>
       ) : null}
     </div>
