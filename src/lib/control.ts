@@ -10,7 +10,14 @@ export const CONTROL_URL = (() => {
   return raw.replace(/\/$/, "");
 })();
 
-export type PermissionPreset = "workspace-write" | "danger-full-access";
+export type PermissionPreset = "workspace-write" | "read-only" | "danger-full-access";
+
+export function permissionLabel(preset: string): string {
+  if (preset === "read-only") return "只读";
+  if (preset === "workspace-write") return "工作区可写";
+  if (preset === "danger-full-access") return "完全访问";
+  return preset;
+}
 
 export type Room = {
   id: string;
