@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { PanelRight, Plus, Search, Users } from "lucide-react";
 import { AppNav } from "@/components/app-nav";
 import { Button } from "@/components/ui/button";
@@ -48,6 +48,7 @@ export default function RoomsPage() {
   const [connection, setConnection] = useState<
     "live" | "reconnecting" | "offline"
   >("offline");
+  const blankTask = useRef(false);
 
   const active = useMemo(
     () => rooms.find((room) => room.id === activeId) ?? null,
@@ -95,7 +96,12 @@ export default function RoomsPage() {
       ]);
       setRooms(roomList.items);
       setApprovals(approvalList.items);
-      const id = roomId ?? activeId ?? roomList.items[0]?.id ?? null;
+      const id =
+        roomId !== undefined
+          ? roomId
+          : blankTask.current
+            ? null
+            : (activeId ?? roomList.items[0]?.id ?? null);
       if (id) {
         const [msgs, trace] = await Promise.all([
           control.listMessages(id),
@@ -107,6 +113,7 @@ export default function RoomsPage() {
       } else {
         setMessages([]);
         setActivity([]);
+        setActiveId(null);
       }
     },
     [activeId],
@@ -142,6 +149,7 @@ export default function RoomsPage() {
   }, [activeId, refresh]);
 
   async function selectRoom(id: string) {
+    blankTask.current = false;
     setError(null);
     setFocusAgentId(null);
     const room = rooms.find((item) => item.id === id);
@@ -155,6 +163,7 @@ export default function RoomsPage() {
     message?: string;
     seedMessages?: string[];
   }) {
+    blankTask.current = false;
     const room = await control.createRoom({
       title: args.title,
       kind: args.kind,
@@ -263,6 +272,7 @@ export default function RoomsPage() {
   }
 
   function startBlankTask() {
+    blankTask.current = true;
     setActiveId(null);
     setMessages([]);
     setActivity([]);
