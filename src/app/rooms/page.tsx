@@ -21,8 +21,6 @@ import {
 import {
   DEFAULT_PERSONAS,
   buildRoster,
-  planConfirmMessage,
-  wrapMessageForMode,
   type ComposerMode,
   type DrawerTab,
 } from "@/lib/rooms-ui";
@@ -46,7 +44,6 @@ export default function RoomsPage() {
   const [drawerTab, setDrawerTab] = useState<DrawerTab>("activity");
   const [personaId, setPersonaId] = useState(DEFAULT_PERSONAS[0].id);
   const [focusAgentId, setFocusAgentId] = useState<string | null>(null);
-  const [planPending, setPlanPending] = useState<string | null>(null);
   const [connection, setConnection] = useState<
     "live" | "reconnecting" | "offline"
   >("offline");
@@ -145,7 +142,6 @@ export default function RoomsPage() {
 
   async function selectRoom(id: string) {
     setError(null);
-    setPlanPending(null);
     setFocusAgentId(null);
     const room = rooms.find((item) => item.id === id);
     setDrawerTab(room?.kind === "collab" ? "roster" : "activity");
@@ -184,23 +180,13 @@ export default function RoomsPage() {
     setBusy(true);
     setError(null);
     try {
-      if (composerMode === "plan") {
-        setPlanPending(text);
-        setDraft("");
-        return;
-      }
-
       const kind = collabIntent ? "collab" : "solo";
-      const payload =
-        composerMode === "steer"
-          ? text
-          : wrapMessageForMode(composerMode, text);
 
       if (!activeId) {
         await createAndMaybeSend({
           title: text.slice(0, 48) || `任务 ${rooms.length + 1}`,
           kind,
-          message: payload,
+          message: text,
         });
         setDraft("");
         setComposerMode("execute");
@@ -210,41 +196,11 @@ export default function RoomsPage() {
       if (composerMode === "steer") {
         await control.steerRoom(activeId, text);
       } else {
-        await control.postMessage(activeId, payload);
+        await control.postMessage(activeId, text);
       }
       setDraft("");
       setComposerMode("execute");
       await refresh(activeId);
-    } catch (err) {
-      setError(String(err));
-    } finally {
-      setBusy(false);
-    }
-  }
-
-  async function onConfirmPlan() {
-    if (!planPending) return;
-    setBusy(true);
-    setError(null);
-    try {
-      const confirm = planConfirmMessage(planPending);
-      const kind = collabIntent ? "collab" : "solo";
-      if (!activeId) {
-        await createAndMaybeSend({
-          title: planPending.slice(0, 48) || `计划任务 ${rooms.length + 1}`,
-          kind,
-          seedMessages: [wrapMessageForMode("plan", planPending)],
-          message: confirm,
-        });
-      } else {
-        await control.postMessage(
-          activeId,
-          wrapMessageForMode("plan", planPending),
-        );
-        await control.postMessage(activeId, confirm);
-        await refresh(activeId);
-      }
-      setPlanPending(null);
     } catch (err) {
       setError(String(err));
     } finally {
@@ -309,7 +265,6 @@ export default function RoomsPage() {
     setActiveId(null);
     setMessages([]);
     setActivity([]);
-    setPlanPending(null);
     setDraft("");
     setDrawerOpen(true);
     setDrawerTab("activity");
@@ -523,17 +478,6 @@ export default function RoomsPage() {
                   onSubmit={() => void onSubmitComposer()}
                   onStop={() => void onStopTurn()}
                 />
-                {planPending ? (
-                  <MessageTimeline
-                    messages={[]}
-                    activity={[]}
-                    pendingApprovals={[]}
-                    planPending={planPending}
-                    onConfirmPlan={() => void onConfirmPlan()}
-                    onDecide={(id, decision) => void onDecide(id, decision)}
-                    busy={busy}
-                  />
-                ) : null}
               </div>
             ) : (
               <>
@@ -543,8 +487,6 @@ export default function RoomsPage() {
                   pendingApprovals={pending}
                   busy={busy}
                   focusAgentId={focusAgentId}
-                  planPending={planPending}
-                  onConfirmPlan={() => void onConfirmPlan()}
                   onDecide={(id, decision) => void onDecide(id, decision)}
                 />
                 <div className="shrink-0 pt-2">

@@ -1,6 +1,6 @@
 import type { ActivityEvent } from "@/lib/control";
 
-export type ComposerMode = "execute" | "plan" | "ask" | "steer";
+export type ComposerMode = "execute" | "steer";
 
 export type DrawerTab = "activity" | "roster";
 
@@ -26,22 +26,6 @@ export type RosterMember = {
   personaName: string;
   inherited: boolean;
 };
-
-/** Ask / Plan frontend convention prefixes (real mode field later). */
-export function wrapMessageForMode(mode: ComposerMode, text: string): string {
-  const trimmed = text.trim();
-  if (mode === "ask") {
-    return `【仅问答】只回答问题，不要改文件、不要调用写工具。\n\n${trimmed}`;
-  }
-  if (mode === "plan") {
-    return `【先计划】请只输出可执行计划，等待我确认后再动手。不要修改文件或执行写操作。\n\n${trimmed}`;
-  }
-  return trimmed;
-}
-
-export function planConfirmMessage(planText: string): string {
-  return `【按计划执行】请按以下计划执行：\n\n${planText}`;
-}
 
 export function activityLabel(item: ActivityEvent): string {
   switch (item.type) {

@@ -11,8 +11,8 @@ export default function AgentsPage() {
           Personas
         </h2>
         <div className="rounded-xl border border-dashed border-border px-4 py-8 text-sm text-muted-foreground">
-          Persona 与 Skill 目录尚未接通。后续由 control 管理版本，worker 编译为
-          dsh session composition。
+          Persona 与 Skill 目录尚未接通。后续由 control 管理版本，再交给 AgentScope
+          会话。
         </div>
       </div>
 
