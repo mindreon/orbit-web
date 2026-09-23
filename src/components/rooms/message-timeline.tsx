@@ -47,34 +47,7 @@ export function MessageTimeline({
 
   return (
     <div className="flex min-h-0 flex-1 flex-col gap-3 overflow-auto px-1 py-2">
-      {pendingApprovals.map((item) => (
-        <div
-          key={item.id}
-          className="rounded-lg border border-amber-200 bg-warning-soft p-3 text-sm"
-        >
-          <p className="font-semibold text-warning-foreground">
-            需要审批：{item.toolName}
-          </p>
-          {item.reason ? (
-            <p className="mt-1 text-muted-foreground">{item.reason}</p>
-          ) : null}
-          <div className="mt-3 flex gap-2">
-            <Button size="sm" disabled={busy} onClick={() => onDecide(item.id, "allow")}>
-              允许这一次
-            </Button>
-            <Button
-              size="sm"
-              variant="outline"
-              disabled={busy}
-              onClick={() => onDecide(item.id, "reject")}
-            >
-              拒绝并停止
-            </Button>
-          </div>
-        </div>
-      ))}
-
-      {messages.length === 0 ? (
+      {messages.length === 0 && pendingApprovals.length === 0 ? (
         <p className="py-8 text-center text-sm text-muted-foreground">
           发送任务后，阶段说明、工具步骤与回复会出现在这里。
         </p>
@@ -103,6 +76,34 @@ export function MessageTimeline({
           </article>
         ))
       )}
+
+      {pendingApprovals.map((item) => (
+        <article
+          key={item.id}
+          className="max-w-[85%] rounded-lg border border-amber-200 bg-warning-soft p-3 text-sm"
+        >
+          <p className="text-xs text-warning-foreground">当前房间的审批</p>
+          <p className="mt-1 font-semibold text-warning-foreground">
+            需要审批：{item.toolName}
+          </p>
+          {item.reason ? (
+            <p className="mt-1 text-muted-foreground">{item.reason}</p>
+          ) : null}
+          <div className="mt-3 flex gap-2">
+            <Button size="sm" disabled={busy} onClick={() => onDecide(item.id, "allow")}>
+              允许这一次
+            </Button>
+            <Button
+              size="sm"
+              variant="outline"
+              disabled={busy}
+              onClick={() => onDecide(item.id, "reject")}
+            >
+              拒绝并停止
+            </Button>
+          </div>
+        </article>
+      ))}
 
       {filteredSteps.map((item) => (
         <StepCard key={item.id} item={item} />
