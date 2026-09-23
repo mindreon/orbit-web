@@ -1,9 +1,9 @@
 const CAPABILITIES = [
   { name: "对话任务", detail: "Room、历史消息、SSE", status: "可用" },
-  { name: "运行策略", detail: "dsh / ACP、进程隔离、权限预设", status: "可用" },
+  { name: "运行策略", detail: "AgentScope、进程隔离、权限预设", status: "可用" },
   { name: "审批与审计", detail: "HITL 与执行轨迹", status: "可用" },
-  { name: "Persona / MCP / Grant", detail: "元数据 API + worker Cordis patch（无密钥落盘）", status: "可用" },
-  { name: "服务间认证 / 环境最小化", detail: "ORBIT_INTERNAL_TOKEN + dsh env allowlist", status: "可用" },
+  { name: "Persona / MCP / Grant", detail: "元数据 API（浏览器不落密钥）", status: "可用" },
+  { name: "服务间认证 / 环境最小化", detail: "ORBIT_INTERNAL_TOKEN + 运行时环境白名单", status: "可用" },
   { name: "审计持久化 / 会话恢复", detail: "ORBIT_DATA_DIR JSON/JSONL + session checkpoint", status: "可用" },
   { name: "bwrap 强隔离", detail: "可选 bubblewrap；缺省 process 并标记降级", status: "部分" },
   { name: "Cloud Agent", detail: "clone、执行、push 与 PR", status: "W2" },
@@ -42,7 +42,7 @@ export default function SettingsPage() {
       <div className="mt-6 rounded-2xl border border-amber-200 bg-warning-soft p-4 text-sm">
         <p className="font-medium text-warning-foreground">安全边界</p>
         <p className="mt-1 text-warning-foreground">
-          浏览器只连接 orbit-control；dsh、Temporal、worker 和凭据明文都不会暴露到前端。
+          浏览器只连接 orbit-control；运行时、Temporal、worker 和凭据明文都不会暴露到前端。
         </p>
       </div>
     </section>

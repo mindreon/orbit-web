@@ -9,9 +9,7 @@ import type { PermissionPreset } from "@/lib/control";
 
 const MODES: { id: ComposerMode; label: string; hint: string }[] = [
   { id: "execute", label: "执行", hint: "直接执行任务" },
-  { id: "plan", label: "先计划", hint: "先出计划再确认" },
-  { id: "ask", label: "仅问答", hint: "只回答，不改文件" },
-  { id: "steer", label: "调整方向", hint: "中途转向（steer）" },
+  { id: "steer", label: "调整方向", hint: "中途转向当前回合" },
 ];
 
 type Props = {
@@ -145,16 +143,6 @@ export function TaskComposer({
       {permissionPreset === "danger-full-access" ? (
         <p className="mt-2 rounded-md bg-warning-soft px-2 py-1.5 text-xs text-warning-foreground">
           完全访问会关闭默认审批，仅用于明确授权的受控环境。
-        </p>
-      ) : null}
-      {mode === "ask" ? (
-        <p className="mt-2 text-xs text-muted-foreground">
-          仅问答：前端会附加「不改文件 / 不调写工具」约定。
-        </p>
-      ) : null}
-      {mode === "plan" ? (
-        <p className="mt-2 text-xs text-muted-foreground">
-          先计划：首轮只产出计划；确认后再发送执行。
         </p>
       ) : null}
     </div>

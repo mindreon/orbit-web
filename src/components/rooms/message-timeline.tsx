@@ -14,8 +14,6 @@ type Props = {
   pendingApprovals: Approval[];
   busy?: boolean;
   focusAgentId?: string | null;
-  planPending?: string | null;
-  onConfirmPlan?: () => void;
   onDecide: (id: string, decision: "allow" | "reject") => void;
 };
 
@@ -25,8 +23,6 @@ export function MessageTimeline({
   pendingApprovals,
   busy,
   focusAgentId,
-  planPending,
-  onConfirmPlan,
   onDecide,
 }: Props) {
   const steps = activity.filter((item) =>
@@ -78,19 +74,7 @@ export function MessageTimeline({
         </div>
       ))}
 
-      {planPending ? (
-        <div className="rounded-lg border border-primary/20 bg-primary-softer p-3 text-sm">
-          <div className="mb-2">
-            <Tag color="processing">计划待确认</Tag>
-          </div>
-          <p className="whitespace-pre-wrap text-foreground">{planPending}</p>
-          <Button className="mt-3" size="sm" disabled={busy} onClick={onConfirmPlan}>
-            按计划执行
-          </Button>
-        </div>
-      ) : null}
-
-      {messages.length === 0 && !planPending ? (
+      {messages.length === 0 ? (
         <p className="py-8 text-center text-sm text-muted-foreground">
           发送任务后，阶段说明、工具步骤与回复会出现在这里。
         </p>

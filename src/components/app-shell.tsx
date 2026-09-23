@@ -33,7 +33,7 @@ export function AppShell({ children }: { children: ReactNode }) {
         <div className="mt-auto rounded-lg border border-sidebar-border bg-background p-3">
           <p className="text-xs font-semibold text-foreground">Runtime</p>
           <p className="mt-1 text-xs text-muted-foreground">
-            dsh · ACP · process isolation
+            AgentScope · 进程隔离
           </p>
         </div>
       </aside>
@@ -47,7 +47,7 @@ export function AppShell({ children }: { children: ReactNode }) {
           </div>
           <div className="flex gap-2 text-xs">
             <span className="inline-flex h-6 items-center rounded-full bg-green-100 px-2.5 font-medium text-green-600">
-              dsh runtime
+              AgentScope
             </span>
             <span className="inline-flex h-6 items-center rounded-full bg-yellow-100 px-2.5 font-medium text-yellow-700">
               W1 · 内存模式
