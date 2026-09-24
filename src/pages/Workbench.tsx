@@ -1,57 +1,35 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useState } from "react";
 import { useNavigate } from "react-router";
-import {
-  confirmOf,
-  currentStepName,
-  feedOf,
-  FILTERS,
-  findDoc,
-  JUMPS,
-  matterTitle,
-  needsRole,
-  permissionLabel,
-  type FilterId,
-  type PermissionPreset,
-} from "../model";
+import { FILTERS, findDoc, matterTitle, permissionLabel, stateLabel, type FilterId, type PermissionPreset } from "../model";
 import { useMind } from "../store";
 import { Area, Button } from "../ui";
 import { cn } from "../lib/cn";
 
 export function WorkbenchPage() {
-  const activeId = useMind((s) => s.activeId);
-  const opening = useMind((s) => s.matters.find((matter) => matter.id === activeId)?.openingPhase);
-  const advanceOpening = useMind((s) => s.advanceOpening);
+  const loadRooms = useMind((s) => s.loadRooms);
   useEffect(() => {
-    if (opening === null || opening === undefined) return;
-    const timer = window.setTimeout(advanceOpening, 700);
-    return () => window.clearTimeout(timer);
-  }, [opening, advanceOpening, activeId]);
+    void loadRooms();
+  }, [loadRooms]);
+
   const navigate = useNavigate();
   const role = useMind((s) => s.role);
   const filter = useMind((s) => s.filter);
   const setFilter = useMind((s) => s.setFilter);
   const matters = useMind((s) => s.matters);
-  const catalog = useMind((s) => s.catalog);
+  const activeId = useMind((s) => s.activeId);
+  const loading = useMind((s) => s.loading);
+  const error = useMind((s) => s.error);
   const selectMatter = useMind((s) => s.selectMatter);
   const startBlank = useMind((s) => s.startBlank);
-  const jump = useMind((s) => s.jump);
 
   const visible = matters.filter((matter) => {
-    if (filter === "已完成") return matter.status === "已完成";
-    if (filter === "待我确认") return needsRole(matter, role);
-    return matter.status !== "已完成";
+    if (filter === "已完成") return matter.state === "closed";
+    if (filter === "待我确认") return matter.state === "awaiting_approval";
+    return matter.state !== "closed";
   });
 
   return (
     <div className="flex min-h-0 flex-1 flex-col">
-      <div className="bg-accent/60 text-muted-foreground flex items-center gap-2 border-b px-4 py-1.5 text-xs">
-        <span>原型跳转</span>
-        {JUMPS.map((item) => (
-          <button key={item.id} className="hover:text-foreground underline" onClick={() => jump(item.id)}>
-            {item.label}
-          </button>
-        ))}
-      </div>
       <div className="grid min-h-0 flex-1 grid-cols-[280px_minmax(0,1fr)_320px]">
         <aside className="bg-sidebar flex min-h-0 flex-col border-r border-sidebar-border">
           {role === "经办人" ? (
@@ -76,6 +54,8 @@ export function WorkbenchPage() {
             ))}
           </div>
           <div className="min-h-0 flex-1 overflow-auto">
+            {error && matters.length === 0 ? <p className="text-destructive p-4 text-sm">{error}</p> : null}
+            {loading && matters.length === 0 ? <p className="text-muted-foreground p-4 text-sm">正在读取事项…</p> : null}
             {visible.map((matter) => (
               <button
                 key={matter.id}
@@ -87,16 +67,16 @@ export function WorkbenchPage() {
               >
                 <div className="flex items-center justify-between gap-2">
                   <span className="text-sm font-medium">{matterTitle(matter)}</span>
-                  {needsRole(matter, role) ? (
+                  {matter.state === "awaiting_approval" ? (
                     <span className="bg-primary/10 text-primary rounded px-1.5 py-0.5 text-[11px]">待我确认</span>
                   ) : null}
                 </div>
                 <p className="text-muted-foreground mt-1 text-xs">
-                  {matter.supplier} · {permissionLabel(matter.permission)} · {matter.status} · {currentStepName(matter, catalog)}
+                  {permissionLabel(matter.permission)} · {stateLabel(matter.state)}
                 </p>
               </button>
             ))}
-            {visible.length === 0 ? (
+            {!loading && visible.length === 0 ? (
               <p className="text-muted-foreground p-4 text-sm">这个筛选下没有事项。</p>
             ) : null}
           </div>
@@ -110,6 +90,8 @@ export function WorkbenchPage() {
 
 function BlankMatter() {
   const createMatter = useMind((s) => s.createMatter);
+  const pending = useMind((s) => s.pending);
+  const error = useMind((s) => s.error);
   const [draft, setDraft] = useState("");
   const [permission, setPermission] = useState<PermissionPreset>("workspace-write");
 
@@ -123,11 +105,11 @@ function BlankMatter() {
         className="max-w-xl p-4"
         onSubmit={(event) => {
           event.preventDefault();
-          if (!draft.trim()) return;
-          createMatter(draft, permission);
+          if (!draft.trim() || pending) return;
+          void createMatter(draft, permission);
         }}
       >
-        <Area rows={3} value={draft} placeholder="给华北钢材办供应商准入" onChange={(event) => setDraft(event.target.value)} />
+        <Area rows={3} value={draft} placeholder="写下这次要办的事" onChange={(event) => setDraft(event.target.value)} />
         <label className="mt-3 block text-xs">
           权限
           <select
@@ -149,29 +131,30 @@ function BlankMatter() {
             完全访问只作用于这件事，会关闭默认审批，仅用于明确授权的受控环境。
           </p>
         ) : null}
-        <Button className="mt-3" type="submit">
-          创建
+        {error ? <p className="text-destructive mt-2 text-xs">{error}</p> : null}
+        <Button className="mt-3" type="submit" disabled={pending === "create"}>
+          {pending === "create" ? "正在创建…" : "创建"}
         </Button>
       </form>
     </section>
   );
 }
 
+function speaker(role: string) {
+  if (role === "user") return "我";
+  if (role === "assistant") return "助手";
+  return role || "系统";
+}
+
 function Timeline() {
   const role = useMind((s) => s.role);
-  const catalog = useMind((s) => s.catalog);
   const matter = useMind((s) => s.matters.find((item) => item.id === s.activeId));
-  const threadAgentId = useMind((s) => s.threadAgentId);
-  const setThread = useMind((s) => s.setThread);
+  const messages = useMind((s) => (s.activeId ? (s.messages[s.activeId] ?? []) : []));
+  const pending = useMind((s) => s.pending);
+  const error = useMind((s) => s.error);
   const send = useMind((s) => s.send);
-  const skipOpening = useMind((s) => s.skipOpening);
-  const setReading = useMind((s) => s.setReading);
   const [text, setText] = useState("");
-  const feed = useMemo(() => (matter ? feedOf(matter, catalog) : []), [matter, catalog]);
-  const shown = threadAgentId ? feed.filter((item) => item.agentId === threadAgentId) : feed;
-  const threadName = catalog.agents.find((agent) => agent.id === threadAgentId)?.name;
   if (!matter) return <BlankMatter />;
-  const card = confirmOf(matter, catalog);
 
   return (
     <section className="bg-background flex min-h-0 flex-col">
@@ -180,120 +163,43 @@ function Timeline() {
         <span className="bg-accent text-accent-foreground rounded px-2 py-0.5 text-xs" title="权限在创建这件事时已经确定">
           {permissionLabel(matter.permission)}
         </span>
+        <span className="text-muted-foreground text-xs">{stateLabel(matter.state)}</span>
         {matter.permission === "danger-full-access" ? (
           <p className="text-muted-foreground text-xs">完全访问只作用于这件事，已关闭默认审批。</p>
         ) : null}
-        {threadAgentId ? (
-          <button className="text-primary text-xs" onClick={() => setThread(null)}>
-            返回主时间线
-          </button>
-        ) : null}
       </div>
       <div className="min-h-0 flex-1 space-y-3 overflow-auto p-4">
-        {threadAgentId ? <p className="text-muted-foreground text-xs">与{threadName}的对话</p> : null}
-        {shown.length === 0 && !card ? (
-          <p className="text-muted-foreground py-8 text-center text-sm">发送后，进展和审批会出现在这里。</p>
+        {messages.length === 0 ? (
+          <p className="text-muted-foreground py-8 text-center text-sm">还没有消息。发送后，这里显示这间房间的真实回复。</p>
         ) : null}
-        {shown.map((item) => (
+        {messages.map((item) => (
           <article key={item.id} className="max-w-2xl">
-            <p className="text-muted-foreground text-xs">{item.who}</p>
+            <p className="text-muted-foreground text-xs">{speaker(item.role)}</p>
             <p className="mt-1 text-sm leading-6">{item.text}</p>
-            {item.cite ? (
-              <button className="text-primary mt-1 text-xs" onClick={() => setReading(item.cite ?? null)}>
-                查看来源
-              </button>
-            ) : null}
           </article>
         ))}
-        {card && !threadAgentId ? <ConfirmCard /> : null}
-        {matter.openingPhase !== null ? (
-          <Button variant="outline" onClick={skipOpening}>
-            跳过，停在办理中
-          </Button>
-        ) : null}
+        {error ? <p className="text-destructive text-xs">{error}</p> : null}
       </div>
       {role === "经办人" ? (
         <form
           className="border-t p-3"
           onSubmit={(event) => {
             event.preventDefault();
-            send(text);
-            setText("");
+            if (!text.trim() || pending) return;
+            void send(text).then(() => {
+              if (!useMind.getState().error) setText("");
+            });
           }}
         >
-          <Area
-            rows={2}
-            value={text}
-            placeholder={threadName ? `对${threadName}说，这句话会回到主时间线` : "对经办助手说，输入 @制度核查 可以插话"}
-            onChange={(event) => setText(event.target.value)}
-          />
-          <Button className="mt-2" type="submit">
-            发送
+          <Area rows={2} value={text} placeholder="给这个事项发一句话" onChange={(event) => setText(event.target.value)} />
+          <Button className="mt-2" type="submit" disabled={pending === "send" || matter.state === "closed"}>
+            {pending === "send" ? "发送中…" : "发送"}
           </Button>
         </form>
       ) : (
-        <p className="text-muted-foreground border-t p-3 text-xs">时间线只读。请在右侧处理你的确认。</p>
+        <p className="text-muted-foreground border-t p-3 text-xs">当前角色只查看这间房间的消息。</p>
       )}
     </section>
-  );
-}
-
-function ConfirmCard() {
-  const role = useMind((s) => s.role);
-  const catalog = useMind((s) => s.catalog);
-  const matter = useMind((s) => s.matters.find((item) => item.id === s.activeId));
-  const decide = useMind((s) => s.decide);
-  const setReading = useMind((s) => s.setReading);
-  const [rejecting, setRejecting] = useState(false);
-  const [reason, setReason] = useState("缺少安全生产许可证");
-  if (!matter) return null;
-  const card = confirmOf(matter, catalog);
-  if (!card) return null;
-  const allowed = card.actor === role && matter.permission !== "read-only";
-
-  return (
-    <div className="bg-card max-w-xl rounded-lg border p-3">
-      <p className="text-xs font-semibold">当前事项的审批 · {card.action}</p>
-      <p className="mt-2 text-sm leading-6">{card.conclusion}</p>
-      <div className="mt-2 flex gap-2">
-        {card.cites.map((cite) => (
-          <button key={cite} className="text-primary text-xs" onClick={() => setReading(cite)}>
-            {cite === "kb" ? "制度原文" : cite === "external" ? "外部来源" : "工商结果"}
-          </button>
-        ))}
-      </div>
-      {matter.permission === "read-only" ? (
-        <p className="text-muted-foreground mt-2 text-xs">只读只作用于这件事：可以查看，不会改文件。</p>
-      ) : null}
-      {!allowed && matter.permission !== "read-only" ? (
-        <p className="text-muted-foreground mt-2 text-xs">等待{card.actor}处理</p>
-      ) : null}
-      {rejecting ? (
-        <div className="mt-2">
-          <Area rows={2} value={reason} onChange={(event) => setReason(event.target.value)} />
-          <Button
-            className="mt-2"
-            variant="danger"
-            disabled={!allowed || reason.trim().length === 0}
-            onClick={() => {
-              decide(false, reason);
-              setRejecting(false);
-            }}
-          >
-            确认驳回
-          </Button>
-        </div>
-      ) : (
-        <div className="mt-3 flex gap-2">
-          <Button disabled={!allowed} onClick={() => decide(true, "")}>
-            允许这一次
-          </Button>
-          <Button variant="outline" disabled={!allowed} onClick={() => setRejecting(true)}>
-            拒绝并停止
-          </Button>
-        </div>
-      )}
-    </div>
   );
 }
 
@@ -303,12 +209,11 @@ function Inspector({ onOpenCatalog }: { onOpenCatalog: () => void }) {
   const matter = useMind((s) => s.matters.find((item) => item.id === s.activeId));
   const reading = useMind((s) => s.reading);
   const setReading = useMind((s) => s.setReading);
-  const setThread = useMind((s) => s.setThread);
   const swap = useMind((s) => s.swap);
   const setCatalogTab = useMind((s) => s.setCatalogTab);
   const [swapKind, setSwapKind] = useState<string | null>(null);
   if (!matter) {
-    return <aside className="text-muted-foreground bg-card border-l p-4 text-sm">新事项的权限在中间选定。创建之后，审批会出现在对话后面。</aside>;
+    return <aside className="text-muted-foreground bg-card border-l p-4 text-sm">新事项的权限在中间选定。创建之后，对话会出现在中间。</aside>;
   }
   const doc = findDoc(catalog, matter.kbDocId);
   const external = catalog.externals.find((item) => item.id === matter.externalId);
@@ -322,7 +227,7 @@ function Inspector({ onOpenCatalog }: { onOpenCatalog: () => void }) {
         ? doc?.doc.body
         : reading === "external"
           ? `${external?.origin ?? ""}\n${external?.excerpt ?? ""}`
-          : `${matter.supplier}有限公司，统一社会信用代码 91130100MOCK88421，登记状态存续。`;
+          : "右栏仍是演示，还没有这次任务的真实工具结果。";
     return (
       <aside className="bg-card flex min-h-0 flex-col border-l">
         <div className="flex items-center justify-between border-b px-3 py-2">
@@ -338,33 +243,27 @@ function Inspector({ onOpenCatalog }: { onOpenCatalog: () => void }) {
 
   return (
     <aside className="bg-card min-h-0 overflow-auto border-l p-3 text-sm">
-      <ConfirmCard />
+      <p className="text-muted-foreground text-xs">右栏仍是演示，不代表这间房间已经做过这些步骤。</p>
       {approver ? null : (
         <>
           <h2 className="mt-4 text-xs font-semibold">步骤</h2>
           <ol className="mt-2 space-y-2">
             {skill?.steps.map((step) => (
               <li key={step.id}>
-                <p className={cn(step.name === currentStepName(matter, catalog) && "text-primary")}>{step.name}</p>
+                <p>{step.name}</p>
                 <p className="text-muted-foreground text-xs">
                   {step.agentIds.map((id) => catalog.agents.find((agent) => agent.id === id)?.name).filter(Boolean).join("、") || "人工确认"}
                   {step.needsConfirm ? " · 需要确认" : ""}
                 </p>
               </li>
             ))}
-            {matter.viaReject ? <li>补交材料 · 经办助手起草，经办人确认</li> : null}
           </ol>
           <h2 className="mt-4 text-xs font-semibold">分工</h2>
           <ul className="mt-2 space-y-1">
             {catalog.agents.map((agent) => (
               <li key={agent.id}>
-                <button className="text-left" onClick={() => setThread(agent.id)}>
-                  {agent.name}
-                  <span className="text-muted-foreground">
-                    {" "}
-                    · {matter.openingPhase !== null ? "正在做" : "已交回"}
-                  </span>
-                </button>
+                {agent.name}
+                <span className="text-muted-foreground"> · 演示</span>
               </li>
             ))}
           </ul>
@@ -389,7 +288,7 @@ function Inspector({ onOpenCatalog }: { onOpenCatalog: () => void }) {
           <h2 className="mt-4 text-xs font-semibold">本次装备</h2>
           <EquipRow
             label={skill?.name ?? "Skill"}
-            disabled={matter.status === "已完成" || matter.permission === "read-only"}
+            disabled={matter.state === "closed" || matter.permission === "read-only"}
             open={swapKind === "skill"}
             onToggle={() => setSwapKind(swapKind === "skill" ? null : "skill")}
             options={catalog.skills.map((item) => item.name)}

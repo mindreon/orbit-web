@@ -1,9 +1,8 @@
 import { create } from "zustand";
+import { createRoom, listMessages, listRooms, postMessage, type ChatMessage, type Room } from "./lib/rooms";
 import {
   defaultEquipment,
-  needsRole,
   seedCatalog,
-  seedMatter,
   type Catalog,
   type ExternalSource,
   type FilterId,
@@ -13,7 +12,6 @@ import {
   type PermissionPreset,
   type Role,
   type Skill,
-  type Status,
 } from "./model";
 
 interface MindState {
@@ -21,7 +19,12 @@ interface MindState {
   filter: FilterId;
   catalog: Catalog;
   matters: Matter[];
+  messages: Record<string, ChatMessage[]>;
   activeId: string | null;
+  composing: boolean;
+  loading: boolean;
+  pending: "create" | "send" | null;
+  error: string | null;
   threadAgentId: string | null;
   reading: "kb" | "external" | "mcp" | null;
   catalogTab: "agent" | "skill" | "kb" | "external" | "mcp";
@@ -31,13 +34,11 @@ interface MindState {
   selectMatter: (id: string) => void;
   setThread: (agentId: string | null) => void;
   setReading: (reading: MindState["reading"]) => void;
-  jump: (status: Status) => void;
-  createMatter: (text: string, permission: PermissionPreset) => void;
+  loadRooms: () => Promise<void>;
+  loadMessages: (id: string) => Promise<void>;
+  createMatter: (text: string, permission: PermissionPreset) => Promise<void>;
   startBlank: () => void;
-  skipOpening: () => void;
-  advanceOpening: () => void;
-  decide: (pass: boolean, reason: string) => void;
-  send: (text: string) => void;
+  send: (text: string) => Promise<void>;
   swap: (patch: Partial<Pick<Matter, "skillId" | "kbDocId" | "externalId">> & { mcpId?: string; slot?: string }) => void;
   setCatalogTab: (tab: MindState["catalogTab"], id?: string) => void;
   updateAgent: (id: string, patch: { name?: string; duty?: string }) => void;
@@ -45,6 +46,17 @@ interface MindState {
   updateBase: (base: KnowledgeBase) => void;
   updateExternal: (source: ExternalSource) => void;
   updateMcp: (tool: McpTool) => void;
+}
+
+function roomToMatter(room: Room, previous?: Matter): Matter {
+  return {
+    ...(previous ?? defaultEquipment()),
+    id: room.id,
+    title: room.title.trim() || "未命名事项",
+    permission: room.permissionPreset,
+    state: room.state,
+    createdAt: room.createdAt,
+  };
 }
 
 function patchActive(matters: Matter[], activeId: string | null, recipe: (matter: Matter) => Matter) {
@@ -56,8 +68,13 @@ export const useMind = create<MindState>((set, get) => ({
   role: "经办人",
   filter: "进行中",
   catalog: seedCatalog(),
-  matters: [seedMatter()],
-  activeId: "huabei",
+  matters: [],
+  messages: {},
+  activeId: null,
+  composing: false,
+  loading: false,
+  pending: null,
+  error: null,
   threadAgentId: null,
   reading: null,
   catalogTab: "skill",
@@ -69,153 +86,94 @@ export const useMind = create<MindState>((set, get) => ({
       threadAgentId: null,
     }),
   setFilter: (filter) => set({ filter }),
-  selectMatter: (id) => set({ activeId: id, threadAgentId: null, reading: null }),
-  startBlank: () => set({ activeId: null, threadAgentId: null, reading: null }),
+  selectMatter: (id) => {
+    set({ activeId: id, composing: false, threadAgentId: null, reading: null, error: null });
+    void get().loadMessages(id);
+  },
+  startBlank: () => set({ activeId: null, composing: true, threadAgentId: null, reading: null, error: null }),
   setThread: (agentId) => set({ threadAgentId: agentId, reading: null }),
   setReading: (reading) => set({ reading }),
-  jump: (status) => {
-    const viaReject = status === "驳回待补材料" || status === "待财务确认" || status === "已完成";
-    set({
-      activeId: "huabei",
-      threadAgentId: null,
-      reading: null,
-      matters: get().matters.map((matter) =>
-        matter.id === "huabei"
-          ? {
-              ...matter,
-              status,
-              viaReject,
-              rich: true,
-              openingPhase: null,
-              extras: [],
-              rejectReason: "缺少安全生产许可证",
-            }
-          : matter,
-      ),
-    });
-  },
-  createMatter: (text, permission) => {
-    const matched = text.match(/给(.+?)办/);
-    const supplier = (matched?.[1] ?? text).trim() || "新供应商";
-    const existing = get().matters.find((matter) => matter.supplier === supplier && matter.scripted);
-    if (existing) {
-      set({ activeId: existing.id, threadAgentId: null, reading: null });
-      return;
+  loadRooms: async () => {
+    set({ loading: true, error: null });
+    try {
+      const body = await listRooms();
+      const previous = new Map(get().matters.map((matter) => [matter.id, matter]));
+      const matters = (body.items ?? [])
+        .map((room) => roomToMatter(room, previous.get(room.id)))
+        .sort((a, b) => b.createdAt.localeCompare(a.createdAt));
+      const { activeId, composing } = get();
+      const stillThere = activeId !== null && matters.some((matter) => matter.id === activeId);
+      const nextId = composing ? null : stillThere ? activeId : (matters[0]?.id ?? null);
+      set({ matters, activeId: nextId, loading: false });
+      if (nextId) await get().loadMessages(nextId);
+    } catch (error) {
+      set({ loading: false, error: error instanceof Error ? error.message : "事项列表读取失败" });
     }
-    const id = `m-${Date.now()}`;
-    const matter: Matter = {
-      id,
-      supplier,
-      scripted: false,
-      permission,
-      status: "办理中",
-      viaReject: false,
-      rejectReason: "",
-      rich: false,
-      openingPhase: 0,
-      extras: [],
-      ...defaultEquipment(),
-    };
-    set({
-      matters: [matter, ...get().matters],
-      activeId: id,
-      threadAgentId: null,
-      reading: null,
-      filter: "进行中",
-    });
   },
-  skipOpening: () =>
-    set({
-      matters: patchActive(get().matters, get().activeId, (matter) => ({
-        ...matter,
-        openingPhase: null,
-        rich: false,
-        status: "办理中",
-      })),
-    }),
-  advanceOpening: () =>
-    set({
-      matters: patchActive(get().matters, get().activeId, (matter) => {
-        if (matter.openingPhase === null) return matter;
-        if (matter.openingPhase >= 2) return { ...matter, openingPhase: null };
-        return { ...matter, openingPhase: matter.openingPhase + 1 };
-      }),
-    }),
-  decide: (pass, reason) => {
-    const { matters, activeId, role } = get();
-    const current = matters.find((matter) => matter.id === activeId);
-    if (!current || !needsRole(current, role)) return;
-    if (current.permission === "read-only" && pass) return;
-    set({
-      matters: patchActive(matters, activeId, (matter) => {
-        if (matter.status === "办理中") return { ...matter, status: "待合规确认" };
-        if (matter.status === "待合规确认" && pass) {
-          return { ...matter, status: "待财务确认", viaReject: false };
-        }
-        if (matter.status === "待合规确认" && !pass) {
-          return {
-            ...matter,
-            status: "驳回待补材料",
-            viaReject: true,
-            rejectReason: reason.trim() || "缺少安全生产许可证",
-          };
-        }
-        if (matter.status === "驳回待补材料") return { ...matter, status: "待财务确认" };
-        if (matter.status === "待财务确认" && pass) return { ...matter, status: "已完成" };
-        if (matter.status === "待财务确认" && !pass) {
-          return {
-            ...matter,
-            status: "驳回待补材料",
-            viaReject: true,
-            rejectReason: reason.trim() || "财务未通过",
-          };
-        }
-        return matter;
-      }),
-    });
+  loadMessages: async (id) => {
+    try {
+      const body = await listMessages(id);
+      if (get().activeId !== id && !get().matters.some((matter) => matter.id === id)) return;
+      const items = [...(body.items ?? [])].sort((a, b) => a.createdAt.localeCompare(b.createdAt));
+      set({ messages: { ...get().messages, [id]: items } });
+    } catch (error) {
+      if (get().activeId === id) {
+        set({ error: error instanceof Error ? error.message : "消息读取失败" });
+      }
+    }
   },
-  send: (text) => {
+  createMatter: async (text, permission) => {
+    const title = text.trim();
+    if (!title || get().pending) return;
+    set({ pending: "create", error: null });
+    try {
+      const room = await createRoom({ title, permissionPreset: permission });
+      const matter = roomToMatter(room);
+      set({
+        matters: [matter, ...get().matters.filter((item) => item.id !== matter.id)],
+        messages: { ...get().messages, [matter.id]: [] },
+        activeId: matter.id,
+        composing: false,
+        filter: "进行中",
+        pending: null,
+        threadAgentId: null,
+        reading: null,
+      });
+    } catch (error) {
+      set({ pending: null, error: error instanceof Error ? error.message : "创建失败" });
+    }
+  },
+  send: async (text) => {
     const trimmed = text.trim();
-    if (!trimmed) return;
-    const { catalog, threadAgentId } = get();
-    const mentioned = catalog.agents.find((agent) => trimmed.includes(`@${agent.name}`));
-    const agentId = mentioned?.id ?? threadAgentId ?? undefined;
-    const clean = trimmed.replace(/@\S+\s*/g, "").trim() || trimmed;
-    set({
-      matters: patchActive(get().matters, get().activeId, (matter) => ({
-        ...matter,
-        extras: [
-          ...matter.extras,
-          { id: `x-${Date.now()}`, author: "human", text: clean, agentId },
-        ],
-      })),
-    });
+    const id = get().activeId;
+    if (!trimmed || !id || get().pending) return;
+    set({ pending: "send", error: null });
+    try {
+      const posted = await postMessage(id, trimmed);
+      set({
+        matters: get().matters.map((matter) => (matter.id === posted.room.id ? roomToMatter(posted.room, matter) : matter)),
+        pending: null,
+      });
+      await get().loadMessages(id);
+    } catch (error) {
+      set({ pending: null, error: error instanceof Error ? error.message : "发送失败" });
+      await get().loadMessages(id);
+    }
   },
   swap: (patch) => {
     if (get().role !== "经办人") return;
     set({
       matters: patchActive(get().matters, get().activeId, (matter) => {
-        if (matter.status === "已完成") return matter;
+        if (matter.state === "closed") return matter;
         const mcpIds = patch.mcpId
           ? matter.mcpIds.map((id) => (id === patch.slot ? patch.mcpId! : id))
           : matter.mcpIds;
-        const note = patch.skillId
-          ? "已更换 Skill"
-          : patch.kbDocId
-            ? "已更换自建制度"
-            : patch.externalId
-              ? "已更换外部来源"
-              : "已更换 MCP";
         return {
           ...matter,
           skillId: patch.skillId ?? matter.skillId,
           kbDocId: patch.kbDocId ?? matter.kbDocId,
           externalId: patch.externalId ?? matter.externalId,
           mcpIds,
-          extras: [
-            ...matter.extras,
-            { id: `s-${Date.now()}`, author: "human", text: note },
-          ],
         };
       }),
     });
