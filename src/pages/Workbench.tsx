@@ -9,10 +9,12 @@ import {
   JUMPS,
   matterTitle,
   needsRole,
+  permissionLabel,
   type FilterId,
+  type PermissionPreset,
 } from "../model";
 import { useMind } from "../store";
-import { Area, Button, Field } from "../ui";
+import { Area, Button } from "../ui";
 import { cn } from "../lib/cn";
 
 export function WorkbenchPage() {
@@ -31,9 +33,8 @@ export function WorkbenchPage() {
   const matters = useMind((s) => s.matters);
   const catalog = useMind((s) => s.catalog);
   const selectMatter = useMind((s) => s.selectMatter);
-  const createMatter = useMind((s) => s.createMatter);
+  const startBlank = useMind((s) => s.startBlank);
   const jump = useMind((s) => s.jump);
-  const [draft, setDraft] = useState("给华北钢材办供应商准入");
 
   const visible = matters.filter((matter) => {
     if (filter === "已完成") return matter.status === "已完成";
@@ -54,18 +55,11 @@ export function WorkbenchPage() {
       <div className="grid min-h-0 flex-1 grid-cols-[280px_minmax(0,1fr)_320px]">
         <aside className="bg-sidebar flex min-h-0 flex-col border-r border-sidebar-border">
           {role === "经办人" ? (
-            <form
-              className="border-b border-sidebar-border p-3"
-              onSubmit={(event) => {
-                event.preventDefault();
-                createMatter(draft);
-              }}
-            >
-              <Field value={draft} onChange={(event) => setDraft(event.target.value)} />
-              <Button className="mt-2 w-full" type="submit">
-                新建事项
+            <div className="border-b border-sidebar-border p-3">
+              <Button className="w-full" variant={activeId === null ? "primary" : "outline"} onClick={startBlank}>
+                新事项
               </Button>
-            </form>
+            </div>
           ) : null}
           <div className="flex gap-1 p-2 text-xs">
             {FILTERS.map((item) => (
@@ -98,7 +92,7 @@ export function WorkbenchPage() {
                   ) : null}
                 </div>
                 <p className="text-muted-foreground mt-1 text-xs">
-                  {matter.supplier} · {matter.status} · {currentStepName(matter, catalog)}
+                  {matter.supplier} · {permissionLabel(matter.permission)} · {matter.status} · {currentStepName(matter, catalog)}
                 </p>
               </button>
             ))}
@@ -111,6 +105,55 @@ export function WorkbenchPage() {
         <Inspector onOpenCatalog={() => navigate("/capabilities")} />
       </div>
     </div>
+  );
+}
+
+function BlankMatter() {
+  const createMatter = useMind((s) => s.createMatter);
+  const [draft, setDraft] = useState("");
+  const [permission, setPermission] = useState<PermissionPreset>("workspace-write");
+
+  return (
+    <section className="bg-background flex min-h-0 flex-col">
+      <div className="border-b px-4 py-3">
+        <h1 className="text-base font-semibold">新事项</h1>
+        <p className="text-muted-foreground mt-1 text-xs">权限在这里选定，创建后只属于这件事，不能再改。</p>
+      </div>
+      <form
+        className="max-w-xl p-4"
+        onSubmit={(event) => {
+          event.preventDefault();
+          if (!draft.trim()) return;
+          createMatter(draft, permission);
+        }}
+      >
+        <Area rows={3} value={draft} placeholder="给华北钢材办供应商准入" onChange={(event) => setDraft(event.target.value)} />
+        <label className="mt-3 block text-xs">
+          权限
+          <select
+            aria-label="权限预设"
+            className="border-input bg-card mt-1 block h-9 rounded-lg border px-2 text-sm"
+            value={permission}
+            onChange={(event) => setPermission(event.target.value as PermissionPreset)}
+          >
+            <option value="workspace-write">工作区可写</option>
+            <option value="read-only">只读</option>
+            <option value="danger-full-access">完全访问</option>
+          </select>
+        </label>
+        {permission === "read-only" ? (
+          <p className="text-muted-foreground mt-2 text-xs">只读只作用于这件事：可以查看，不会改文件。</p>
+        ) : null}
+        {permission === "danger-full-access" ? (
+          <p className="mt-2 rounded-md bg-amber-50 px-2 py-1.5 text-xs text-amber-800">
+            完全访问只作用于这件事，会关闭默认审批，仅用于明确授权的受控环境。
+          </p>
+        ) : null}
+        <Button className="mt-3" type="submit">
+          创建
+        </Button>
+      </form>
+    </section>
   );
 }
 
@@ -127,13 +170,19 @@ function Timeline() {
   const feed = useMemo(() => (matter ? feedOf(matter, catalog) : []), [matter, catalog]);
   const shown = threadAgentId ? feed.filter((item) => item.agentId === threadAgentId) : feed;
   const threadName = catalog.agents.find((agent) => agent.id === threadAgentId)?.name;
-  if (!matter) return null;
+  if (!matter) return <BlankMatter />;
   const card = confirmOf(matter, catalog);
 
   return (
     <section className="bg-background flex min-h-0 flex-col">
       <div className="flex items-center gap-3 border-b px-4 py-3">
         <h1 className="text-base font-semibold">{matterTitle(matter)}</h1>
+        <span className="bg-accent text-accent-foreground rounded px-2 py-0.5 text-xs" title="权限在创建这件事时已经确定">
+          {permissionLabel(matter.permission)}
+        </span>
+        {matter.permission === "danger-full-access" ? (
+          <p className="text-muted-foreground text-xs">完全访问只作用于这件事，已关闭默认审批。</p>
+        ) : null}
         {threadAgentId ? (
           <button className="text-primary text-xs" onClick={() => setThread(null)}>
             返回主时间线
@@ -142,6 +191,9 @@ function Timeline() {
       </div>
       <div className="min-h-0 flex-1 space-y-3 overflow-auto p-4">
         {threadAgentId ? <p className="text-muted-foreground text-xs">与{threadName}的对话</p> : null}
+        {shown.length === 0 && !card ? (
+          <p className="text-muted-foreground py-8 text-center text-sm">发送后，进展和审批会出现在这里。</p>
+        ) : null}
         {shown.map((item) => (
           <article key={item.id} className="max-w-2xl">
             <p className="text-muted-foreground text-xs">{item.who}</p>
@@ -197,11 +249,11 @@ function ConfirmCard() {
   if (!matter) return null;
   const card = confirmOf(matter, catalog);
   if (!card) return null;
-  const allowed = card.actor === role;
+  const allowed = card.actor === role && matter.permission !== "read-only";
 
   return (
     <div className="bg-card max-w-xl rounded-lg border p-3">
-      <p className="text-xs font-semibold">待你确认 · {card.action}</p>
+      <p className="text-xs font-semibold">当前事项的审批 · {card.action}</p>
       <p className="mt-2 text-sm leading-6">{card.conclusion}</p>
       <div className="mt-2 flex gap-2">
         {card.cites.map((cite) => (
@@ -210,7 +262,12 @@ function ConfirmCard() {
           </button>
         ))}
       </div>
-      {!allowed ? <p className="text-muted-foreground mt-2 text-xs">等待{card.actor}处理</p> : null}
+      {matter.permission === "read-only" ? (
+        <p className="text-muted-foreground mt-2 text-xs">只读只作用于这件事：可以查看，不会改文件。</p>
+      ) : null}
+      {!allowed && matter.permission !== "read-only" ? (
+        <p className="text-muted-foreground mt-2 text-xs">等待{card.actor}处理</p>
+      ) : null}
       {rejecting ? (
         <div className="mt-2">
           <Area rows={2} value={reason} onChange={(event) => setReason(event.target.value)} />
@@ -229,10 +286,10 @@ function ConfirmCard() {
       ) : (
         <div className="mt-3 flex gap-2">
           <Button disabled={!allowed} onClick={() => decide(true, "")}>
-            通过
+            允许这一次
           </Button>
           <Button variant="outline" disabled={!allowed} onClick={() => setRejecting(true)}>
-            驳回
+            拒绝并停止
           </Button>
         </div>
       )}
@@ -250,7 +307,9 @@ function Inspector({ onOpenCatalog }: { onOpenCatalog: () => void }) {
   const swap = useMind((s) => s.swap);
   const setCatalogTab = useMind((s) => s.setCatalogTab);
   const [swapKind, setSwapKind] = useState<string | null>(null);
-  if (!matter) return null;
+  if (!matter) {
+    return <aside className="text-muted-foreground bg-card border-l p-4 text-sm">新事项的权限在中间选定。创建之后，审批会出现在对话后面。</aside>;
+  }
   const doc = findDoc(catalog, matter.kbDocId);
   const external = catalog.externals.find((item) => item.id === matter.externalId);
   const skill = catalog.skills.find((item) => item.id === matter.skillId);
@@ -330,7 +389,7 @@ function Inspector({ onOpenCatalog }: { onOpenCatalog: () => void }) {
           <h2 className="mt-4 text-xs font-semibold">本次装备</h2>
           <EquipRow
             label={skill?.name ?? "Skill"}
-            disabled={matter.status === "已完成"}
+            disabled={matter.status === "已完成" || matter.permission === "read-only"}
             open={swapKind === "skill"}
             onToggle={() => setSwapKind(swapKind === "skill" ? null : "skill")}
             options={catalog.skills.map((item) => item.name)}

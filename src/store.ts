@@ -10,6 +10,7 @@ import {
   type KnowledgeBase,
   type Matter,
   type McpTool,
+  type PermissionPreset,
   type Role,
   type Skill,
   type Status,
@@ -20,7 +21,7 @@ interface MindState {
   filter: FilterId;
   catalog: Catalog;
   matters: Matter[];
-  activeId: string;
+  activeId: string | null;
   threadAgentId: string | null;
   reading: "kb" | "external" | "mcp" | null;
   catalogTab: "agent" | "skill" | "kb" | "external" | "mcp";
@@ -31,7 +32,8 @@ interface MindState {
   setThread: (agentId: string | null) => void;
   setReading: (reading: MindState["reading"]) => void;
   jump: (status: Status) => void;
-  createMatter: (text: string) => void;
+  createMatter: (text: string, permission: PermissionPreset) => void;
+  startBlank: () => void;
   skipOpening: () => void;
   advanceOpening: () => void;
   decide: (pass: boolean, reason: string) => void;
@@ -45,7 +47,8 @@ interface MindState {
   updateMcp: (tool: McpTool) => void;
 }
 
-function patchActive(matters: Matter[], activeId: string, recipe: (matter: Matter) => Matter) {
+function patchActive(matters: Matter[], activeId: string | null, recipe: (matter: Matter) => Matter) {
+  if (!activeId) return matters;
   return matters.map((matter) => (matter.id === activeId ? recipe(matter) : matter));
 }
 
@@ -67,6 +70,7 @@ export const useMind = create<MindState>((set, get) => ({
     }),
   setFilter: (filter) => set({ filter }),
   selectMatter: (id) => set({ activeId: id, threadAgentId: null, reading: null }),
+  startBlank: () => set({ activeId: null, threadAgentId: null, reading: null }),
   setThread: (agentId) => set({ threadAgentId: agentId, reading: null }),
   setReading: (reading) => set({ reading }),
   jump: (status) => {
@@ -90,7 +94,7 @@ export const useMind = create<MindState>((set, get) => ({
       ),
     });
   },
-  createMatter: (text) => {
+  createMatter: (text, permission) => {
     const matched = text.match(/给(.+?)办/);
     const supplier = (matched?.[1] ?? text).trim() || "新供应商";
     const existing = get().matters.find((matter) => matter.supplier === supplier && matter.scripted);
@@ -103,6 +107,7 @@ export const useMind = create<MindState>((set, get) => ({
       id,
       supplier,
       scripted: false,
+      permission,
       status: "办理中",
       viaReject: false,
       rejectReason: "",
@@ -140,6 +145,7 @@ export const useMind = create<MindState>((set, get) => ({
     const { matters, activeId, role } = get();
     const current = matters.find((matter) => matter.id === activeId);
     if (!current || !needsRole(current, role)) return;
+    if (current.permission === "read-only" && pass) return;
     set({
       matters: patchActive(matters, activeId, (matter) => {
         if (matter.status === "办理中") return { ...matter, status: "待合规确认" };

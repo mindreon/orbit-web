@@ -1,4 +1,5 @@
 export type Role = "经办人" | "合规" | "财务";
+export type PermissionPreset = "read-only" | "workspace-write" | "danger-full-access";
 export type Status =
   | "办理中"
   | "待合规确认"
@@ -55,10 +56,17 @@ export interface ExtraMessage {
   /** 这条插话属于哪个智能体的对话。主时间线也会显示。 */
   agentId?: string;
 }
+export function permissionLabel(preset: PermissionPreset) {
+  if (preset === "read-only") return "只读";
+  if (preset === "workspace-write") return "工作区可写";
+  return "完全访问";
+}
+
 export interface Matter {
   id: string;
   supplier: string;
   scripted: boolean;
+  permission: PermissionPreset;
   status: Status;
   viaReject: boolean;
   rejectReason: string;
@@ -254,6 +262,7 @@ export function seedMatter(): Matter {
     id: "huabei",
     supplier: "华北钢材",
     scripted: true,
+    permission: "workspace-write",
     status: "办理中",
     viaReject: false,
     rejectReason: "缺少安全生产许可证",
@@ -318,6 +327,7 @@ export interface ConfirmView {
 
 export function confirmOf(matter: Matter, catalog: Catalog): ConfirmView | null {
   if (matter.openingPhase !== null) return null;
+  if (matter.permission === "danger-full-access") return null;
   const doc = findDoc(catalog, matter.kbDocId)?.doc.title ?? "制度";
   if (matter.status === "办理中" && matter.rich) {
     return {
