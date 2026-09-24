@@ -4,6 +4,9 @@ import { FILTERS, findDoc, matterTitle, permissionLabel, stateLabel, type Filter
 import { useMind } from "../store";
 import { Area, Button } from "../ui";
 import { cn } from "../lib/cn";
+import type { ChatMessage } from "../lib/rooms";
+
+const emptyMessages: ChatMessage[] = [];
 
 export function WorkbenchPage() {
   const loadRooms = useMind((s) => s.loadRooms);
@@ -149,7 +152,7 @@ function speaker(role: string) {
 function Timeline() {
   const role = useMind((s) => s.role);
   const matter = useMind((s) => s.matters.find((item) => item.id === s.activeId));
-  const messages = useMind((s) => (s.activeId ? (s.messages[s.activeId] ?? []) : []));
+  const messages = useMind((s) => (s.activeId && s.messages[s.activeId]) || emptyMessages);
   const pending = useMind((s) => s.pending);
   const error = useMind((s) => s.error);
   const send = useMind((s) => s.send);
