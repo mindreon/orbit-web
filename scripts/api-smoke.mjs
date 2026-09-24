@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 /**
- * Automated API smoke for the dsh workbench.
+ * Automated API smoke for the room workbench.
  * No browser video — fetch-only regression against orbit-control.
  */
 const CONTROL = process.env.ORBIT_CONTROL_URL ?? 'http://127.0.0.1:8080';

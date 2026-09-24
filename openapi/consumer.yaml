@@ -19,12 +19,11 @@ forbidden_from_browser:
   - temporal
   - llm-sdks
   - model-provider-direct
-  - dsh-web
-  - dsh-sdk
-  - dsh-acp
+  - agent-runtime
   - any-url-not-in-control-openapi
 
 notes:
   - Do not generate or wire a client in W0.
   - Later waves generate types from the control spec only.
-  - The browser never talks to Temporal, dsh, or LLM runtimes.
+  - The browser never talks to Temporal, the agent runtime, or LLM providers.
+  - Room `runtime.kernel` is whatever control returns. The live value is `agentscope`.

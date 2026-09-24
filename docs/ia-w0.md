@@ -2,7 +2,7 @@
 
 Status: wireframe only. Gate A nav locked. No visual tokens until after Gate A design-review sign-off.
 
-Target runtime (not in the browser): DeepSeek Harness on orbit-worker, driven by control. See control OpenAPI and orch tech-selection.
+Target runtime (not in the browser): AgentScope on the worker, driven by control. The browser only reads the runtime snapshot control returns.
 
 ## Global nav (4)
 - Agents | Rooms | Approvals | Settings
@@ -33,7 +33,7 @@ Target runtime (not in the browser): DeepSeek Harness on orbit-worker, driven by
 - Secrets area: placeholder list; never show plaintext secrets
 - Empty:「暂无密钥」
 - Profile/account minimal placeholder OK
-- No dsh login / credential screens — control secrets metadata only
+- No runtime login / credential screens — control secrets metadata only
 
 ## Out of scope W0
 - Cloud agent run UI (W1.5/W2)

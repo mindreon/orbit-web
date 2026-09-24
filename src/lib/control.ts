@@ -19,17 +19,25 @@ export function permissionLabel(preset: string): string {
   return preset;
 }
 
+/** Room snapshot from control. Live worker sends `agentscope`; protocol may be empty. */
+export type RuntimeSnapshot = {
+  kernel: string;
+  protocol: string;
+  isolation: string;
+};
+
+export function runtimeLabel(kernel: string): string {
+  if (kernel === "agentscope") return "AgentScope";
+  return kernel;
+}
+
 export type Room = {
   id: string;
   kind: "solo" | "collab";
   title: string;
   state: string;
   permissionPreset: PermissionPreset;
-  runtime: {
-    kernel: "dsh";
-    protocol: "acp";
-    isolation: "process";
-  };
+  runtime: RuntimeSnapshot;
   sessionId?: string;
   createdAt: string;
 };
@@ -68,8 +76,8 @@ export type ActivityEvent = {
   sessionId?: string;
   turnId?: string;
   source: "control" | "worker";
-  runtime?: "dsh";
-  protocol?: "acp";
+  runtime?: string;
+  protocol?: string;
   role?: string;
   text?: string;
   toolName?: string;

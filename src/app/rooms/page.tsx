@@ -13,6 +13,7 @@ import {
   CONTROL_URL,
   control,
   permissionLabel,
+  runtimeLabel,
   type ActivityEvent,
   type Approval,
   type ChatMessage,
@@ -376,6 +377,9 @@ export default function RoomsPage() {
                       {active.kind === "collab" ? "协作" : "单 Agent"}
                     </Tag>
                     <Tag color="processing">{permissionLabel(active.permissionPreset)}</Tag>
+                    {active.runtime.kernel ? (
+                      <Tag>{runtimeLabel(active.runtime.kernel)}</Tag>
+                    ) : null}
                     <span className="tabular-nums">{active.state}</span>
                   </div>
                 </div>

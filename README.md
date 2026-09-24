@@ -6,7 +6,8 @@ Orbit web UI. The browser talks to **orbit-control** only.
 - Compose one-click: leave `NEXT_PUBLIC_CONTROL_URL` empty so the UI uses
   same-origin `/v1` through the Caddy edge on a single host port.
 
-W1 Rooms can create a `solo|collab` task with a pinned dsh permission preset,
+W1 Rooms can create a `solo|collab` task with a pinned permission preset
+(`workspace-write`, `read-only`, or `danger-full-access`),
 send or steer a turn, subscribe to SSE, inspect the normalized execution
 timeline, and decide HITL approvals. Approvals is a live list of the same
 records.
@@ -48,6 +49,6 @@ npm run build
 
 ## Non-goals (W1)
 
-Authentication and any Temporal, dsh, or LLM SDK in the browser. Persona,
+Authentication and any Temporal, agent-runtime, or LLM SDK in the browser. Persona,
 Skill, workspace, enterprise connector and artifact management remain explicit
 future capabilities; Cloud Agent jobs stay a grey card until W2.
