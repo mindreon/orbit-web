@@ -18,6 +18,29 @@ export interface ChatMessage {
   type?: string;
 }
 
+export interface Approval {
+  id: string;
+  roomId: string;
+  toolName?: string;
+  reason?: string;
+  status: string;
+  decision?: string;
+  createdAt: string;
+}
+
+export interface ActivityEvent {
+  id: string;
+  sequence: number;
+  type: string;
+  roomId: string;
+  role?: string;
+  text?: string;
+  toolName?: string;
+  reason?: string;
+  status?: string;
+  occurredAt: string;
+}
+
 interface ErrorBody {
   message?: string;
   code?: string;
@@ -70,8 +93,41 @@ export function listMessages(roomId: string) {
 }
 
 export function postMessage(roomId: string, message: string) {
-  return api<{ room: Room }>(`/v1/rooms/${encodeURIComponent(roomId)}/messages`, {
+  return api<{ room: Room; approval?: Approval | null }>(`/v1/rooms/${encodeURIComponent(roomId)}/messages`, {
     method: "POST",
     body: JSON.stringify({ message }),
+  });
+}
+
+export function getRoom(roomId: string) {
+  return api<Room>(`/v1/rooms/${encodeURIComponent(roomId)}`);
+}
+
+export function listActivity(roomId: string) {
+  return api<{ items: ActivityEvent[] | null }>(`/v1/rooms/${encodeURIComponent(roomId)}/activity`);
+}
+
+export function listApprovals() {
+  return api<{ items: Approval[] | null }>("/v1/approvals");
+}
+
+export function decideApproval(approvalId: string, decision: "allow" | "reject") {
+  return api<Approval>(`/v1/approvals/${encodeURIComponent(approvalId)}/decide`, {
+    method: "POST",
+    body: JSON.stringify({ decision }),
+  });
+}
+
+export function abortRoom(roomId: string) {
+  return api<{ aborted: boolean }>(`/v1/rooms/${encodeURIComponent(roomId)}/abort`, {
+    method: "POST",
+    body: JSON.stringify({}),
+  });
+}
+
+export function steerRoom(roomId: string, instruction: string) {
+  return api<{ accepted: boolean }>(`/v1/rooms/${encodeURIComponent(roomId)}/steer`, {
+    method: "POST",
+    body: JSON.stringify({ instruction }),
   });
 }

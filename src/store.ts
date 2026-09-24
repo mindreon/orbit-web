@@ -1,5 +1,20 @@
 import { create } from "zustand";
-import { createRoom, listMessages, listRooms, postMessage, type ChatMessage, type Room } from "./lib/rooms";
+import {
+  abortRoom,
+  createRoom,
+  decideApproval,
+  getRoom,
+  listActivity,
+  listApprovals,
+  listMessages,
+  listRooms,
+  postMessage,
+  steerRoom,
+  type ActivityEvent,
+  type Approval,
+  type ChatMessage,
+  type Room,
+} from "./lib/rooms";
 import {
   defaultEquipment,
   seedCatalog,
@@ -20,10 +35,14 @@ interface MindState {
   catalog: Catalog;
   matters: Matter[];
   messages: Record<string, ChatMessage[]>;
+  activity: Record<string, ActivityEvent[]>;
+  approvals: Record<string, Approval | null>;
+  /** 这间房间刚点过停止，下一句走转向。 */
+  steered: Record<string, boolean>;
   activeId: string | null;
   composing: boolean;
   loading: boolean;
-  pending: "create" | "send" | null;
+  pending: "create" | "send" | "abort" | "steer" | "decide" | null;
   error: string | null;
   threadAgentId: string | null;
   reading: "kb" | "external" | "mcp" | null;
@@ -36,9 +55,15 @@ interface MindState {
   setReading: (reading: MindState["reading"]) => void;
   loadRooms: () => Promise<void>;
   loadMessages: (id: string) => Promise<void>;
+  loadActivity: (id: string) => Promise<void>;
+  loadApproval: (id: string) => Promise<void>;
+  loadRoomDetail: (id: string) => Promise<void>;
   createMatter: (text: string, permission: PermissionPreset) => Promise<void>;
   startBlank: () => void;
   send: (text: string) => Promise<void>;
+  stop: () => Promise<void>;
+  steer: (text: string) => Promise<void>;
+  decide: (approvalId: string, decision: "allow" | "reject") => Promise<void>;
   swap: (patch: Partial<Pick<Matter, "skillId" | "kbDocId" | "externalId">> & { mcpId?: string; slot?: string }) => void;
   setCatalogTab: (tab: MindState["catalogTab"], id?: string) => void;
   updateAgent: (id: string, patch: { name?: string; duty?: string }) => void;
@@ -70,6 +95,9 @@ export const useMind = create<MindState>((set, get) => ({
   catalog: seedCatalog(),
   matters: [],
   messages: {},
+  activity: {},
+  approvals: {},
+  steered: {},
   activeId: null,
   composing: false,
   loading: false,
@@ -88,7 +116,7 @@ export const useMind = create<MindState>((set, get) => ({
   setFilter: (filter) => set({ filter }),
   selectMatter: (id) => {
     set({ activeId: id, composing: false, threadAgentId: null, reading: null, error: null });
-    void get().loadMessages(id);
+    void get().loadRoomDetail(id);
   },
   startBlank: () => set({ activeId: null, composing: true, threadAgentId: null, reading: null, error: null }),
   setThread: (agentId) => set({ threadAgentId: agentId, reading: null }),
@@ -105,7 +133,7 @@ export const useMind = create<MindState>((set, get) => ({
       const stillThere = activeId !== null && matters.some((matter) => matter.id === activeId);
       const nextId = composing ? null : stillThere ? activeId : (matters[0]?.id ?? null);
       set({ matters, activeId: nextId, loading: false });
-      if (nextId) await get().loadMessages(nextId);
+      if (nextId) await get().loadRoomDetail(nextId);
     } catch (error) {
       set({ loading: false, error: error instanceof Error ? error.message : "事项列表读取失败" });
     }
@@ -122,6 +150,33 @@ export const useMind = create<MindState>((set, get) => ({
       }
     }
   },
+  loadRoomDetail: async (id) => {
+    await Promise.all([get().loadMessages(id), get().loadActivity(id), get().loadApproval(id)]);
+  },
+  loadActivity: async (id) => {
+    try {
+      const body = await listActivity(id);
+      const items = [...(body.items ?? [])].sort((a, b) => a.sequence - b.sequence);
+      set({ activity: { ...get().activity, [id]: items } });
+    } catch (error) {
+      if (get().activeId === id) {
+        set({ error: error instanceof Error ? error.message : "活动读取失败" });
+      }
+    }
+  },
+  loadApproval: async (id) => {
+    try {
+      const body = await listApprovals();
+      const pending = (body.items ?? [])
+        .filter((item) => item.roomId === id && item.status === "pending")
+        .sort((a, b) => b.createdAt.localeCompare(a.createdAt))[0];
+      set({ approvals: { ...get().approvals, [id]: pending ?? null } });
+    } catch (error) {
+      if (get().activeId === id) {
+        set({ error: error instanceof Error ? error.message : "批准读取失败" });
+      }
+    }
+  },
   createMatter: async (text, permission) => {
     const title = text.trim();
     if (!title || get().pending) return;
@@ -132,6 +187,8 @@ export const useMind = create<MindState>((set, get) => ({
       set({
         matters: [matter, ...get().matters.filter((item) => item.id !== matter.id)],
         messages: { ...get().messages, [matter.id]: [] },
+        activity: { ...get().activity, [matter.id]: [] },
+        approvals: { ...get().approvals, [matter.id]: null },
         activeId: matter.id,
         composing: false,
         filter: "进行中",
@@ -152,12 +209,61 @@ export const useMind = create<MindState>((set, get) => ({
       const posted = await postMessage(id, trimmed);
       set({
         matters: get().matters.map((matter) => (matter.id === posted.room.id ? roomToMatter(posted.room, matter) : matter)),
+        approvals: { ...get().approvals, [id]: posted.approval?.status === "pending" ? posted.approval : null },
         pending: null,
       });
-      await get().loadMessages(id);
+      await get().loadRoomDetail(id);
     } catch (error) {
       set({ pending: null, error: error instanceof Error ? error.message : "发送失败" });
-      await get().loadMessages(id);
+      await get().loadRoomDetail(id);
+    }
+  },
+  stop: async () => {
+    const id = get().activeId;
+    if (!id || get().pending === "abort") return;
+    set({ pending: "abort", error: null });
+    try {
+      await abortRoom(id);
+      const room = await getRoom(id);
+      set({
+        matters: get().matters.map((matter) => (matter.id === room.id ? roomToMatter(room, matter) : matter)),
+        steered: { ...get().steered, [id]: true },
+        pending: null,
+      });
+      await get().loadRoomDetail(id);
+    } catch (error) {
+      set({ pending: null, error: error instanceof Error ? error.message : "停止失败" });
+    }
+  },
+  steer: async (text) => {
+    const trimmed = text.trim();
+    const id = get().activeId;
+    if (!trimmed || !id || get().pending) return;
+    set({ pending: "steer", error: null });
+    try {
+      await steerRoom(id, trimmed);
+      set({ pending: null });
+      await get().loadRoomDetail(id);
+    } catch (error) {
+      set({ pending: null, error: error instanceof Error ? error.message : "接着说失败" });
+      await get().loadRoomDetail(id);
+    }
+  },
+  decide: async (approvalId, decision) => {
+    const id = get().activeId;
+    if (!id || get().pending) return;
+    set({ pending: "decide", error: null });
+    try {
+      await decideApproval(approvalId, decision);
+      const room = await getRoom(id);
+      set({
+        matters: get().matters.map((matter) => (matter.id === room.id ? roomToMatter(room, matter) : matter)),
+        pending: null,
+      });
+      await get().loadRoomDetail(id);
+    } catch (error) {
+      set({ pending: null, error: error instanceof Error ? error.message : "批准失败" });
+      if (id) await get().loadRoomDetail(id);
     }
   },
   swap: (patch) => {
