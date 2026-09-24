@@ -1,6 +1,6 @@
 # orbit-web
 
-MindBuddy 的可点击前端。技术栈与 `common/web-template` 的 `dev` 分支一致：Vite、React 19、React Router、Tailwind。页面数据是 mock，不连接后端。
+MindBuddy 的可点击前端。技术栈与 `common/web-template` 的 `dev` 分支一致：Vite、React 19、React Router、Tailwind。页面数据是 mock，不连接后端。运行时身份与控制面最新契约一致，是 AgentScope。
 
 ## 本地运行
 

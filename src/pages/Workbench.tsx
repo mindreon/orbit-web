@@ -10,6 +10,8 @@ import {
   matterTitle,
   needsRole,
   permissionLabel,
+  RUNTIME_KERNEL,
+  runtimeLabel,
   type FilterId,
   type PermissionPreset,
 } from "../model";
@@ -180,6 +182,7 @@ function Timeline() {
         <span className="bg-accent text-accent-foreground rounded px-2 py-0.5 text-xs" title="权限在创建这件事时已经确定">
           {permissionLabel(matter.permission)}
         </span>
+        <span className="text-muted-foreground text-xs">{runtimeLabel(RUNTIME_KERNEL)}</span>
         {matter.permission === "danger-full-access" ? (
           <p className="text-muted-foreground text-xs">完全访问只作用于这件事，已关闭默认审批。</p>
         ) : null}

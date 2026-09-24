@@ -1,6 +1,6 @@
 # Architecture
 
-orbit-web is the Orbit browser shell. It is a **consumer** of orbit-control. It is not an orchestrator, model host, workflow worker, or dsh frontend.
+orbit-web is the Orbit browser shell. It is a **consumer** of orbit-control. It is not an orchestrator, model host, workflow worker, or agent-runtime frontend.
 
 ## Product surfaces
 
@@ -9,13 +9,13 @@ orbit-web is the Orbit browser shell. It is a **consumer** of orbit-control. It 
 | **Rooms** | Super single-agent (`solo`) and multi-agent (`collab`) | Chat, steer, abort, subagent catalog, live WS |
 | **Approvals** | HITL | Decide allow/reject; unread badge from pending count |
 | **Agents** | Personas + **Cloud Agent** jobs | Persona CRUD; Cloud Job cards become runnable in W2 |
-| **Settings** | Secrets metadata, account | Never plaintext secrets; no dsh credential UI |
+| **Settings** | Secrets metadata, account | Never plaintext secrets; no runtime credential UI |
 
-dsh's own `web` profile is not used. The browser never loads a dsh origin.
+The browser never loads the worker. It only shows the runtime snapshot control returns.
 
-W1 Rooms expose an explicit runtime snapshot (`dsh` + `acp` + per-session
-process isolation) and a permission preset. The UI sends the selected preset
-to control; it never sets dsh environment variables or writes Cordis patches
+W1 Rooms show that snapshot (`kernel`, `protocol`, `isolation`) and a permission
+preset. The live worker identity is `agentscope`; `protocol` may be empty.
+The UI sends the selected preset to control and does not configure the worker
 itself.
 
 ## Boundary
@@ -28,7 +28,7 @@ itself.
         |  (server-side only)
         +--> Temporal (orbit-orch)
         +--> worker grants + event ingest
-             (worker hosts dsh --profile acp)
+             (worker hosts AgentScope)
 ```
 
 **Allowed from the browser:** orbit-control endpoints published in control's OpenAPI spec.
@@ -37,7 +37,7 @@ itself.
 
 - Temporal client / worker / task-queue APIs
 - Direct LLM or model-provider SDKs
-- dsh web / SDK / ACP endpoints
+- Agent runtime web / SDK / worker sockets
 - Ad-hoc URLs that skip control
 - Secrets that belong on the control side
 
@@ -60,15 +60,14 @@ control's OpenAPI first.
 
 When a later wave needs types, generate them from the control spec. Do not invent parallel request shapes in the UI.
 
-## App shape (W1)
+## App shape
 
-- Next.js App Router shell
-- Four locked destinations: Agents, Rooms, Approvals, Settings
-- Default route: Rooms (`/` → `/rooms`)
-- Rooms creates `solo|collab` tasks with a pinned permission preset, sends
-  turns, steers, aborts and renders a normalized execution timeline
-- Approvals lists live HITL records and decides allow-once or reject
-- Agents keeps **Cloud** as its own type (Cloud Job card), not mixed into persona cards
+The current shell is a Vite + React Router mock. It does not call orbit-control yet.
+
+- Routes: 事项 (`/`) and 能力 (`/capabilities`)
+- A new matter pins `workspace-write`, `read-only`, or `danger-full-access`
+- The header shows the live worker identity, `agentscope`
+- Confirmation cards stay in the matter thread
 
 Information architecture: [`docs/ia-w0.md`](./docs/ia-w0.md).
 
