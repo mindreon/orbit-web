@@ -1,12 +1,12 @@
 import { useEffect, useState } from "react";
-import { useNavigate } from "react-router";
-import { FILTERS, findDoc, matterTitle, permissionLabel, stateLabel, type FilterId, type PermissionPreset } from "../model";
+import { FILTERS, matterTitle, permissionLabel, stateLabel, type FilterId, type PermissionPreset } from "../model";
 import { useMind } from "../store";
 import { Area, Button } from "../ui";
 import { cn } from "../lib/cn";
-import type { ChatMessage } from "../lib/rooms";
+import type { ActivityEvent, ChatMessage } from "../lib/rooms";
 
 const emptyMessages: ChatMessage[] = [];
+const emptyActivity: ActivityEvent[] = [];
 
 export function WorkbenchPage() {
   const loadRooms = useMind((s) => s.loadRooms);
@@ -14,7 +14,6 @@ export function WorkbenchPage() {
     void loadRooms();
   }, [loadRooms]);
 
-  const navigate = useNavigate();
   const role = useMind((s) => s.role);
   const filter = useMind((s) => s.filter);
   const setFilter = useMind((s) => s.setFilter);
@@ -85,7 +84,7 @@ export function WorkbenchPage() {
           </div>
         </aside>
         <Timeline />
-        <Inspector onOpenCatalog={() => navigate("/capabilities")} />
+        <Inspector />
       </div>
     </div>
   );
@@ -153,11 +152,17 @@ function Timeline() {
   const role = useMind((s) => s.role);
   const matter = useMind((s) => s.matters.find((item) => item.id === s.activeId));
   const messages = useMind((s) => (s.activeId && s.messages[s.activeId]) || emptyMessages);
+  const approval = useMind((s) => (s.activeId ? (s.approvals[s.activeId] ?? null) : null));
+  const steered = useMind((s) => (s.activeId ? s.steered[s.activeId] === true : false));
   const pending = useMind((s) => s.pending);
   const error = useMind((s) => s.error);
   const send = useMind((s) => s.send);
+  const stop = useMind((s) => s.stop);
+  const steer = useMind((s) => s.steer);
+  const decide = useMind((s) => s.decide);
   const [text, setText] = useState("");
   if (!matter) return <BlankMatter />;
+  const continuing = steered || matter.state === "closed";
 
   return (
     <section className="bg-background flex min-h-0 flex-col">
@@ -181,6 +186,23 @@ function Timeline() {
             <p className="mt-1 text-sm leading-6">{item.text}</p>
           </article>
         ))}
+        {approval && approval.status === "pending" ? (
+          <div className="bg-card max-w-xl rounded-lg border p-3">
+            <p className="text-xs font-semibold">这一次要先确认</p>
+            <p className="mt-2 text-sm leading-6">
+              {approval.toolName ? `要调用「${approval.toolName}」。` : "助手要做一次需要确认的操作。"}
+              {approval.reason ? approval.reason : ""}
+            </p>
+            <div className="mt-3 flex gap-2">
+              <Button disabled={pending === "decide"} onClick={() => void decide(approval.id, "allow")}>
+                允许这一次
+              </Button>
+              <Button variant="outline" disabled={pending === "decide"} onClick={() => void decide(approval.id, "reject")}>
+                拒绝
+              </Button>
+            </div>
+          </div>
+        ) : null}
         {error ? <p className="text-destructive text-xs">{error}</p> : null}
       </div>
       {role === "经办人" ? (
@@ -189,165 +211,87 @@ function Timeline() {
           onSubmit={(event) => {
             event.preventDefault();
             if (!text.trim() || pending) return;
-            void send(text).then(() => {
+            const submit = continuing ? steer(text) : send(text);
+            void submit.then(() => {
               if (!useMind.getState().error) setText("");
             });
           }}
         >
-          <Area rows={2} value={text} placeholder="给这个事项发一句话" onChange={(event) => setText(event.target.value)} />
-          <Button className="mt-2" type="submit" disabled={pending === "send" || matter.state === "closed"}>
-            {pending === "send" ? "发送中…" : "发送"}
-          </Button>
+          <Area
+            rows={2}
+            value={text}
+            placeholder={continuing ? "接着说，会沿着这次的上下文改方向" : "给这个事项发一句话"}
+            onChange={(event) => setText(event.target.value)}
+          />
+          <div className="mt-2 flex gap-2">
+            <Button className="mt-0" type="submit" disabled={pending === "send" || pending === "steer" || matter.state === "awaiting_approval"}>
+              {pending === "send" || pending === "steer" ? "发送中…" : continuing ? "接着说" : "发送"}
+            </Button>
+            {matter.state === "running" || pending === "send" ? (
+              <Button type="button" variant="outline" disabled={pending === "abort"} onClick={() => void stop()}>
+                {pending === "abort" ? "正在停止…" : "停止"}
+              </Button>
+            ) : null}
+          </div>
         </form>
       ) : (
-        <p className="text-muted-foreground border-t p-3 text-xs">当前角色只查看这间房间的消息。</p>
+        <p className="text-muted-foreground border-t p-3 text-xs">当前角色只查看这间房间的消息。确认卡仍可点。</p>
       )}
     </section>
   );
 }
 
-function Inspector({ onOpenCatalog }: { onOpenCatalog: () => void }) {
-  const role = useMind((s) => s.role);
-  const catalog = useMind((s) => s.catalog);
-  const matter = useMind((s) => s.matters.find((item) => item.id === s.activeId));
-  const reading = useMind((s) => s.reading);
-  const setReading = useMind((s) => s.setReading);
-  const swap = useMind((s) => s.swap);
-  const setCatalogTab = useMind((s) => s.setCatalogTab);
-  const [swapKind, setSwapKind] = useState<string | null>(null);
-  if (!matter) {
-    return <aside className="text-muted-foreground bg-card border-l p-4 text-sm">新事项的权限在中间选定。创建之后，对话会出现在中间。</aside>;
-  }
-  const doc = findDoc(catalog, matter.kbDocId);
-  const external = catalog.externals.find((item) => item.id === matter.externalId);
-  const skill = catalog.skills.find((item) => item.id === matter.skillId);
-  const approver = role !== "经办人";
+function activityTitle(event: ActivityEvent) {
+  if (event.type === "tool.call") return "工具调用";
+  if (event.type === "tool.result") return "工具结果";
+  if (event.type === "approval.asked") return "等待批准";
+  if (event.type === "agent.started") return "开始";
+  if (event.type === "agent.finished") return "结束";
+  if (event.type === "room.steered") return "接着说";
+  return event.type;
+}
 
-  if (reading) {
-    const title = reading === "kb" ? doc?.doc.title : reading === "external" ? external?.name : "工商查询";
-    const body =
-      reading === "kb"
-        ? doc?.doc.body
-        : reading === "external"
-          ? `${external?.origin ?? ""}\n${external?.excerpt ?? ""}`
-          : "右栏仍是演示，还没有这次任务的真实工具结果。";
-    return (
-      <aside className="bg-card flex min-h-0 flex-col border-l">
-        <div className="flex items-center justify-between border-b px-3 py-2">
-          <p className="text-sm font-semibold">{title}</p>
-          <button className="text-primary text-xs" onClick={() => setReading(null)}>
-            关闭
-          </button>
-        </div>
-        <p className="whitespace-pre-wrap p-3 text-sm leading-6">{body}</p>
-      </aside>
-    );
+function activityBody(event: ActivityEvent) {
+  if (event.type === "tool.call" || event.type === "tool.result") {
+    return [event.toolName, event.text].filter(Boolean).join(" · ");
   }
+  if (event.type === "approval.asked") {
+    return [event.toolName, event.reason || event.text].filter(Boolean).join(" · ");
+  }
+  if (event.type === "agent.started" || event.type === "agent.finished") {
+    return [event.role, event.text].filter(Boolean).join(" · ") || "子助手";
+  }
+  return event.text || event.reason || "";
+}
+
+function Inspector() {
+  const matter = useMind((s) => s.matters.find((item) => item.id === s.activeId));
+  const activity = useMind((s) => (s.activeId && s.activity[s.activeId]) || emptyActivity);
+  const approval = useMind((s) => (s.activeId ? (s.approvals[s.activeId] ?? null) : null));
+  if (!matter) {
+    return <aside className="text-muted-foreground bg-card border-l p-4 text-sm">创建之后，右边显示这次的工具调用和结果。</aside>;
+  }
+  const shown = activity.filter((event) => event.type !== "usage" && event.type !== "assistant.message" && event.type !== "session.status");
+  const waiting = approval && approval.status === "pending" ? approval : null;
 
   return (
     <aside className="bg-card min-h-0 overflow-auto border-l p-3 text-sm">
-      <p className="text-muted-foreground text-xs">右栏仍是演示，不代表这间房间已经做过这些步骤。</p>
-      {approver ? null : (
-        <>
-          <h2 className="mt-4 text-xs font-semibold">步骤</h2>
-          <ol className="mt-2 space-y-2">
-            {skill?.steps.map((step) => (
-              <li key={step.id}>
-                <p>{step.name}</p>
-                <p className="text-muted-foreground text-xs">
-                  {step.agentIds.map((id) => catalog.agents.find((agent) => agent.id === id)?.name).filter(Boolean).join("、") || "人工确认"}
-                  {step.needsConfirm ? " · 需要确认" : ""}
-                </p>
-              </li>
-            ))}
-          </ol>
-          <h2 className="mt-4 text-xs font-semibold">分工</h2>
-          <ul className="mt-2 space-y-1">
-            {catalog.agents.map((agent) => (
-              <li key={agent.id}>
-                {agent.name}
-                <span className="text-muted-foreground"> · 演示</span>
-              </li>
-            ))}
-          </ul>
-          <h2 className="mt-4 text-xs font-semibold">已引用</h2>
-          <ul className="mt-2 space-y-1 text-xs">
-            <li>
-              <button className="text-primary" onClick={() => setReading("kb")}>
-                {doc?.doc.title}
-              </button>
-            </li>
-            <li>
-              <button className="text-primary" onClick={() => setReading("external")}>
-                {external?.name}
-              </button>
-            </li>
-            <li>
-              <button className="text-primary" onClick={() => setReading("mcp")}>
-                工商查询结果
-              </button>
-            </li>
-          </ul>
-          <h2 className="mt-4 text-xs font-semibold">本次装备</h2>
-          <EquipRow
-            label={skill?.name ?? "Skill"}
-            disabled={matter.state === "closed" || matter.permission === "read-only"}
-            open={swapKind === "skill"}
-            onToggle={() => setSwapKind(swapKind === "skill" ? null : "skill")}
-            options={catalog.skills.map((item) => item.name)}
-            onPick={(name) => {
-              const next = catalog.skills.find((item) => item.name === name);
-              if (next) swap({ skillId: next.id });
-              setSwapKind(null);
-            }}
-          />
-          <button
-            className="text-primary mt-1 block text-xs"
-            onClick={() => {
-              setCatalogTab("skill", matter.skillId);
-              onOpenCatalog();
-            }}
-          >
-            打开这条 Skill
-          </button>
-        </>
-      )}
-    </aside>
-  );
-}
-
-function EquipRow({
-  label,
-  disabled,
-  open,
-  onToggle,
-  options,
-  onPick,
-}: {
-  label: string;
-  disabled: boolean;
-  open: boolean;
-  onToggle: () => void;
-  options: string[];
-  onPick: (name: string) => void;
-}) {
-  return (
-    <div className="mt-2">
-      <div className="flex items-center justify-between">
-        <span>{label}</span>
-        <button className="text-primary text-xs" disabled={disabled} onClick={onToggle}>
-          更换
-        </button>
-      </div>
-      {open ? (
-        <div className="mt-1 rounded-md border p-1">
-          {options.map((option) => (
-            <button key={option} className="block w-full px-2 py-1 text-left text-xs" onClick={() => onPick(option)}>
-              {option}
-            </button>
-          ))}
-        </div>
+      <h2 className="text-xs font-semibold">这次做了什么</h2>
+      {waiting ? (
+        <p className="bg-primary/10 text-primary mt-2 rounded px-2 py-1.5 text-xs">
+          等待批准{waiting.toolName ? ` · ${waiting.toolName}` : ""}
+          {waiting.reason ? ` · ${waiting.reason}` : ""}
+        </p>
       ) : null}
-    </div>
+      {shown.length === 0 ? <p className="text-muted-foreground mt-3 text-xs">这次还没有工具调用或子助手。</p> : null}
+      <ol className="mt-3 space-y-3">
+        {shown.map((event) => (
+          <li key={event.id}>
+            <p className="text-xs font-semibold">{activityTitle(event)}</p>
+            {activityBody(event) ? <p className="text-muted-foreground mt-1 text-xs leading-5">{activityBody(event)}</p> : null}
+          </li>
+        ))}
+      </ol>
+    </aside>
   );
 }
