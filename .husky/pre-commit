@@ -1,0 +1,9 @@
+# husky v9 格式：不要 source _/husky.sh（v10 会硬失败）
+# 从 Dock/launchd 启动的 IDE 只继承最小 PATH，找不到 nvm 下的 node/pnpm，
+# 这里显式加载 nvm，保证 IDE 里点提交也能跑通。
+export NVM_DIR="${NVM_DIR:-$HOME/.nvm}"
+if [ -s "$NVM_DIR/nvm.sh" ]; then
+  . "$NVM_DIR/nvm.sh" >/dev/null 2>&1 || true
+fi
+
+pnpm exec lint-staged

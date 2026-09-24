@@ -1,0 +1,40 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* 与 web-template packages/design-tokens 亮色主题一致 */
+:root {
+  --background: 0 0% 100%;
+  --foreground: 225 17% 8%;
+  --card: 0 0% 100%;
+  --card-foreground: 225 17% 8%;
+  --primary: 219 92% 57%;
+  --primary-foreground: 0 0% 100%;
+  --secondary: 210 40% 98%;
+  --secondary-foreground: 225 14% 17%;
+  --muted: 210 32% 98%;
+  --muted-foreground: 218 10% 41%;
+  --accent: 217 100% 97%;
+  --accent-foreground: 219 76% 50%;
+  --destructive: 356 78% 58%;
+  --destructive-foreground: 0 0% 100%;
+  --border: 220 23% 92%;
+  --input: 220 23% 92%;
+  --ring: 219 92% 57%;
+  --radius: 0.5rem;
+  --sidebar-background: 220 27% 98%;
+  --sidebar-foreground: 225 14% 17%;
+  --sidebar-accent: 217 100% 95%;
+  --sidebar-border: 220 23% 90%;
+  color-scheme: light;
+}
+
+body {
+  margin: 0;
+  min-height: 100vh;
+  background: hsl(var(--sidebar-background));
+  color: hsl(var(--foreground));
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto,
+    "Helvetica Neue", Arial, "Noto Sans", "PingFang SC", "Microsoft YaHei",
+    sans-serif;
+}

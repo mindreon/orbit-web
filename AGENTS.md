@@ -1,9 +1,11 @@
-<!-- BEGIN:nextjs-agent-rules -->
+# MindBuddy
 
-# This is NOT the Next.js you know
+这是 Vite + React Router 的单页应用，源码在仓库根目录的 `src/`，不使用 Next.js。
 
-This version has breaking changes — APIs, conventions, and file structure may all differ from your training data. Read the relevant guide in `node_modules/next/dist/docs/` (resolved from this file's directory; in monorepos the `next` package may not be visible from the repo root) before writing any code. Heed deprecation notices.
+改界面前先看 `src/model.ts`（事项状态和文案）和 `src/store.ts`（点击后怎么改状态）。
 
-This block is written and re-added by `next dev` — verify at `node_modules/next/dist/server/lib/generate-agent-files.js`. Removing it from a diff only re-creates the uncommitted change; committing it with your work keeps the tree clean.
+## Testing
 
-<!-- END:nextjs-agent-rules -->
+- NEVER write unit tests after you write code.
+- Highly prefer E2E tests as the sole testing mechanism. Use them to verify complex features work. At the end of E2E tests, produce a verifiable and repeatable artifact.
+- If you must test a system in isolation, FIRST write all the ways it could fail, THEN write the code.
