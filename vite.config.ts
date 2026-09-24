@@ -6,6 +6,10 @@ export default defineConfig({
   server: {
     port: 3010,
     strictPort: false,
+    proxy: {
+      "/v1": "http://127.0.0.1:8080",
+      "/health": "http://127.0.0.1:8080",
+    },
   },
   preview: {
     port: 3000,
