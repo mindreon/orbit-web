@@ -60,15 +60,14 @@ control's OpenAPI first.
 
 When a later wave needs types, generate them from the control spec. Do not invent parallel request shapes in the UI.
 
-## App shape (W1)
+## App shape
 
-- Next.js App Router shell
-- Four locked destinations: Agents, Rooms, Approvals, Settings
-- Default route: Rooms (`/` → `/rooms`)
-- Rooms creates `solo|collab` tasks with a pinned permission preset, sends
-  turns, steers, aborts and renders a normalized execution timeline
-- Approvals lists live HITL records and decides allow-once or reject
-- Agents keeps **Cloud** as its own type (Cloud Job card), not mixed into persona cards
+The current shell is a Vite + React Router mock. It does not call orbit-control yet.
+
+- Routes: 事项 (`/`) and 能力 (`/capabilities`)
+- A new matter pins `workspace-write`, `read-only`, or `danger-full-access`
+- The header shows the live worker identity, `agentscope`
+- Confirmation cards stay in the matter thread
 
 Information architecture: [`docs/ia-w0.md`](./docs/ia-w0.md).
 

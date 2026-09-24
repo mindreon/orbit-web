@@ -1,7 +1,7 @@
 import { NavLink, useLocation } from "react-router";
 import { CapabilitiesPage } from "./pages/Capabilities";
 import { WorkbenchPage } from "./pages/Workbench";
-import { ROLES, type Role } from "./model";
+import { ROLES, RUNTIME_KERNEL, runtimeLabel, type Role } from "./model";
 import { useMind } from "./store";
 import { cn } from "./lib/cn";
 import { useState } from "react";
@@ -17,6 +17,9 @@ export function App() {
     <div className="flex h-screen flex-col">
       <header className="bg-sidebar flex h-14 shrink-0 items-center gap-6 border-b border-sidebar-border px-5">
         <span className="text-primary text-base font-semibold">MindBuddy</span>
+        <span className="text-muted-foreground text-xs" title="控制面里的运行时身份。这个页面仍用本地数据。">
+          {runtimeLabel(RUNTIME_KERNEL)}
+        </span>
         <nav className="flex items-center gap-1 text-sm">
           <NavLink
             to="/"

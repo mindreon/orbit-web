@@ -62,6 +62,14 @@ export function permissionLabel(preset: PermissionPreset) {
   return "完全访问";
 }
 
+/** Live worker identity from orbit-control. This mock does not fetch it. */
+export const RUNTIME_KERNEL = "agentscope";
+
+export function runtimeLabel(kernel: string) {
+  if (kernel === "agentscope") return "AgentScope";
+  return kernel;
+}
+
 export interface Matter {
   id: string;
   supplier: string;
