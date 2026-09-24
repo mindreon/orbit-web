@@ -45,8 +45,8 @@ export interface Skill {
   steps: SkillStep[];
 }
 export function permissionLabel(preset: PermissionPreset) {
-  if (preset === "read-only") return "只读";
-  if (preset === "workspace-write") return "工作区可写";
+  if (preset === "read-only") return "云端只读";
+  if (preset === "workspace-write") return "云端可写";
   return "完全访问";
 }
 

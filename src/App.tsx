@@ -28,7 +28,7 @@ export function App() {
               )
             }
           >
-            事项
+            任务
           </NavLink>
           <NavLink
             to="/capabilities"

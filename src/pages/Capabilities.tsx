@@ -19,7 +19,11 @@ export function CapabilitiesPage() {
   }
 
   return (
-    <div className="bg-background grid min-h-0 flex-1 grid-cols-[200px_minmax(0,1fr)]">
+    <div className="bg-background flex min-h-0 flex-1 flex-col">
+      <p className="text-muted-foreground border-b px-6 py-2 text-xs">
+        能力仍是演示。MindBuddy 的资源在云端，不在你的电脑上，也不是某一家厂商的文档或连接器。
+      </p>
+      <div className="grid min-h-0 flex-1 grid-cols-[200px_minmax(0,1fr)]">
       <aside className="bg-sidebar border-r border-sidebar-border p-3">
         {TABS.map(([id, label]) => (
           <button
@@ -41,6 +45,7 @@ export function CapabilitiesPage() {
         {tab === "external" ? <ExternalEditor /> : null}
         {tab === "mcp" ? <McpEditor /> : null}
       </div>
+    </div>
     </div>
   );
 }
