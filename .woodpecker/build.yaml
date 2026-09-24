@@ -1,0 +1,62 @@
+# =========================================================================
+# Web 构建 Workflow（amd64 + arm64 并行）
+# =========================================================================
+x-config:
+  registry: &registry_url harbor.mindreon.com
+  full_repo_web: &full_repo_web harbor.mindreon.com/baize/orbit-web
+
+matrix:
+  include:
+    - PLATFORM: linux/amd64
+      ARCH: amd64
+    - PLATFORM: linux/arm64
+      ARCH: arm64
+
+labels:
+  platform: ${PLATFORM}
+
+when:
+  event: [push, tag]
+
+steps:
+  build-web-branch:
+    image: harbor.mindreon.com/ops/woodpeckerci/plugin-docker-buildx:6.0
+    privileged: true
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+    settings:
+      dockerfile: Dockerfile
+      repo: *full_repo_web
+      registry: *registry_url
+      username: { from_secret: harbor_username }
+      password: { from_secret: harbor_password }
+      cache: true
+      daemon_off: true
+      platforms:
+        - ${PLATFORM}
+      provenance: false
+      auto_tag: false
+      tags:
+        - ${CI_COMMIT_BRANCH//\//-}-${ARCH}
+    when:
+      event: push
+
+  build-web-tag:
+    image: harbor.mindreon.com/ops/woodpeckerci/plugin-docker-buildx:6.0
+    privileged: true
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+    settings:
+      dockerfile: Dockerfile
+      repo: *full_repo_web
+      registry: *registry_url
+      username: { from_secret: harbor_username }
+      password: { from_secret: harbor_password }
+      cache: true
+      daemon_off: true
+      platforms:
+        - ${PLATFORM}
+      provenance: false
+      tags: ${CI_COMMIT_TAG}-${ARCH}
+    when:
+      event: tag

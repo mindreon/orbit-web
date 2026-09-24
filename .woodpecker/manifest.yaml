@@ -1,0 +1,49 @@
+# =========================================================================
+# Manifest 合并 Workflow：web
+# =========================================================================
+x-config:
+  registry: &registry_url harbor.mindreon.com
+  full_repo_web: &full_repo_web harbor.mindreon.com/baize/orbit-web
+depends_on:
+  - build
+
+skip_clone: true
+
+labels:
+  platform: linux/amd64
+
+when:
+  event: [push, tag]
+
+steps:
+  manifest-web-branch:
+    image: harbor.mindreon.com/ops/woodpeckerci/plugin-docker-buildx:6.0
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+    environment:
+      HARBOR_USER: { from_secret: harbor_username }
+      HARBOR_PWD: { from_secret: harbor_password }
+      REGISTRY: *registry_url
+      REPO: *full_repo_web
+    commands:
+      - "echo $HARBOR_PWD | docker login $REGISTRY -u $HARBOR_USER --password-stdin"
+      - 'IMAGE_TAG=$(printf "%s" "$CI_COMMIT_BRANCH" | tr "/" "-"); docker manifest create --amend "$REPO:$IMAGE_TAG" "$REPO:$IMAGE_TAG-amd64" "$REPO:$IMAGE_TAG-arm64"'
+      - 'IMAGE_TAG=$(printf "%s" "$CI_COMMIT_BRANCH" | tr "/" "-"); docker manifest push "$REPO:$IMAGE_TAG"'
+    when:
+      event: push
+
+  manifest-web-tag:
+    image: harbor.mindreon.com/ops/woodpeckerci/plugin-docker-buildx:6.0
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+    environment:
+      HARBOR_USER: { from_secret: harbor_username }
+      HARBOR_PWD: { from_secret: harbor_password }
+      REGISTRY: *registry_url
+      REPO: *full_repo_web
+    commands:
+      - "echo $HARBOR_PWD | docker login $REGISTRY -u $HARBOR_USER --password-stdin"
+      - "docker manifest create --amend $REPO:$CI_COMMIT_TAG $REPO:$CI_COMMIT_TAG-amd64 $REPO:$CI_COMMIT_TAG-arm64"
+      - "docker manifest push $REPO:$CI_COMMIT_TAG"
+    when:
+      event: tag
