@@ -9,14 +9,16 @@ on:
 permissions:
   contents: read
 
-# Every job writes acceptance-report/runs/<run>.json plus screenshots; the last job merges them into one
-# acceptance report (a JSON file per acceptance item, screenshots, perf numbers) uploaded as `acceptance-report`.
+# Every job runs its suite twice on the same commit: the first run writes acceptance-report/, the rerun
+# acceptance-report/rerun/ (runs/<run>.json plus screenshots). The last job builds both reports, checks that their
+# report.json files are byte-identical and that the measured numbers meet the thresholds in both runs, secret-scans
+# everything, and uploads it as `acceptance-report`.
 jobs:
   # The acceptance suite against the running stack in mock model mode:
   # Temporal dev server + orbit-control + orbit-orch + orbit-worker (ORBIT_MODEL_MODE=mock) + orbit-web production build.
   stack:
     runs-on: ubuntu-latest
-    timeout-minutes: 30
+    timeout-minutes: 40
     steps:
       # The PR head, not the merge commit, so the report names the commit under review.
       - uses: actions/checkout@v4
@@ -48,11 +50,20 @@ jobs:
 
       - run: pnpm exec playwright install --with-deps chromium webkit
 
-      # Starts the stack (e2e/stack/up.mjs, pinned orbit-control and orbit-runtime refs) and runs e2e/stack.
+      # Starts a fresh stack (e2e/stack/up.mjs, pinned orbit-control and orbit-runtime refs) and runs e2e/stack.
       - run: pnpm test:stack
 
-      - if: always()
+      - if: success() || failure()
         run: cp .stack/stack.json acceptance-report/stack.json || true
+
+      - name: Rerun on the same commit
+        if: success() || failure()
+        run: pnpm test:stack
+        env:
+          ACCEPTANCE_OUT: acceptance-report/rerun
+
+      - if: success() || failure()
+        run: cp .stack/stack.json acceptance-report/rerun/stack.json || true
 
       - uses: actions/upload-artifact@v4
         if: always()
@@ -94,6 +105,12 @@ jobs:
 
       - run: pnpm test:e2e
 
+      - name: Rerun on the same commit
+        if: success() || failure()
+        run: pnpm test:e2e --output test-results-rerun
+        env:
+          ACCEPTANCE_OUT: acceptance-report/rerun
+
       - uses: actions/upload-artifact@v4
         if: always()
         with:
@@ -133,19 +150,25 @@ jobs:
 
       - run: pnpm perf:chat
 
+      # The Chrome trace of the first run (open in DevTools > Performance) is large, so it travels separately.
+      - uses: actions/upload-artifact@v4
+        if: success() || failure()
+        with:
+          name: chat-perf-trace
+          path: perf-results
+          retention-days: 14
+
+      - name: Rerun on the same commit
+        if: success() || failure()
+        run: pnpm perf:chat
+        env:
+          ACCEPTANCE_OUT: acceptance-report/rerun
+
       - uses: actions/upload-artifact@v4
         if: always()
         with:
           name: acceptance-run-fixture-perf
           path: acceptance-report
-          retention-days: 14
-
-      # The Chrome trace (open in DevTools > Performance) is large, so it travels separately.
-      - uses: actions/upload-artifact@v4
-        if: always()
-        with:
-          name: chat-perf-trace
-          path: perf-results
           retention-days: 14
 
   acceptance-report:
@@ -163,11 +186,40 @@ jobs:
           path: acceptance-report
           merge-multiple: true
 
-      - name: Build the acceptance report
-        run: node e2e/report/build.mjs
+      - name: Build the report of each run
+        run: |
+          node e2e/report/build.mjs acceptance-report
+          node e2e/report/build.mjs acceptance-report/rerun
+
+      - name: Compare the two runs
+        if: success() || failure()
+        run: node e2e/report/compare.mjs acceptance-report acceptance-report/rerun
+
+      - name: Install gitleaks 8.30.1 (pinned checksum)
+        if: success() || failure()
+        run: |
+          curl -sSfL -o /tmp/gitleaks.tar.gz https://github.com/gitleaks/gitleaks/releases/download/v8.30.1/gitleaks_8.30.1_linux_x64.tar.gz
+          echo "551f6fc83ea457d62a0d98237cbad105af8d557003051f41f3e7ca7b3f2470eb  /tmp/gitleaks.tar.gz" | sha256sum -c -
+          tar -xzf /tmp/gitleaks.tar.gz -C /tmp gitleaks
+
+      - name: Secret-scan the report
+        if: success() || failure()
+        run: node e2e/report/scan.mjs acceptance-report
+        env:
+          GITLEAKS: /tmp/gitleaks
+          REQUIRE_GITLEAKS: "1"
 
       - if: always()
-        run: cat acceptance-report/index.md >> "$GITHUB_STEP_SUMMARY" || true
+        run: |
+          cat acceptance-report/index.md >> "$GITHUB_STEP_SUMMARY" || true
+          echo '## Rerun comparison' >> "$GITHUB_STEP_SUMMARY"
+          printf '```json\n' >> "$GITHUB_STEP_SUMMARY"
+          node -e 'const r=require("./acceptance-report/rerun-comparison.json");console.log(JSON.stringify({commit:r.commit,reportJson:{identical:r.reportJson.identical,sha256:r.reportJson.sha256},pass:r.pass},null,2))' >> "$GITHUB_STEP_SUMMARY" || true
+          printf '```\n' >> "$GITHUB_STEP_SUMMARY"
+          echo '## Secret scan' >> "$GITHUB_STEP_SUMMARY"
+          printf '```json\n' >> "$GITHUB_STEP_SUMMARY"
+          node -e 'const s=require("./acceptance-report/secret-scan.json");console.log(JSON.stringify({scanned:s.scanned,rules:s.rules,findings:s.findings.length,gitleaks:{version:s.gitleaks.version,findings:s.gitleaks.findings},pass:s.pass},null,2))' >> "$GITHUB_STEP_SUMMARY" || true
+          printf '```\n' >> "$GITHUB_STEP_SUMMARY"
 
       - uses: actions/upload-artifact@v4
         if: always()

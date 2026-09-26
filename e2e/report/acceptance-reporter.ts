@@ -5,7 +5,8 @@
  * Each Playwright run writes <out>/runs/<run>.json, where <out> is $ACCEPTANCE_OUT (default acceptance-report);
  * e2e/report/build.mjs merges the runs. Test durations are left out: they differ on every run.
  */
-import { copyFileSync, mkdirSync, writeFileSync } from "node:fs";
+import { execFileSync } from "node:child_process";
+import { copyFileSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { basename, join } from "node:path";
 import type { FullResult, Reporter, TestCase, TestResult } from "@playwright/test/reporter";
 
@@ -71,13 +72,38 @@ export default class AcceptanceReporter implements Reporter {
 
   onEnd(result: FullResult) {
     mkdirSync(join(OUT, "runs"), { recursive: true });
-    const run = { run: this.options.run, environment: this.options.environment, status: result.status, browsers: this.browsers, tests: this.entries };
+    const run = { run: this.options.run, environment: this.options.environment, status: result.status, versions: toolchain(), browsers: this.browsers, tests: this.entries };
     writeFileSync(join(OUT, "runs", `${this.options.run}.json`), `${JSON.stringify(run, null, 2)}\n`);
   }
 
   printsToStdio() {
     return false;
   }
+}
+
+const KEY_DEPENDENCIES = ["react", "react-dom", "react-router", "zustand", "@tanstack/react-virtual", "react-markdown", "remark-gfm", "rehype-sanitize", "dompurify", "katex", "mermaid", "lowlight", "vite", "typescript"];
+
+/** Versions of what ran the tests, read where node_modules is installed (the report job has none). */
+function toolchain() {
+  const installed = (name: string) => {
+    try {
+      return JSON.parse(readFileSync(join("node_modules", name, "package.json"), "utf8")).version as string;
+    } catch {
+      return "missing";
+    }
+  };
+  let pnpm = "unavailable";
+  try {
+    pnpm = execFileSync("pnpm", ["--version"], { encoding: "utf8" }).trim();
+  } catch {
+    // not run through pnpm
+  }
+  return {
+    node: process.version,
+    pnpm,
+    playwright: installed("@playwright/test"),
+    dependencies: Object.fromEntries(KEY_DEPENDENCIES.map((name) => [name, installed(name)])),
+  };
 }
 
 function slug(text: string) {

@@ -40,15 +40,20 @@ const stackInfo = stackFile && runs.some((run) => run.run === "stack") ? JSON.pa
 if (stackInfo && stackInfo.orbitWeb?.ref !== commit) problems.push(`the stack served orbit-web ${stackInfo.orbitWeb?.ref}, not ${commit}: restart it`);
 const { orbitWeb: _servedRef, ...stack } = stackInfo ?? {};
 
-const KEY_DEPENDENCIES = ["react", "react-dom", "react-router", "zustand", "@tanstack/react-virtual", "react-markdown", "remark-gfm", "rehype-sanitize", "dompurify", "katex", "mermaid", "lowlight", "vite", "typescript"];
+// Toolchain versions as each test run recorded them: one value when every run agrees, else one per run.
+const perRun = (pick) => {
+  const values = Object.fromEntries(runs.map((run) => [run.run, JSON.stringify(pick(run.versions ?? {}) ?? null)]));
+  const distinct = [...new Set(Object.values(values))];
+  return distinct.length === 1 ? JSON.parse(distinct[0]) : Object.fromEntries(Object.entries(values).map(([run, value]) => [run, JSON.parse(value)]));
+};
 const versions = {
   orbitWeb: commit,
   ...(stackInfo ? { stack } : {}),
-  node: process.version,
-  pnpm: tool("pnpm", ["--version"]),
-  playwright: installed("@playwright/test"),
+  node: perRun((v) => v.node),
+  pnpm: perRun((v) => v.pnpm),
+  playwright: perRun((v) => v.playwright),
   browsers: Object.fromEntries(Object.entries(Object.assign({}, ...runs.map((run) => run.browsers ?? {}))).sort()),
-  dependencies: Object.fromEntries(KEY_DEPENDENCIES.map((name) => [name, installed(name)])),
+  dependencies: perRun((v) => v.dependencies),
 };
 
 for (const run of runs) {
@@ -242,21 +247,5 @@ function git(args) {
     return execFileSync("git", args, { encoding: "utf8" }).trim();
   } catch {
     return "";
-  }
-}
-
-function tool(cmd, args) {
-  try {
-    return execFileSync(cmd, args, { encoding: "utf8" }).trim();
-  } catch {
-    return "unavailable";
-  }
-}
-
-function installed(name) {
-  try {
-    return JSON.parse(readFileSync(join("node_modules", name, "package.json"), "utf8")).version;
-  } catch {
-    return "missing";
   }
 }
