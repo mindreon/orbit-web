@@ -18,3 +18,16 @@ pnpm start
 ```
 
 `pnpm start` 用 Vite preview 在 3000 端口提供构建结果。源码在仓库根目录的 `src/`。
+
+`pnpm dev` 默认把 `/v1` 代理到 `http://127.0.0.1:8080`，用 `ORBIT_CONTROL_URL` 可以改。
+
+## 任务对话的事件流
+
+任务台对话只读 orbit-control 的 `GET /v1/rooms/{id}/activity` 和 `GET /v1/rooms/{id}/events`（SSE，断线重连时带 `Last-Event-ID`），发送走 `POST /v1/rooms/{id}/messages`。事件类型由 orbit-runtime 的 JSON Schema 生成，版本钉在 `scripts/gen-events.mjs` 里：
+
+```bash
+pnpm gen:events   # 重新生成 src/lib/events/orbit-event.gen.ts
+pnpm test:e2e     # 断线重连清草稿、reset 重建两条 E2E，报告在 playwright-report/
+```
+
+首次跑 E2E 前先 `pnpm exec playwright install chromium`。
