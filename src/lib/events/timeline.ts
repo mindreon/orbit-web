@@ -12,6 +12,8 @@ export interface ToolCallView {
   toolName: string;
   argsPreview: string;
   resultText: string;
+  /** tool.result says its text was capped at 4KB. */
+  truncated: boolean;
   state: ToolRunState;
   /** Why a call failed or was rejected, in business language. Empty for running and success. */
   note: string;
@@ -92,6 +94,7 @@ function toolFromCall(event: ActivityEvent): ToolCallView {
     toolName: event.toolName ?? "",
     argsPreview: event.argsPreview ?? "",
     resultText: "",
+    truncated: false,
     state: "running",
     note: "",
     errorCode: null,
@@ -106,6 +109,7 @@ function applyResult(call: ToolCallView, event: ActivityEvent) {
   const toolState = event.toolState ?? (code ? "error" : "success");
   call.errorCode = code;
   call.resultText = event.text ?? "";
+  call.truncated = event.truncated === true;
   call.finishedAt = event.occurredAt ?? "";
   if (!call.toolName) call.toolName = event.toolName ?? "";
   if (!call.argsPreview) call.argsPreview = event.argsPreview ?? "";

@@ -1,4 +1,4 @@
-import type { ActivityEvent } from "./activity";
+import { sseSequence, streamKey, type ActivityEvent } from "./activity";
 
 /** Live text of one assistant block, built from assistant.delta frames. Never persisted. */
 export interface Draft {
@@ -15,7 +15,7 @@ export interface Draft {
 }
 
 export interface RoomStream {
-  /** Persisted events, ordered by sequence, unique by id. */
+  /** Persisted events, ordered by per-task sequence, unique by stream key (see streamKey). */
   events: readonly ActivityEvent[];
   seen: ReadonlySet<string>;
   drafts: Readonly<Record<string, Draft>>;
@@ -25,7 +25,10 @@ export interface RoomStream {
   finalBlocks: ReadonlySet<string>;
   /** turnId|blockId|attempt whose draft was dropped on reconnect or reset; wait for the final message. */
   abandoned: ReadonlySet<string>;
+  /** Resume point: the last SSE `id:` received (or, before any frame, the snapshot's highest per-task sequence). */
   lastEventId: string | null;
+  /** Highest numeric SSE id applied; a frame at or below it is a replay and is dropped whole. */
+  streamSeq: number;
   lastSequence: number;
   /** lastSequence when the user pressed stop. Work started at or before it is over. */
   stoppedSequence: number;
@@ -35,7 +38,7 @@ export interface RoomStream {
 export type StreamInput = { event: ActivityEvent | null; sseId?: string };
 
 export type StreamAction =
-  | { type: "snapshot"; items: readonly ActivityEvent[]; mode: "merge" | "rebuild" }
+  | { type: "snapshot"; items: readonly ActivityEvent[]; mode: "merge" | "rebuild"; resetId?: string }
   | { type: "events"; items: readonly StreamInput[] }
   /** The SSE connection came back after a drop: unfinished drafts cannot be completed from deltas any more. */
   | { type: "abandonDrafts" }
@@ -51,6 +54,7 @@ export function emptyStream(): RoomStream {
     finalBlocks: new Set(),
     abandoned: new Set(),
     lastEventId: null,
+    streamSeq: 0,
     lastSequence: 0,
     stoppedSequence: 0,
     nextDraftOrder: 0,
@@ -69,6 +73,7 @@ class Draftable {
   finalBlocks: Set<string>;
   abandoned: Set<string>;
   lastEventId: string | null;
+  streamSeq: number;
   lastSequence: number;
   stoppedSequence: number;
   nextDraftOrder: number;
@@ -84,6 +89,7 @@ class Draftable {
     this.finalBlocks = new Set(state.finalBlocks);
     this.abandoned = new Set(state.abandoned);
     this.lastEventId = state.lastEventId;
+    this.streamSeq = state.streamSeq;
     this.lastSequence = state.lastSequence;
     this.stoppedSequence = state.stoppedSequence;
     this.nextDraftOrder = state.nextDraftOrder;
@@ -98,6 +104,7 @@ class Draftable {
       finalBlocks: this.finalBlocks,
       abandoned: this.abandoned,
       lastEventId: this.lastEventId,
+      streamSeq: this.streamSeq,
       lastSequence: this.lastSequence,
       stoppedSequence: this.stoppedSequence,
       nextDraftOrder: this.nextDraftOrder,
@@ -126,11 +133,11 @@ class Draftable {
     this.ownsEvents = true;
   }
 
-  /** Returns true when the event was new. */
-  insert(event: ActivityEvent): boolean {
-    if (event.id && this.seen.has(event.id)) return false;
+  /** Returns true when the event was new. `key` is its stream key: the SSE id / per-task sequence. */
+  insert(event: ActivityEvent, key: string): boolean {
+    if (key && this.seen.has(key)) return false;
     this.ownEvents();
-    if (event.id) this.seen.add(event.id);
+    if (key) this.seen.add(key);
     const list = this.events;
     let at = list.length;
     if (event.sequence > 0) {
@@ -199,13 +206,10 @@ class Draftable {
   }
 }
 
-function lastPersisted(items: readonly ActivityEvent[]) {
-  let best: ActivityEvent | null = null;
-  for (const item of items) {
-    if (!item.id) continue;
-    if (!best || item.sequence >= best.sequence) best = item;
-  }
-  return best;
+function maxSequence(items: readonly ActivityEvent[]) {
+  let max = 0;
+  for (const item of items) if (item.sequence > max) max = item.sequence;
+  return max;
 }
 
 export function reduceStream(state: RoomStream, action: StreamAction): RoomStream {
@@ -218,21 +222,25 @@ export function reduceStream(state: RoomStream, action: StreamAction): RoomStrea
   }
 
   if (action.type === "snapshot") {
+    const top = maxSequence(action.items);
     if (action.mode === "rebuild") {
       // Server history was rewritten. Start over, but remember which drafts were cut off so their late deltas stay hidden.
       const carried = new Draftable(state);
       carried.abandonAll();
       const fresh = new Draftable({ ...emptyStream(), attempts: carried.attempts, abandoned: carried.abandoned, finalBlocks: carried.finalBlocks });
-      for (const item of action.items) if (item.type !== "assistant.delta") fresh.insert(item);
-      fresh.lastEventId = lastPersisted(action.items)?.id ?? null;
+      for (const item of action.items) if (item.type !== "assistant.delta") fresh.insert(item, streamKey(item));
+      // Resume from the reset frame itself; frames that arrived after it are applied next.
+      fresh.lastEventId = action.resetId ?? (top > 0 ? String(top) : null);
+      fresh.streamSeq = sseSequence(action.resetId) ?? 0;
       return fresh.done();
     }
     const next = new Draftable(state);
     let changed = false;
-    for (const item of action.items) if (item.type !== "assistant.delta" && next.insert(item)) changed = true;
-    const newest = lastPersisted(action.items);
-    if (newest && (state.lastEventId === null || newest.sequence >= state.lastSequence)) {
-      next.lastEventId = newest.id;
+    for (const item of action.items) if (item.type !== "assistant.delta" && next.insert(item, streamKey(item))) changed = true;
+    if (state.lastEventId === null && top > 0) {
+      // First load: the stream resumes right after this snapshot. Snapshots never move an existing resume point and never
+      // touch streamSeq, which only SSE frames advance; otherwise frames already in flight could be dropped.
+      next.lastEventId = String(top);
       changed = true;
     }
     return changed ? next.done() : state;
@@ -240,11 +248,13 @@ export function reduceStream(state: RoomStream, action: StreamAction): RoomStrea
 
   const next = new Draftable(state);
   for (const { event, sseId } of action.items) {
-    const id = sseId || event?.id;
-    if (id) next.lastEventId = id;
+    const position = sseSequence(sseId);
+    if (position !== null && position <= next.streamSeq) continue;
+    if (sseId) next.lastEventId = sseId;
+    if (position !== null) next.streamSeq = position;
     if (!event) continue;
     if (event.type === "assistant.delta") next.delta(event);
-    else next.insert(event);
+    else next.insert(event, streamKey(event, sseId));
   }
   return next.done();
 }

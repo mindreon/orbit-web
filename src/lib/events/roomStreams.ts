@@ -103,14 +103,14 @@ export function useRoomEventStream(roomId: string | null | undefined) {
       dispatch(id, { type: "events", items });
     };
 
-    const rebuild = async () => {
+    const rebuild = async (resetId: string | undefined) => {
       const token = ++resetToken;
       pending = [];
       held = [];
       try {
         const items = await fetchActivity(id);
         if (disposed || token !== resetToken) return;
-        dispatch(id, { type: "snapshot", items, mode: "rebuild" });
+        dispatch(id, { type: "snapshot", items, mode: "rebuild", resetId });
         const after = held;
         held = null;
         if (after.length > 0) dispatch(id, { type: "events", items: after });
@@ -118,7 +118,7 @@ export function useRoomEventStream(roomId: string | null | undefined) {
         if (disposed || token !== resetToken) return;
         // Keep holding frames; the next reset or reconnect retries.
         setTimeout(() => {
-          if (!disposed && token === resetToken) void rebuild();
+          if (!disposed && token === resetToken) void rebuild(resetId);
         }, 2000);
       }
     };
@@ -133,7 +133,7 @@ export function useRoomEventStream(roomId: string | null | undefined) {
         }
       }
       if (isReset(frame, parsed)) {
-        void rebuild();
+        void rebuild(frame.id);
         return;
       }
       const input: StreamInput = { event: parseActivityEvent(parsed, frame.id), sseId: frame.id };

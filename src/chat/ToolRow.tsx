@@ -65,16 +65,20 @@ function duration(call: ToolCallView) {
   return `${Math.floor(seconds / 60)}m ${Math.round(seconds % 60)}s`;
 }
 
-function Detail({ title, text }: { title: string; text: string }) {
+function Detail({ title, text, truncated = false }: { title: string; text: string; truncated?: boolean }) {
   return (
     <div className="mt-2">
       <div className="flex items-center justify-between text-[11px] text-[#888]">
-        <span>{title}</span>
+        <span>
+          {title}
+          {truncated ? <span className="ml-1.5 rounded bg-amber-50 px-1 text-amber-700">已截断</span> : null}
+        </span>
         {text ? <CopyButton text={text} /> : null}
       </div>
       <pre className="mt-1 max-h-60 overflow-auto whitespace-pre-wrap break-all rounded-md bg-[#f6f6f7] px-2 py-1.5 font-mono text-[11px] leading-5 text-[#333]">
         {text || "（空）"}
       </pre>
+      {truncated ? <p className="mt-1 text-[11px] text-amber-700">结果超过 4KB，这里只显示前 4KB。</p> : null}
     </div>
   );
 }
@@ -126,7 +130,7 @@ export const ToolRow = memo(function ToolRow({ call, compact = false }: { call: 
             {call.callId ? <span className="ml-2 font-mono text-[#aaa]">{call.callId}</span> : null}
           </p>
           <Detail title="参数（已脱敏，最多 256 字）" text={call.argsPreview} />
-          {call.state === "running" || (!call.resultText && call.note) ? null : <Detail title="结果" text={call.resultText} />}
+          {call.state === "running" || (!call.resultText && call.note) ? null : <Detail title="结果" text={call.resultText} truncated={call.truncated} />}
           {call.errorCode ? <p className="mt-2 font-mono text-[11px] text-[#888]">错误码 {call.errorCode}</p> : null}
         </div>
       ) : null}
@@ -142,6 +146,7 @@ export function sameCall(a: ToolCallView, b: ToolCallView) {
     a.toolName === b.toolName &&
     a.argsPreview === b.argsPreview &&
     a.resultText === b.resultText &&
+    a.truncated === b.truncated &&
     a.errorCode === b.errorCode &&
     a.note === b.note &&
     a.finishedAt === b.finishedAt
