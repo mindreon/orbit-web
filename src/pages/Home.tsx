@@ -18,6 +18,7 @@ export function HomePage() {
   const createMatter = useMind((s) => s.createMatter);
   const pending = useMind((s) => s.pending);
   const createError = useMind((s) => s.createError);
+  const clearCreateError = useMind((s) => s.clearCreateError);
   const catalog = useMind((s) => s.catalog);
   const uiPrefs = useSyncExternalStore(subscribeUiPrefs, getUiPrefs);
   const [sceneId, setSceneId] = useState<(typeof SCENES)[number]["id"]>("work");
@@ -53,6 +54,8 @@ export function HomePage() {
     setCasePage(0);
     setCasesAll(false);
   }, [sceneId]);
+
+  useEffect(() => () => clearCreateError(), [clearCreateError]);
 
   useEffect(() => {
     if (params.get("quick") !== "1") return;
@@ -182,7 +185,10 @@ export function HomePage() {
           aria-label="任务内容"
           placeholder={quick ? "快速问答模式可解答简单问题，任务仍在云端运行" : "今天帮你做些什么？ @ 添加上下文，/调用技能与指令"}
           className="w-full resize-none bg-transparent text-sm outline-none placeholder:text-[#b0b0b0]"
-          onChange={(event) => setDraft(event.target.value)}
+          onChange={(event) => {
+            clearCreateError();
+            setDraft(event.target.value);
+          }}
         />
         <div className="mt-2 flex items-center gap-2 text-sm text-[#666]">
           <div className="relative">

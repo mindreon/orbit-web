@@ -1,10 +1,9 @@
 import { useEffect, useState, useSyncExternalStore } from "react";
 import { NavLink, Outlet, useLocation, useNavigate, useParams } from "react-router";
-import { MORE_NAV, PRIMARY_NAV, UNWIRED_NAV_LABELS } from "./shell/nav";
+import { PRIMARY_NAV } from "./shell/nav";
 import { getBuddyApps, subscribeBuddyApps } from "./lib/buddyApps";
 import { chordFromEvent, getShortcuts, isShortcutCapture, subscribeShortcuts } from "./lib/shortcuts";
 import { fontSizePx, getUiPrefs, stepFontSize, subscribeUiPrefs } from "./lib/uiPrefs";
-import { ShareTaskDialog } from "./pages/ShareTaskDialog";
 import { matterTitle, ROLES, type Role } from "./model";
 import { useMind } from "./store";
 import { cn } from "./lib/cn";
@@ -59,11 +58,9 @@ export function App() {
   const startBlank = useMind((s) => s.startBlank);
   const role = useMind((s) => s.role);
   const setRole = useMind((s) => s.setRole);
-  const [moreOpen, setMoreOpen] = useState(false);
   const [menuEdit, setMenuEdit] = useState(false);
   const [menuTip, setMenuTip] = useState("");
   const [primaryLabels, setPrimaryLabels] = useState<string[]>(PRIMARY_NAV.map((item) => item.label));
-  const [moreLabels, setMoreLabels] = useState<string[]>(MORE_NAV.map((item) => item.label));
   const [appsOpen, setAppsOpen] = useState(false);
   const buddyApps = useSyncExternalStore(subscribeBuddyApps, getBuddyApps);
   const uiPrefs = useSyncExternalStore(subscribeUiPrefs, getUiPrefs);
@@ -97,8 +94,6 @@ export function App() {
   const [renameValue, setRenameValue] = useState("");
   const [archiveId, setArchiveId] = useState<string | null>(null);
   const [deleteId, setDeleteId] = useState<string | null>(null);
-  const [shareId, setShareId] = useState<string | null>(null);
-
   useEffect(() => {
     void loadRooms();
   }, [loadRooms]);
@@ -344,21 +339,8 @@ export function App() {
         ) : null}
         <nav className="px-2" aria-label="Agents tabs">
           {primaryLabels.map((label) => {
-            const item = [...PRIMARY_NAV, ...MORE_NAV].find((entry) => entry.label === label);
+            const item = PRIMARY_NAV.find((entry) => entry.label === label);
             if (!item) return null;
-            if (UNWIRED_NAV_LABELS.has(item.label)) {
-              return (
-                <button
-                  key={item.label}
-                  type="button"
-                  disabled
-                  aria-disabled="true"
-                  className="mb-0.5 flex h-8 w-full cursor-not-allowed items-center rounded-lg px-3 text-left text-sm text-[#b0b0b0] disabled:cursor-not-allowed"
-                >
-                  {item.label} · 未接入
-                </button>
-              );
-            }
             return (
               <NavLink
                 key={item.to}
@@ -372,62 +354,16 @@ export function App() {
               </NavLink>
             );
           })}
-          <div className="relative">
-            <button
-              type="button"
-              aria-expanded={moreOpen}
-              className={cn(
-                "flex h-8 w-full items-center rounded-lg px-3 text-left text-sm",
-                moreLabels.some((label) => [...PRIMARY_NAV, ...MORE_NAV].find((item) => item.label === label)?.to === location.pathname) ? "bg-[#e7e7e9] font-medium" : "hover:bg-[#ececee]",
-              )}
-              onClick={() => setMoreOpen((open) => !open)}
-            >
-              更多
-            </button>
-            {moreOpen ? (
-              <div className="absolute left-2 z-20 mt-1 w-48 rounded-xl border border-[#ececee] bg-white p-1 shadow-lg">
-                {moreLabels.length === 0 ? <p className="px-3 py-2 text-xs text-[#888]">暂无内容，可将不常用的菜单功能移动到"更多"下</p> : null}
-                {moreLabels.map((label) => {
-                  const item = [...PRIMARY_NAV, ...MORE_NAV].find((entry) => entry.label === label);
-                  if (!item) return null;
-                  if (UNWIRED_NAV_LABELS.has(item.label)) {
-                    return (
-                      <button
-                        key={item.label}
-                        type="button"
-                        disabled
-                        aria-disabled="true"
-                        className="block w-full cursor-not-allowed rounded-lg px-3 py-2 text-left text-sm text-[#b0b0b0] disabled:cursor-not-allowed"
-                      >
-                        {item.label} · 未接入
-                      </button>
-                    );
-                  }
-                  return (
-                    <NavLink
-                      key={item.to}
-                      to={item.to}
-                      className={({ isActive }) => cn("block rounded-lg px-3 py-2 text-sm", isActive ? "bg-[#f3f3f4]" : "hover:bg-[#f6f6f7]")}
-                      onClick={() => setMoreOpen(false)}
-                    >
-                      {item.label}
-                    </NavLink>
-                  );
-                })}
-                <button
-                  type="button"
-                  className="mt-1 block w-full rounded-lg px-3 py-2 text-left text-sm hover:bg-[#f6f6f7]"
-                  onClick={() => {
-                    setMoreOpen(false);
-                    setMenuTip("");
-                    setMenuEdit(true);
-                  }}
-                >
-                  自定义菜单
-                </button>
-              </div>
-            ) : null}
-          </div>
+          <button
+            type="button"
+            className="mt-1 flex h-8 w-full items-center rounded-lg px-3 text-left text-sm hover:bg-[#ececee]"
+            onClick={() => {
+              setMenuTip("");
+              setMenuEdit(true);
+            }}
+          >
+            自定义菜单
+          </button>
         </nav>
         {menuEdit ? (
           <div className="fixed inset-0 z-40 flex items-center justify-center bg-black/30 p-4">
@@ -435,53 +371,39 @@ export function App() {
               <p className="font-medium">自定义菜单栏</p>
               <p className="mt-1 text-xs text-[#888]">拖拽可替换位置</p>
               {menuTip ? <p className="mt-2 text-xs text-[#c04545]">{menuTip}</p> : null}
-              {(["一级菜单", "更多"] as const).map((section) => {
-                const labels = section === "一级菜单" ? primaryLabels : moreLabels;
-                return (
-                  <div
-                    key={section}
-                    className="mt-3 rounded-xl border border-dashed border-[#e6e6e8] p-2"
-                    onDragOver={(event) => event.preventDefault()}
-                    onDrop={(event) => {
-                      event.preventDefault();
-                      const label = event.dataTransfer.getData("text/plain");
-                      if (!label || label === "新建任务") return;
-                      const restPrimary = primaryLabels.filter((item) => item !== label);
-                      const restMore = moreLabels.filter((item) => item !== label);
-                      if (section === "一级菜单") {
-                        setPrimaryLabels([...restPrimary, label]);
-                        setMoreLabels(restMore);
-                      } else {
-                        setPrimaryLabels(restPrimary);
-                        setMoreLabels([...restMore, label]);
+              <div
+                className="mt-3 rounded-xl border border-dashed border-[#e6e6e8] p-2"
+                onDragOver={(event) => event.preventDefault()}
+                onDrop={(event) => {
+                  event.preventDefault();
+                  const label = event.dataTransfer.getData("text/plain");
+                  if (!label || label === "新建任务") return;
+                  const rest = primaryLabels.filter((item) => item !== label);
+                  setPrimaryLabels([...rest, label]);
+                  setMenuTip("");
+                }}
+              >
+                <p className="px-2 py-1 text-xs text-[#888]">一级菜单</p>
+                {primaryLabels.map((label) => (
+                  <button
+                    key={label}
+                    type="button"
+                    draggable={label !== "新建任务"}
+                    className="block w-full rounded-lg px-2 py-1.5 text-left hover:bg-[#f6f6f7]"
+                    onDragStart={(event) => {
+                      if (label === "新建任务") {
+                        event.preventDefault();
+                        setMenuTip("新建任务菜单不支持拖拽替换位置");
+                        return;
                       }
+                      event.dataTransfer.setData("text/plain", label);
                       setMenuTip("");
                     }}
                   >
-                    <p className="px-2 py-1 text-xs text-[#888]">{section}</p>
-                    {labels.length === 0 ? <p className="px-2 py-2 text-xs text-[#888]">暂无内容，可将不常用的菜单功能移动到"更多"下</p> : null}
-                    {labels.map((label) => (
-                      <button
-                        key={label}
-                        type="button"
-                        draggable
-                        className="block w-full rounded-lg px-2 py-1.5 text-left hover:bg-[#f6f6f7]"
-                        onDragStart={(event) => {
-                          if (label === "新建任务") {
-                            event.preventDefault();
-                            setMenuTip("新建任务菜单不支持拖拽替换位置");
-                            return;
-                          }
-                          event.dataTransfer.setData("text/plain", label);
-                          setMenuTip("");
-                        }}
-                      >
-                        {label}
-                      </button>
-                    ))}
-                  </div>
-                );
-              })}
+                    {label}
+                  </button>
+                ))}
+              </div>
               <div className="mt-4 flex justify-end">
                 <button type="button" onClick={() => setMenuEdit(false)}>
                   取消
@@ -553,16 +475,6 @@ export function App() {
                         }}
                       >
                         重命名
-                      </button>
-                      <button
-                        type="button"
-                        className="block w-full rounded-lg px-3 py-2 text-left text-sm hover:bg-[#f6f6f7]"
-                        onClick={() => {
-                          setShareId(matter.id);
-                          setMenuId(null);
-                        }}
-                      >
-                        分享任务
                       </button>
                       <button
                         type="button"
@@ -707,14 +619,8 @@ export function App() {
               ))}
               <hr className="my-1 border-[#f0f0f1]" />
               <MenuLink label="企业智能体" to="/assistants?group=企业智能体" onDone={() => setAccountOpen(false)} />
-              <MenuLink label="检查更新" to="/settings?section=关于&check=1" onDone={() => setAccountOpen(false)} />
               <MenuLink label="已归档任务" to="/archived" onDone={() => setAccountOpen(false)} />
               <MenuLink label="系统设置" to="/settings" onDone={() => setAccountOpen(false)} />
-              <MenuLink label="记忆与进化" to="/settings?section=记忆与进化" onDone={() => setAccountOpen(false)} />
-              <MenuLink label="个性化" to="/settings?section=个性化" onDone={() => setAccountOpen(false)} />
-              <MenuLink label="外观" to="/settings?section=外观" onDone={() => setAccountOpen(false)} />
-              <MenuLink label="数据管理" to="/settings?section=数据管理" onDone={() => setAccountOpen(false)} />
-              <MenuLink label="帮助与反馈" to="/settings?section=获取帮助" onDone={() => setAccountOpen(false)} />
               <MenuLink label="账户管理" to="/settings?section=个人主页" onDone={() => setAccountOpen(false)} />
             </div>
           ) : null}
@@ -798,15 +704,6 @@ export function App() {
               </button>
             </div>
           </div>
-        </div>
-      ) : null}
-      {shareId ? (
-        <div className="fixed inset-0 z-40 flex items-center justify-center bg-black/30 p-4">
-          <ShareTaskDialog
-            matterId={shareId}
-            title={matters.find((item) => item.id === shareId)?.title ?? ""}
-            onClose={() => setShareId(null)}
-          />
         </div>
       ) : null}
       {rangeOpen ? (

@@ -9,15 +9,6 @@ export const PRIMARY_NAV = [
   { to: "/library", label: "资料库", end: false },
 ] as const;
 
-export const MORE_NAV = [
-  { to: "/files", label: "我的文件" },
-  { to: "/mail", label: "我的邮箱" },
-  { to: "/inspiration", label: "灵感" },
-] as const;
-
-/** 更多里这三项打开的是本地假流程，菜单上不可点。页面路由仍在，方便以后接上后端。 */
-export const UNWIRED_NAV_LABELS = new Set<string>(["我的文件", "我的邮箱", "灵感"]);
-
 export const EXPERT_TABS = [
   { to: "/experts", label: "专家", end: true },
   { to: "/experts/skills", label: "技能", end: false },
@@ -28,20 +19,8 @@ export const SKILL_TABS = ["推荐", "套件", "企业 Skill", "已安装"] as c
 
 export const SETTINGS_NAV = [
   {
-    group: "设置",
-    items: ["个人主页", "外观", "通用", "快捷键", "个性化"],
-  },
-  {
-    group: "功能",
-    items: ["连接器", "智能体", "记忆与进化", "模型", "应用管理"],
-  },
-  {
-    group: "数据与安全",
-    items: ["数据管理", "安全中心"],
-  },
-  {
-    group: "关于我们",
-    items: ["关于", "获取帮助"],
+    group: "个人设置",
+    items: ["个人主页", "语言", "主题"],
   },
 ] as const;
 
