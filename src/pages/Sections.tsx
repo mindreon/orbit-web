@@ -706,7 +706,6 @@ export function ProjectsPage() {
   const [deleteFor, setDeleteFor] = useState<string | null>(null);
   const [toast, setToast] = useState<string | null>(null);
   const [inviteOpen, setInviteOpen] = useState(false);
-  const [inviteCopied, setInviteCopied] = useState(false);
   const [joinMode, setJoinMode] = useState<"申请后加入" | "直接加入">("申请后加入");
   const [membersOpen, setMembersOpen] = useState(false);
   const [members, setMembers] = useState([{ name: "经办人", role: "所有者" }, { name: "合规", role: "成员" }]);
@@ -1081,7 +1080,7 @@ export function ProjectsPage() {
           <button type="button" className="ml-auto rounded-lg border border-[#e6e6e8] bg-white px-3 py-1.5 text-sm" aria-expanded={membersOpen} onClick={() => setMembersOpen((open) => !open)}>
             {`项目团队成员 · ${members.length}`}
           </button>
-          <button type="button" className="rounded-lg border border-[#e6e6e8] bg-white px-3 py-1.5 text-sm" onClick={() => { setInviteOpen(true); setInviteCopied(false); }}>
+          <button type="button" className="rounded-lg border border-[#e6e6e8] bg-white px-3 py-1.5 text-sm" onClick={() => setInviteOpen(true)}>
             邀请
           </button>
           <button type="button" className="rounded-lg border border-[#e6e6e8] bg-white px-3 py-1.5 text-sm" onClick={() => setConfigOpen((open) => !open)}>
@@ -2025,8 +2024,13 @@ export function ProjectsPage() {
                 <button type="button" className="rounded-lg px-3 py-1.5 text-sm" onClick={() => setInviteOpen(false)}>
                   关闭
                 </button>
-                <button type="button" className="rounded-lg bg-[#1a1a1a] px-3 py-1.5 text-sm text-white" onClick={() => setInviteCopied(true)}>
-                  {inviteCopied ? "已复制邀请链接" : "复制链接"}
+                <button
+                  type="button"
+                  disabled
+                  aria-disabled="true"
+                  className="cursor-not-allowed rounded-lg bg-[#f3f3f4] px-3 py-1.5 text-sm text-[#b0b0b0] disabled:cursor-not-allowed"
+                >
+                  复制链接 · 未接入
                 </button>
               </div>
             </div>
@@ -3550,8 +3554,6 @@ export function FilesPage() {
   const [currentFolder, setCurrentFolder] = useState<string | null>(null);
   const [moveId, setMoveId] = useState<string | null>(null);
   const [shareId, setShareId] = useState<string | null>(null);
-  const [shareCopied, setShareCopied] = useState(false);
-  const [shareBusy, setShareBusy] = useState(false);
   const [moveBusy, setMoveBusy] = useState(false);
   const [toast, setToast] = useState<string | null>(null);
   const [addTaskFor, setAddTaskFor] = useState<CloudEntry | null>(null);
@@ -3658,10 +3660,7 @@ export function FilesPage() {
               <button
                 type="button"
                 className="text-[#666]"
-                onClick={() => {
-                  setShareId(item.id);
-                  setShareCopied(false);
-                }}
+                onClick={() => setShareId(item.id)}
               >
                 分享给好友
               </button>
@@ -3938,17 +3937,11 @@ export function FilesPage() {
               <button type="button" onClick={() => setShareId(null)}>取消</button>
               <button
                 type="button"
-                className="rounded-lg bg-[#1a1a1a] px-3 py-1.5 text-white disabled:opacity-40"
-                disabled={shareBusy}
-                onClick={() => {
-                  setShareBusy(true);
-                  window.setTimeout(() => {
-                    setShareBusy(false);
-                    setShareCopied(true);
-                  }, 400);
-                }}
+                disabled
+                aria-disabled="true"
+                className="cursor-not-allowed rounded-lg bg-[#f3f3f4] px-3 py-1.5 text-[#b0b0b0] disabled:cursor-not-allowed"
               >
-                {shareBusy ? "获取链接中..." : shareCopied ? "已复制" : "立即分享"}
+                立即分享 · 未接入
               </button>
             </div>
           </div>
@@ -4315,23 +4308,19 @@ function knownSection(value: string | null) {
 }
 
 function AboutSection() {
-  const [params, setParams] = useSearchParams();
-  const [notice, setNotice] = useState<string | null>(params.get("check") === "1" ? "正在检查更新..." : null);
-  useEffect(() => {
-    if (params.get("check") === "1") setNotice("正在检查更新...");
-  }, [params]);
-  useEffect(() => {
-    if (notice !== "正在检查更新...") return;
-    const timer = window.setTimeout(() => setNotice("已是最新版本"), 700);
-    return () => window.clearTimeout(timer);
-  }, [notice]);
+  const [, setParams] = useSearchParams();
   return (
     <div className="mt-6 max-w-lg space-y-3 text-sm">
       <p>关于 MindBuddy</p>
       <p className="text-[#666]">当前版本 5.6.2</p>
       <div className="flex gap-2">
-        <button type="button" className="rounded-lg bg-white px-3 py-2" onClick={() => setNotice("正在检查更新...")}>
-          检查更新
+        <button
+          type="button"
+          disabled
+          aria-disabled="true"
+          className="cursor-not-allowed rounded-lg bg-white px-3 py-2 text-[#b0b0b0] disabled:cursor-not-allowed"
+        >
+          检查更新 · 未接入
         </button>
         <button type="button" className="rounded-lg bg-white px-3 py-2" onClick={() => setParams({ section: "获取帮助", feedback: "1" })}>
           填写反馈
@@ -4340,7 +4329,6 @@ function AboutSection() {
           查看文档
         </button>
       </div>
-      {notice ? <p className="text-[#666]">{notice}</p> : null}
     </div>
   );
 }
@@ -4783,7 +4771,6 @@ function SettingsBody({ section }: { section: string }) {
   const [feedbackNotice, setFeedbackNotice] = useState<string | null>(null);
   const [feedbackImages, setFeedbackImages] = useState<string[]>([]);
   const [feedbackLog, setFeedbackLog] = useState(false);
-  const [feedbackAt, setFeedbackAt] = useState(0);
   const buddyApps = useSyncExternalStore(subscribeBuddyApps, getBuddyApps);
   const uiPrefs = useSyncExternalStore(subscribeUiPrefs, getUiPrefs);
   const disconnecting = buddyApps.find((item) => item.id === disconnectId);
@@ -5914,20 +5901,6 @@ function SettingsBody({ section }: { section: string }) {
             className="rounded-xl bg-white p-4"
             onSubmit={(event) => {
               event.preventDefault();
-              if (!feedbackText.trim()) return;
-              if (feedbackAt && Date.now() - feedbackAt < 60_000) {
-                setFeedbackNotice("提交过于频繁，请 1 分钟后再试");
-                return;
-              }
-              setFeedbackNotice(feedbackLog ? "打包中..." : "正在提交...");
-              window.setTimeout(() => {
-                setFeedbackNotice("反馈提交成功，感谢您的反馈！");
-                setFeedbackText("");
-                setFeedbackImages([]);
-                setFeedbackLog(false);
-                setFeedbackOpen(false);
-                setFeedbackAt(Date.now());
-              }, 400);
             }}
           >
             <p className="font-medium">意见反馈</p>
@@ -5972,7 +5945,14 @@ function SettingsBody({ section }: { section: string }) {
             </div>
             <div className="mt-3 flex justify-end gap-2">
               <button type="button" onClick={() => setFeedbackOpen(false)}>取消</button>
-              <button type="submit" className="rounded-lg bg-[#1a1a1a] px-3 py-1.5 text-white">提交</button>
+              <button
+                type="button"
+                disabled
+                aria-disabled="true"
+                className="cursor-not-allowed rounded-lg bg-[#f3f3f4] px-3 py-1.5 text-[#b0b0b0] disabled:cursor-not-allowed"
+              >
+                提交 · 未接入
+              </button>
             </div>
           </form>
         ) : null}

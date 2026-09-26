@@ -6,15 +6,13 @@ import { Area, Button } from "../ui";
 import { cn } from "../lib/cn";
 import type { ActivityEvent, ChatMessage } from "../lib/rooms";
 import { publishFileShare } from "../lib/shares";
-import { getPublishedApps, publishApp, subscribePublishedApps } from "../lib/publishedApps";
+import { getPublishedApps, subscribePublishedApps } from "../lib/publishedApps";
 import { getUiPrefs, setUiPrefs, subscribeUiPrefs } from "../lib/uiPrefs";
 import { chordFromEvent, getShortcuts, isShortcutCapture } from "../lib/shortcuts";
 import { ModelPicker } from "./ModelPicker";
 import { ShareTaskDialog } from "./ShareTaskDialog";
 import { AppMenu } from "./AppMenu";
-import { addHandoff } from "../lib/handoffs";
 import { CreateFailureNotice } from "./CreateFailureNotice";
-import type { RoomCreateAlert } from "../lib/rooms";
 
 const emptyMessages: ChatMessage[] = [];
 const emptyActivity: ActivityEvent[] = [];
@@ -47,18 +45,13 @@ export function WorkbenchPage() {
 function BlankMatter() {
   const createMatter = useMind((s) => s.createMatter);
   const pending = useMind((s) => s.pending);
+  const createError = useMind((s) => s.createError);
   const [draft, setDraft] = useState("");
-  const [createAlert, setCreateAlert] = useState<RoomCreateAlert | null>(null);
   const [permission, setPermission] = useState<PermissionPreset>("workspace-write");
 
   function submit() {
     if (!draft.trim() || pending === "create") return;
-    setCreateAlert(null);
     void createMatter(draft, permission).then((result) => {
-      if (result.alert) {
-        setCreateAlert(result.alert);
-        return;
-      }
       if (result.createdId) setDraft("");
     });
   }
@@ -107,8 +100,8 @@ function BlankMatter() {
             </p>
           ) : null}
           {pending === "create" ? <p className="text-muted-foreground mt-2 text-xs">Agent 正在接手并进入工作状态。</p> : null}
-          {createAlert ? (
-            <CreateFailureNotice alert={createAlert} retryDisabled={pending === "create" || !draft.trim()} onRetry={submit} />
+          {createError ? (
+            <CreateFailureNotice alert={createError} retryDisabled={pending === "create" || !draft.trim()} onRetry={submit} />
           ) : null}
         </div>
       </form>
@@ -142,118 +135,6 @@ function markedText(text: string, query: string, active: boolean) {
   );
 }
 
-function HandoffDialog({
-  taskTitle,
-  artifacts,
-  rounds,
-  onClose,
-  onDone,
-}: {
-  taskTitle: string;
-  artifacts: { name: string }[];
-  rounds: number;
-  onClose: () => void;
-  onDone: (notice: string) => void;
-}) {
-  const [todoTitle, setTodoTitle] = useState("");
-  const [description, setDescription] = useState("");
-  const [assignee, setAssignee] = useState("");
-  const [memberQuery, setMemberQuery] = useState("");
-  const [pickerOpen, setPickerOpen] = useState(false);
-  const [summaryOpen, setSummaryOpen] = useState(false);
-  const [submitting, setSubmitting] = useState(false);
-  const [error, setError] = useState("");
-  const names = artifacts.map((item) => item.name).filter(Boolean);
-  const summary =
-    rounds === 0 && artifacts.length === 0
-      ? ""
-      : `该任务「${taskTitle || "当前任务"}」已产出 ${artifacts.length} 个文件产物${names.length ? `（${names.join("、")}）` : ""}。对话共 ${rounds} 轮交互，任务整体进展顺利，可接续后续环节。`;
-  const members = ["经办人", "合规", "财务"].filter((name) => !memberQuery.trim() || name.includes(memberQuery.trim()));
-  function confirm() {
-    if (!todoTitle.trim()) {
-      setError("请先填写待办标题");
-      return;
-    }
-    if (!assignee) {
-      setError("请选择处理人");
-      return;
-    }
-    if (!summary) {
-      setError("任务进展摘要为空，请稍后重试");
-      return;
-    }
-    setError("");
-    setSubmitting(true);
-    const title = todoTitle.trim();
-    const note = description.trim();
-    const owner = assignee;
-    const source = taskTitle || "当前任务";
-    window.setTimeout(() => {
-      addHandoff({ title, description: note, owner, source });
-      onDone("任务正在转交中，稍后可在计划看板中查看");
-    }, 400);
-  }
-  return (
-    <div className="fixed inset-0 z-30 flex items-center justify-center bg-black/30 p-4" aria-label="关闭新建待办" onClick={onClose}>
-      <div className="max-h-[80vh] w-full max-w-md overflow-auto rounded-2xl bg-white p-5 text-sm" role="dialog" aria-label="新建待办" onClick={(event) => event.stopPropagation()}>
-        <div className="flex items-center gap-2">
-          <p className="font-medium">新建待办</p>
-          <button type="button" className="ml-auto text-xs text-[#666]" onClick={onClose}>关闭</button>
-        </div>
-        <p className="mt-3 text-xs text-[#888]">任务信息</p>
-        <p className="mt-1">{`来自「${taskTitle || "当前任务"}」`}</p>
-        <label className="mt-3 block">
-          标题
-          <input aria-label="标题" placeholder="请输入标题" className="mt-1 h-9 w-full rounded-lg border border-[#e6e6e8] px-3" value={todoTitle} onChange={(event) => setTodoTitle(event.target.value)} />
-        </label>
-        <label className="mt-3 block">
-          描述
-          <textarea aria-label="描述" placeholder="添加描述（可选）" className="mt-1 w-full rounded-lg border border-[#e6e6e8] px-3 py-2" rows={2} value={description} onChange={(event) => setDescription(event.target.value)} />
-        </label>
-        <div className="mt-3" aria-label="待办属性">
-          <button type="button" className="rounded-full border border-[#e6e6e8] px-3 py-1" onClick={() => setPickerOpen((open) => !open)}>
-            {assignee || "处理人"}
-          </button>
-          {pickerOpen ? (
-            <div className="mt-2 rounded-xl border border-[#ececee] p-2">
-              <input aria-label="搜索成员" placeholder="搜索成员" className="h-8 w-full rounded-lg border border-[#e6e6e8] px-2" value={memberQuery} onChange={(event) => setMemberQuery(event.target.value)} />
-              {members.length === 0 ? <p className="mt-2 text-xs text-[#888]">没有匹配的处理人</p> : null}
-              <ul className="mt-1">
-                {members.map((name) => (
-                  <li key={name}>
-                    <button type="button" className="w-full rounded-lg px-2 py-1 text-left hover:bg-[#f6f6f7]" onClick={() => { setAssignee(name); setPickerOpen(false); }}>
-                      {name}
-                    </button>
-                  </li>
-                ))}
-              </ul>
-            </div>
-          ) : null}
-        </div>
-        <p className="mt-3 text-xs text-[#888]">{`任务产物 · 共 ${artifacts.length} 项`}</p>
-        {artifacts.length === 0 ? <p className="mt-1 text-xs text-[#888]">暂无产物</p> : null}
-        <ul>
-          {artifacts.map((item) => (
-            <li key={item.name} className="mt-1 text-xs">{item.name} · 文件</li>
-          ))}
-        </ul>
-        <div className="mt-3">
-          <button type="button" className="text-xs text-[#666]" onClick={() => setSummaryOpen((open) => !open)}>
-            {summaryOpen ? "收起" : "展开"}
-          </button>
-          <p className="mt-1 text-xs text-[#888]">任务进度摘要 <span className="rounded bg-[#f3f3f4] px-1">AI生成</span></p>
-          {summaryOpen ? <p className="mt-1 text-xs leading-5">{summary || "任务进展摘要为空，请稍后重试"}</p> : null}
-        </div>
-        {error ? <p className="mt-3 text-xs text-[#c4554d]">{error}</p> : null}
-        <div className="mt-4 flex justify-end gap-3">
-          <button type="button" onClick={onClose}>取消</button>
-          <button type="button" disabled={submitting} onClick={confirm}>{submitting ? "提交中..." : "确认"}</button>
-        </div>
-      </div>
-    </div>
-  );
-}
-
 function Timeline({ railOpen, onToggleRail }: { railOpen: boolean; onToggleRail: () => void }) {
   const role = useMind((s) => s.role);
   const matter = useMind((s) => s.matters.find((item) => item.id === s.activeId));
@@ -267,38 +148,23 @@ function Timeline({ railOpen, onToggleRail }: { railOpen: boolean; onToggleRail:
   const uiPrefs = useSyncExternalStore(subscribeUiPrefs, getUiPrefs);
   const steer = useMind((s) => s.steer);
   const decide = useMind((s) => s.decide);
-  const rewindTo = useMind((s) => s.rewindTo);
-  const replayFrom = useMind((s) => s.replayFrom);
   const [params] = useSearchParams();
   const attachedFile = params.get("file");
   const [text, setText] = useState(attachedFile ?? "");
   const [copiedId, setCopiedId] = useState<string | null>(null);
-  const [feedbackId, setFeedbackId] = useState<string | null>(null);
-  const [feedbackReason, setFeedbackReason] = useState("");
-  const [feedbackDone, setFeedbackDone] = useState<string | null>(null);
-  const [replayId, setReplayId] = useState<string | null>(null);
   const [model, setModel] = useState("Auto");
   const [modelNotice, setModelNotice] = useState("");
   const [findOpen, setFindOpen] = useState(false);
   const [findText, setFindText] = useState("");
   const [findIndex, setFindIndex] = useState(0);
   const [collabOpen, setCollabOpen] = useState(false);
-  const [collaborators, setCollaborators] = useState<string[]>([]);
   const [inviteOpen, setInviteOpen] = useState(false);
-  const [inviting, setInviting] = useState<string | null>(null);
-  const [collabToast, setCollabToast] = useState<string | null>(null);
-  const [removeCollab, setRemoveCollab] = useState<string | null>(null);
-  const [linkCopied, setLinkCopied] = useState(false);
-  const [handoffOpen, setHandoffOpen] = useState(false);
-  const [handoffNotice, setHandoffNotice] = useState<string | null>(null);
-  const [handoffBusy, setHandoffBusy] = useState(false);
-  const [handoffQueued, setHandoffQueued] = useState(false);
   const [queue, setQueue] = useState<{ id: string; text: string }[]>([]);
   const [queueOpen, setQueueOpen] = useState(true);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editText, setEditText] = useState("");
   const [voiceNotice, setVoiceNotice] = useState<string | null>(null);
-  const team = ["合规", "财务"].filter((name) => !collaborators.includes(name));
+  const team = ["合规", "财务"];
   const findRef = useRef<HTMLInputElement>(null);
   const composerRef = useRef<HTMLFormElement>(null);
   const taskIdRef = useRef(matter?.id);
@@ -340,43 +206,21 @@ function Timeline({ railOpen, onToggleRail }: { railOpen: boolean; onToggleRail:
     const previousId = taskIdRef.current;
     taskIdRef.current = nextId;
     if (!previousId || !nextId || previousId === nextId) return;
-    setCollaborators([]);
     setCollabOpen(false);
     setInviteOpen(false);
-    setRemoveCollab(null);
-    setLinkCopied(false);
-    setCollabToast(null);
-    setHandoffOpen(false);
-    setHandoffNotice(null);
-    setHandoffBusy(false);
-    setHandoffQueued(false);
     setQueue([]);
     setEditingId(null);
   }, [matter?.id]);
-  useEffect(() => {
-    if (!collabToast) return;
-    const timer = window.setTimeout(() => setCollabToast(null), 2400);
-    return () => window.clearTimeout(timer);
-  }, [collabToast]);
   const draining = useRef(false);
   useEffect(() => {
-    if (pending || editingId || handoffBusy || matter?.state === "running" || queue.length === 0 || draining.current) return;
+    if (pending || editingId || matter?.state === "running" || queue.length === 0 || draining.current) return;
     const next = queue[0];
     draining.current = true;
     setQueue((items) => items.filter((item) => item.id !== next.id));
     void send(next.text).finally(() => {
       draining.current = false;
     });
-  }, [pending, editingId, handoffBusy, matter?.state, queue, send]);
-  useEffect(() => {
-    if (!handoffNotice) return;
-    const timer = window.setTimeout(() => {
-      setHandoffNotice(null);
-      setHandoffBusy(false);
-      setHandoffQueued(false);
-    }, 2400);
-    return () => window.clearTimeout(timer);
-  }, [handoffNotice]);
+  }, [pending, editingId, matter?.state, queue, send]);
   useEffect(() => {
     if (findOpen) findRef.current?.focus();
   }, [findOpen]);
@@ -412,16 +256,6 @@ function Timeline({ railOpen, onToggleRail }: { railOpen: boolean; onToggleRail:
     setQueue((items) => items.filter((item) => item.id !== id));
     void send(picked.text);
   }
-  function inviteMember(name: string) {
-    if (inviting) return;
-    setInviting(name);
-    window.setTimeout(() => {
-      setCollaborators((items) => (items.includes(name) ? items : [...items, name]));
-      setInviting(null);
-      setCollabToast(`已邀请 ${name}`);
-      setInviteOpen(false);
-    }, 400);
-  }
   if (!matter) return <BlankMatter />;
   const continuing = steered || matter.state === "closed";
 
@@ -435,16 +269,15 @@ function Timeline({ railOpen, onToggleRail }: { railOpen: boolean; onToggleRail:
         <span className="text-muted-foreground text-xs">{stateLabel(matter.state)}</span>
         <TaskMenu matterId={matter.id} running={matter.state === "running"} title={matter.title} />
         <button type="button" className="text-xs text-[#666]" onClick={() => setCollabOpen((open) => !open)}>
-          {collaborators.length > 0 ? "协同中" : "协作"}
+          协作
         </button>
         <button
           type="button"
-          className="text-xs text-[#666] disabled:opacity-40"
-          disabled={matter.state === "running" || pending === "send"}
-          title={matter.state === "running" || pending === "send" ? "请等待当前任务执行完毕后再流转" : undefined}
-          onClick={() => setHandoffOpen(true)}
+          disabled
+          aria-disabled="true"
+          className="cursor-not-allowed text-xs text-[#b0b0b0] disabled:cursor-not-allowed"
         >
-          流转
+          流转 · 未接入
         </button>
         <button
           type="button"
@@ -490,36 +323,29 @@ function Timeline({ railOpen, onToggleRail }: { railOpen: boolean; onToggleRail:
       ) : null}
       {collabOpen ? (
         <div className="border-b px-4 py-3 text-sm">
-          <p className="font-medium">{`任务协作成员 · ${1 + collaborators.length}`}</p>
-          <p className="mt-1 text-xs text-[#888]">{`已加入协作 · ${collaborators.length}`}</p>
+          <p className="font-medium">任务协作成员 · 1</p>
+          <p className="mt-1 text-xs text-[#888]">已加入协作 · 0</p>
           <ul className="mt-2 space-y-1">
             <li className="flex items-center gap-2">
               <span>经办人</span>
               <span className="text-xs text-[#888]">所有者</span>
             </li>
-            {collaborators.map((name) => (
-              <li key={name} className="flex items-center gap-2">
-                <span>{name}</span>
-                <span className="text-xs text-[#888]">协作者</span>
-                <button type="button" className="ml-auto text-xs text-[#666]" onClick={() => setRemoveCollab(name)}>
-                  移除协作者
-                </button>
-              </li>
-            ))}
           </ul>
           <div className="mt-3 flex gap-2 text-xs">
-            <button type="button" className="rounded-lg bg-[#1a1a1a] px-3 py-1.5 text-white" onClick={() => { setInviteOpen(true); setLinkCopied(false); }}>
+            <button type="button" className="rounded-lg bg-[#1a1a1a] px-3 py-1.5 text-white" onClick={() => setInviteOpen(true)}>
               邀请
             </button>
-            <button type="button" className="rounded-lg border border-[#e6e6e8] px-3 py-1.5" onClick={() => setLinkCopied(true)}>
-              {linkCopied ? "邀请链接已复制" : "复制链接"}
+            <button
+              type="button"
+              disabled
+              aria-disabled="true"
+              className="cursor-not-allowed rounded-lg border border-[#e6e6e8] bg-[#f3f3f4] px-3 py-1.5 text-[#b0b0b0] disabled:cursor-not-allowed"
+            >
+              复制链接 · 未接入
             </button>
           </div>
-          {collabToast ? <p className="mt-2 text-xs text-[#666]">{collabToast}</p> : null}
         </div>
       ) : null}
-      {handoffNotice ? <p className="border-b px-4 py-2 text-xs text-[#666]">{handoffNotice}</p> : null}
-      {handoffQueued ? <p className="border-b px-4 py-2 text-xs text-[#666]">任务转交中，新消息将在转交完成后依次处理</p> : null}
       <div className="min-h-0 flex-1 space-y-3 overflow-auto p-4">
         {messages.length === 0 ? (
           <p className="text-muted-foreground py-8 text-center text-sm">还没有消息。发送后，这里显示这件云端任务的真实回复。</p>
@@ -539,41 +365,16 @@ function Timeline({ railOpen, onToggleRail }: { railOpen: boolean; onToggleRail:
                 {copiedId === item.id ? "已复制" : "复制 message"}
               </button>
               {item.role === "assistant" ? (
-                <button type="button" onClick={() => { setFeedbackId((current) => (current === item.id ? null : item.id)); setFeedbackReason(""); }}>
-                  提交反馈
-                </button>
-              ) : null}
-              {item.role === "user" ? (
-                <>
-                  <button type="button" onClick={() => rewindTo(item.id)}>
-                    回退到此版本
-                  </button>
-                  <button type="button" title="点击将重新生成内容，此会话后的内容都将被覆盖，请谨慎操作" onClick={() => setReplayId(item.id)}>
-                    重放
-                  </button>
-                </>
-              ) : null}
-            </div>
-            {item.role === "assistant" && feedbackId === item.id ? (
-              <div className="mt-2 flex flex-wrap gap-2 text-xs">
-                {["理解错误", "上下文错误", "回答不清晰", "代码错误", "回答不专业", "代码格式错误", "其他"].map((reason) => (
-                  <button key={reason} type="button" aria-pressed={feedbackReason === reason} className={cn("rounded-full px-2 py-1", feedbackReason === reason && "bg-[#ececee] font-medium")} onClick={() => setFeedbackReason(reason)}>
-                    {reason}
-                  </button>
-                ))}
                 <button
                   type="button"
-                  disabled={!feedbackReason}
-                  onClick={() => {
-                    setFeedbackDone(item.id);
-                    setFeedbackId(null);
-                  }}
+                  disabled
+                  aria-disabled="true"
+                  className="cursor-not-allowed text-[#b0b0b0] disabled:cursor-not-allowed"
                 >
-                  提交反馈
+                  提交反馈 · 未接入
                 </button>
-              </div>
-            ) : null}
-            {feedbackDone === item.id ? <p className="mt-1 text-xs text-[#666]">反馈提交成功，感谢您的反馈！</p> : null}
+              ) : null}
+            </div>
           </article>
         ))}
         {approval && approval.status === "pending" ? (
@@ -594,24 +395,6 @@ function Timeline({ railOpen, onToggleRail }: { railOpen: boolean; onToggleRail:
           </div>
         ) : null}
         {error ? <p className="text-destructive text-xs">{error}</p> : null}
-        {replayId ? (
-          <div className="bg-card max-w-xl rounded-lg border p-3 text-sm">
-            <p className="font-medium">重放</p>
-            <p className="mt-2 text-[#666]">点击将重新生成内容，此会话后的内容都将被覆盖，请谨慎操作</p>
-            <div className="mt-3 flex gap-2">
-              <button type="button" onClick={() => setReplayId(null)}>取消</button>
-              <Button
-                type="button"
-                onClick={() => {
-                  replayFrom(replayId);
-                  setReplayId(null);
-                }}
-              >
-                重放
-              </Button>
-            </div>
-          </div>
-        ) : null}
       </div>
       {queue.length > 0 ? (
         <div className="border-t px-3 py-2 text-sm">
@@ -645,10 +428,9 @@ function Timeline({ railOpen, onToggleRail }: { railOpen: boolean; onToggleRail:
             event.preventDefault();
             const trimmed = text.trim();
             if (!trimmed) return;
-            if (handoffBusy || pending || matter.state === "running") {
+            if (pending || matter.state === "running") {
               setQueue((items) => [...items, { id: `q-${Date.now()}`, text: trimmed }]);
               setQueueOpen(true);
-              if (handoffBusy) setHandoffQueued(true);
               setText("");
               return;
             }
@@ -717,8 +499,13 @@ function Timeline({ railOpen, onToggleRail }: { railOpen: boolean; onToggleRail:
               {team.map((name) => (
                 <li key={name} className="flex items-center gap-2">
                   <span>{name}</span>
-                  <button type="button" className="ml-auto text-[#666]" disabled={inviting !== null} onClick={() => inviteMember(name)}>
-                    {inviting === name ? "邀请中..." : "邀请"}
+                  <button
+                    type="button"
+                    disabled
+                    aria-disabled="true"
+                    className="ml-auto cursor-not-allowed text-[#b0b0b0] disabled:cursor-not-allowed"
+                  >
+                    邀请 · 未接入
                   </button>
                 </li>
               ))}
@@ -728,19 +515,6 @@ function Timeline({ railOpen, onToggleRail }: { railOpen: boolean; onToggleRail:
             </button>
           </div>
         </div>
-      ) : null}
-      {handoffOpen ? (
-        <HandoffDialog
-          taskTitle={matterTitle(matter)}
-          artifacts={[]}
-          rounds={messages.filter((item) => item.role === "user").length}
-          onClose={() => setHandoffOpen(false)}
-          onDone={(notice) => {
-            setHandoffOpen(false);
-            setHandoffNotice(notice);
-            setHandoffBusy(true);
-          }}
-        />
       ) : null}
       {editingId ? (
         <div className="fixed inset-0 z-30 flex items-center justify-center bg-black/30 p-4">
@@ -758,28 +532,6 @@ function Timeline({ railOpen, onToggleRail }: { railOpen: boolean; onToggleRail:
                 }}
               >
                 确定
-              </button>
-            </div>
-          </div>
-        </div>
-      ) : null}
-      {removeCollab ? (
-        <div className="fixed inset-0 z-30 flex items-center justify-center bg-black/30 p-4">
-          <div className="w-full max-w-sm rounded-2xl bg-white p-5 text-sm" role="dialog" aria-label="移除协作者">
-            <p className="font-medium">移除协作者</p>
-            <p className="mt-2 text-[#666]">{`确定将「${removeCollab}」从任务协作中移除吗？移除后对方将无法继续参与本任务。`}</p>
-            <div className="mt-4 flex justify-end gap-3">
-              <button type="button" onClick={() => setRemoveCollab(null)}>取消</button>
-              <button
-                type="button"
-                onClick={() => {
-                  const name = removeCollab;
-                  setCollaborators((items) => items.filter((item) => item !== name));
-                  setRemoveCollab(null);
-                  setCollabToast("已移除协作者");
-                }}
-              >
-                移除协作者
               </button>
             </div>
           </div>
@@ -822,7 +574,6 @@ function Inspector() {
   const [shareOpen, setShareOpen] = useState(false);
   const [copied, setCopied] = useState(false);
   const [notice, setNotice] = useState<string | null>(null);
-  const published = useSyncExternalStore(subscribePublishedApps, getPublishedApps, getPublishedApps);
   const items: { id: string; name: string; kind: string; body: string }[] = [];
   const selected = items.find((item) => item.id === selectedId) ?? null;
   if (!matter) {
@@ -891,19 +642,6 @@ function Inspector() {
             }}
             onFollow={() => setFollowed((value) => !value)}
             onReview={() => setNotice("审查")}
-            onDownload={(name) => {
-              setNotice("下载中...");
-              window.setTimeout(() => setNotice(`已开始下载「${name}」`), 400);
-            }}
-            onPublish={() => {
-              if (!selected) return;
-              setNotice("正在发布应用…");
-              window.setTimeout(() => {
-                publishApp({ id: selected.id, name: selected.name, matterId: matter.id, taskTitle: matter.title });
-                setNotice("发布成功");
-              }, 400);
-            }}
-            published={published.some((item) => item.id === selected?.id && item.status === "已发布")}
             onShare={() => {
               setShareOpen(true);
               setCopied(false);
@@ -933,12 +671,9 @@ function ArtifactPane({
   onSelect,
   onFollow,
   onReview,
-  onDownload,
   onShare,
   onCopy,
   onCloseShare,
-  onPublish,
-  published,
 }: {
   tab: "产物" | "文件";
   items: { id: string; name: string; kind: string; body: string }[];
@@ -950,12 +685,9 @@ function ArtifactPane({
   onSelect: (id: string) => void;
   onFollow: () => void;
   onReview: () => void;
-  onDownload: (name: string) => void;
   onShare: () => void;
   onCopy: () => void;
   onCloseShare: () => void;
-  onPublish: () => void;
-  published: boolean;
 }) {
   if (items.length === 0) {
     return <p className="text-muted-foreground text-xs leading-5">{tab === "产物" ? "请选择一个产物查看详情" : "暂无内容"}</p>;
@@ -996,11 +728,21 @@ function ArtifactPane({
         <button type="button" className="rounded-lg bg-[#f3f3f4] px-2 py-1" onClick={onShare}>
           分享
         </button>
-        <button type="button" className="rounded-lg bg-[#f3f3f4] px-2 py-1" onClick={() => onDownload(selected.name)}>
-          下载
+        <button
+          type="button"
+          disabled
+          aria-disabled="true"
+          className="cursor-not-allowed rounded-lg bg-[#f3f3f4] px-2 py-1 text-[#b0b0b0] disabled:cursor-not-allowed"
+        >
+          下载 · 未接入
         </button>
-        <button type="button" className="rounded-lg bg-[#f3f3f4] px-2 py-1" onClick={onPublish}>
-          {published ? "更新" : "发布"}
+        <button
+          type="button"
+          disabled
+          aria-disabled="true"
+          className="cursor-not-allowed rounded-lg bg-[#f3f3f4] px-2 py-1 text-[#b0b0b0] disabled:cursor-not-allowed"
+        >
+          发布 · 未接入
         </button>
       </div>
       {shareOpen ? (

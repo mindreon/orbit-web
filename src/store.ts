@@ -48,7 +48,10 @@ interface MindState {
   composing: boolean;
   loading: boolean;
   pending: "create" | "send" | "abort" | "steer" | "decide" | null;
+  /** 任务列表加载失败。创建失败不写这里，避免空列表时侧边栏把创建失败当成列表错误。 */
   error: string | null;
+  /** 创建房间失败。带是否显示重试，和列表错误分开。 */
+  createError: RoomCreateAlert | null;
   threadAgentId: string | null;
   reading: "kb" | "external" | "mcp" | null;
   catalogTab: "agent" | "skill" | "kb" | "external" | "mcp";
@@ -71,8 +74,6 @@ interface MindState {
   removeMatter: (id: string) => void;
   pinMatter: (id: string, pinned: boolean) => void;
   send: (text: string) => Promise<void>;
-  rewindTo: (messageId: string) => void;
-  replayFrom: (messageId: string) => void;
   stop: () => Promise<void>;
   steer: (text: string) => Promise<void>;
   decide: (approvalId: string, decision: "allow" | "reject") => Promise<void>;
@@ -116,6 +117,7 @@ export const useMind = create<MindState>((set, get) => ({
   loading: false,
   pending: null,
   error: null,
+  createError: null,
   threadAgentId: null,
   reading: null,
   catalogTab: "skill",
@@ -178,11 +180,9 @@ export const useMind = create<MindState>((set, get) => ({
         set({ loading: false });
         return;
       }
-      const current = get().error;
-      const keepCreate = current?.startsWith("创建任务失败") ?? false;
       set({
         loading: false,
-        error: keepCreate ? current : describeRoomFailure("任务列表加载失败", error),
+        error: describeRoomFailure("任务列表加载失败", error),
       });
     }
   },
@@ -231,8 +231,7 @@ export const useMind = create<MindState>((set, get) => ({
   createMatter: async (text, permission) => {
     const title = text.trim();
     if (!title || get().pending) return { createdId: null, alert: null };
-    set({ pending: "create", error: null });
-    await new Promise((resolve) => window.setTimeout(resolve, 400));
+    set({ pending: "create", createError: null });
     try {
       const room = await createRoom({ title, permissionPreset: permission });
       const matter = roomToMatter(room);
@@ -246,6 +245,7 @@ export const useMind = create<MindState>((set, get) => ({
         filter: "进行中",
         pending: null,
         error: null,
+        createError: null,
         threadAgentId: null,
         reading: null,
       });
@@ -256,7 +256,7 @@ export const useMind = create<MindState>((set, get) => ({
         return { createdId: null, alert: null };
       }
       const alert = roomCreateAlert(error);
-      set({ pending: null, error: alert.message });
+      set({ pending: null, createError: alert });
       return { createdId: null, alert };
     }
   },
@@ -281,8 +281,6 @@ export const useMind = create<MindState>((set, get) => ({
       set({ pending: null, error: "发送失败" });
     }
   },
-  rewindTo: () => undefined,
-  replayFrom: () => undefined,
   stop: async () => {
     const id = get().activeId;
     if (!id || get().pending === "abort") return;

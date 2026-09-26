@@ -30,14 +30,11 @@ export function ShareTaskDialog({ matterId, title, onClose }: { matterId: string
           className="rounded-lg bg-[#1a1a1a] px-3 py-1.5 text-white"
           disabled={status === "generating"}
           onClick={() => {
-            setStatus("generating");
-            window.setTimeout(() => {
-              const link = publishTaskShare(matterId, title) || taskShareLink(matterId);
-              void navigator.clipboard.writeText(link).then(
-                () => setStatus("copied"),
-                () => setStatus("failed"),
-              );
-            }, 300);
+            const link = publishTaskShare(matterId, title) || taskShareLink(matterId);
+            void navigator.clipboard.writeText(link).then(
+              () => setStatus("copied"),
+              () => setStatus("failed"),
+            );
           }}
         >
           {status === "generating" ? "正在生成分享链接..." : status === "copied" ? "已复制链接" : status === "failed" ? "复制链接失败" : "复制链接"}
