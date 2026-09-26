@@ -71,6 +71,14 @@ export const WORKER_START_FAILURE = "任务已创建，但启动失败，刷新�
  */
 export const ROOM_REQUEST_TIMEOUT_MS = 15000;
 
+/**
+ * 创建房间单独的上限，单位毫秒。
+ * orbit-control StartRoom 在 Temporal 下最多轮询 30 秒等会话号
+ * （internal/orch/client.go，main 846d27e，deadline 30s）。
+ * 45 秒高于这次服务端最坏情况，避免慢但成功的创建被 15 秒超时说成连不上，重试再开一个房间。
+ */
+export const ROOM_CREATE_TIMEOUT_MS = 45000;
+
 type ApiInit = RequestInit & {
   /**
    * 这次请求最多等多少毫秒。不传则用 ROOM_REQUEST_TIMEOUT_MS。
@@ -194,6 +202,7 @@ export function createRoom(input: { title: string; permissionPreset: PermissionP
       title: input.title,
       permissionPreset: input.permissionPreset,
     }),
+    timeoutMs: ROOM_CREATE_TIMEOUT_MS,
   });
 }
 
