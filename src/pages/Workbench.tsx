@@ -143,6 +143,7 @@ function Timeline({ railOpen, onToggleRail }: { railOpen: boolean; onToggleRail:
   const decide = useMind((s) => s.decide);
   const stream = useRoomStream(matter?.id);
   const streamStatus = useStreams((s) => (matter?.id ? s.status[matter.id] : undefined));
+  const streamLoaded = useStreams((s) => (matter?.id ? s.loaded[matter.id] === true : false));
   const [params] = useSearchParams();
   const attachedFile = params.get("file");
   const [text, setText] = useState(attachedFile ?? "");
@@ -352,7 +353,11 @@ function Timeline({ railOpen, onToggleRail }: { railOpen: boolean; onToggleRail:
             focusId={findOpen ? currentHitId : null}
             retryDisabled={turnRunning || pending !== null || role !== "经办人"}
             onRetry={retry}
-            empty={<p className="text-muted-foreground py-8 text-center text-sm">还没有消息。发送后，这里显示这件云端任务的真实回复。</p>}
+            empty={
+            <p className="text-muted-foreground py-8 text-center text-sm">
+              {streamLoaded ? "还没有消息。发送后，这里显示这件云端任务的真实回复。" : "正在加载对话…"}
+            </p>
+          }
             footer={
               <>
                 {approval && approval.status === "pending" ? (

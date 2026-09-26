@@ -8,13 +8,17 @@ import { emptyStream, reduceStream, type RoomStream, type StreamAction, type Str
 interface StreamsState {
   rooms: Record<string, RoomStream>;
   status: Record<string, StreamStatus>;
+  /** The first /activity request for the room has finished, successfully or not. */
+  loaded: Record<string, boolean>;
   dispatch: (roomId: string, action: StreamAction) => void;
   setStatus: (roomId: string, status: StreamStatus) => void;
+  markLoaded: (roomId: string) => void;
 }
 
 export const useStreams = create<StreamsState>((set, get) => ({
   rooms: {},
   status: {},
+  loaded: {},
   dispatch: (roomId, action) => {
     const current = get().rooms[roomId] ?? emptyStream();
     const next = reduceStream(current, action);
@@ -22,6 +26,9 @@ export const useStreams = create<StreamsState>((set, get) => ({
   },
   setStatus: (roomId, status) => {
     if (get().status[roomId] !== status) set({ status: { ...get().status, [roomId]: status } });
+  },
+  markLoaded: (roomId) => {
+    if (!get().loaded[roomId]) set({ loaded: { ...get().loaded, [roomId]: true } });
   },
 }));
 
@@ -143,6 +150,8 @@ export function useRoomEventStream(roomId: string | null | undefined) {
 
     const start = async () => {
       setStatus(id, "connecting");
+      // Drafts left from an earlier visit were cut off when that connection closed; their deltas are not replayed.
+      dispatch(id, { type: "abandonDrafts" });
       try {
         const items = await fetchActivity(id);
         if (disposed) return;
@@ -150,6 +159,7 @@ export function useRoomEventStream(roomId: string | null | undefined) {
       } catch {
         // The stream still opens; the next resync fills history.
       }
+      useStreams.getState().markLoaded(id);
       if (disposed) return;
       closeStream = openEventStream({
         url: `/v1/rooms/${encodeURIComponent(id)}/events`,
