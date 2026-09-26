@@ -1,5 +1,17 @@
 /** Shared helpers for the E2E specs that drive e2e/fake-control.mjs. */
-import { expect, type APIRequestContext, type Page } from "@playwright/test";
+import { expect, test, type APIRequestContext, type Page } from "@playwright/test";
+
+/** Screenshot attached to the test, so the acceptance report carries it as evidence. */
+export async function shot(page: Page, name: string, options: { fullPage?: boolean } = {}) {
+  const path = test.info().outputPath(`${name}.png`);
+  await page.screenshot({ path, fullPage: options.fullPage });
+  await test.info().attach(name, { path, contentType: "image/png" });
+}
+
+/** Numbers attached to the test; the acceptance report merges them per acceptance item. */
+export async function metrics(values: Record<string, unknown>) {
+  await test.info().attach("metrics", { body: JSON.stringify(values), contentType: "application/json" });
+}
 
 export const CONTROL = "http://127.0.0.1:18080";
 export const ROOM = "room-e2e";

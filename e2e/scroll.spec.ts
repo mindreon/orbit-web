@@ -11,7 +11,7 @@
  *      replaces the draft.
  */
 import { expect, test, type Page } from "@playwright/test";
-import { activity, control, delta, emit, openRoom } from "./helpers";
+import { activity, control, delta, emit, metrics, openRoom, shot } from "./helpers";
 
 const scroller = (page: Page) => page.getByTestId("chat-scroll");
 const distance = (page: Page) => scroller(page).evaluate((el) => el.scrollHeight - el.scrollTop - el.clientHeight);
@@ -38,7 +38,7 @@ test.beforeEach(async ({ page }) => {
   await control(page.request, "/__test/clear");
 });
 
-test("follows at the bottom, pauses beyond 80px, and 「回到最新」 scrolls smoothly back", async ({ page }) => {
+test("follows at the bottom, pauses beyond 80px, and 「回到最新」 scrolls smoothly back", { tag: ["@acc-13"] }, async ({ page }) => {
   await control(page.request, "/__test/activity", { items: history(60) });
   await openRoom(page, page.request);
   await expect(page.getByText("回答 30：")).toBeVisible();
@@ -89,9 +89,11 @@ test("follows at the bottom, pauses beyond 80px, and 「回到最新」 scrolls 
   expect(intermediate.size).toBeGreaterThanOrEqual(3);
   expect(await distance(page)).toBeLessThanOrEqual(2);
   await expect(page.getByTestId("jump-latest")).toHaveCount(0);
+  await metrics({ smoothScrollIntermediatePositions: intermediate.size });
+  await shot(page, "after-jump-latest");
 });
 
-test("streaming keeps CLS at or below 0.1 and never re-mounts finished blocks", async ({ page }) => {
+test("streaming keeps CLS at or below 0.1 and never re-mounts finished blocks", { tag: ["@acc-1", "@acc-13"] }, async ({ page }) => {
   await control(page.request, "/__test/activity", { items: history(20) });
   await page.addInitScript(() => {
     const w = window as unknown as { __shifts: { value: number; time: number }[] };
@@ -159,6 +161,6 @@ test("streaming keeps CLS at or below 0.1 and never re-mounts finished blocks", 
     }
     return { worst, total: shifts.reduce((sum, shift) => sum + shift.value, 0), count: shifts.length };
   });
-  test.info().annotations.push({ type: "cls", description: JSON.stringify(cls) });
+  await metrics({ streamingCls: cls });
   expect(cls.worst).toBeLessThanOrEqual(0.1); // A5
 });

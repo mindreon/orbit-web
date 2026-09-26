@@ -2,9 +2,12 @@
 /**
  * Test-only stand-in for orbit-control. It serves the room endpoints orbit-web reads and lets a test
  * script drive the SSE stream through /__test/*: emit frames, drop the connection, swap /activity.
- * It follows the contract the web codes against (C33): every SSE frame carries `id:` = the per-task event sequence,
- * which is also `sequence` on /activity items; assistant.delta keeps its own `seq` (chunk index within the block).
- * `event: reset` means refetch.
+ * It speaks control's event contract (orbit-control docs/contract-notes/sse-resume.md, C33):
+ * - /activity items and every SSE `data:` are envelopes `{id, type, taskId, ts, source, payload}`; `id` is the event id
+ *   and the SSE `id:`. Tests hand in flat events; `sequence` becomes the envelope id and the rest the payload.
+ * - assistant.delta and reset envelopes have no `id`; their SSE `id:` repeats the room's last durable event id.
+ * - assistant.delta keeps its own `seq` (chunk index within the block).
+ * - reset is `{type: "reset", payload: {reason, lastId}}`; a legacy `event: reset` frame is still accepted by the web.
  */
 import { createServer } from "node:http";
 import { readFile } from "node:fs/promises";
@@ -32,6 +35,8 @@ const state = {
     ? perfDataset({ messages: Number(process.env.FIXTURE_MESSAGES), replyChars: Number(process.env.FIXTURE_REPLY_CHARS ?? 0) })
     : [],
   approvals: [],
+  /** Fault knobs for the state tests: an HTTP status for /activity, and a delay before it answers. */
+  faults: { activityStatus: 0, activityDelayMs: 0 },
   streams: new Set(),
   log: { events: [], activity: 0, posts: [], decisions: [] },
 };
@@ -41,15 +46,29 @@ function maxSequence(items) {
 }
 state.sequence = maxSequence(state.activity);
 
-/** Frames without an explicit id get the next per-task sequence; persisted events without one get it as `sequence`. */
+const LIVE_ONLY = new Set(["assistant.delta", "reset"]);
+
+/** Wraps a flat test event in control's envelope. `id` is omitted for live-only types. */
+function envelope(event, id) {
+  const { id: _eventId, sequence: _sequence, source = "worker", ...payload } = event;
+  const out = { type: event.type, taskId: ROOM.id, ts: event.occurredAt || new Date().toISOString(), source, payload };
+  return LIVE_ONLY.has(event.type) ? out : { id, ...out };
+}
+
+/**
+ * Durable frames get the next event id (unless the test pins one); live-only frames repeat the last durable id.
+ * Non-object data (e.g. raw strings) and legacy named events pass through unchanged.
+ */
 function numbered(item) {
-  const id = item.id ?? (item.noId ? undefined : String(++state.sequence));
-  if (id && /^\d+$/.test(id)) state.sequence = Math.max(state.sequence, Number(id));
-  let data = item.data;
-  if (id && /^\d+$/.test(id) && data && typeof data === "object" && data.type && data.type !== "assistant.delta" && !data.sequence) {
-    data = { ...data, sequence: Number(id) };
-  }
-  return { id, event: item.event, data };
+  const data = item.data;
+  const isEvent = data && typeof data === "object" && typeof data.type === "string";
+  const liveOnly = isEvent && LIVE_ONLY.has(data.type);
+  let id = item.id;
+  if (id === undefined && !item.noId) id = liveOnly || item.event ? String(state.sequence) : String(++state.sequence);
+  if (id && /^\d+$/.test(id) && !liveOnly) state.sequence = Math.max(state.sequence, Number(id));
+  if (!isEvent) return { id, event: item.event, data };
+  if (data.type === "reset") return { id, data: { type: "reset", taskId: ROOM.id, ts: new Date().toISOString(), source: "control", payload: { reason: "unknown", lastId: Number(id) || 0 } } };
+  return { id, data: envelope(data, Number(data.sequence) || Number(id)) };
 }
 
 function json(res, status, body) {
@@ -95,7 +114,9 @@ const server = createServer(async (req, res) => {
 
   if (path === `/v1/rooms/${ROOM.id}/activity`) {
     state.log.activity += 1;
-    return json(res, 200, { items: state.activity });
+    if (state.faults.activityDelayMs) await new Promise((resolve) => setTimeout(resolve, state.faults.activityDelayMs));
+    if (state.faults.activityStatus) return json(res, state.faults.activityStatus, { code: "INTERNAL", message: "activity unavailable" });
+    return json(res, 200, { items: state.activity.map((event) => envelope(event, Number(event.sequence))) });
   }
 
   if (path === `/v1/rooms/${ROOM.id}/abort` && req.method === "POST") return json(res, 200, { aborted: true });
@@ -132,6 +153,10 @@ const server = createServer(async (req, res) => {
     state.sequence = maxSequence(state.activity);
     return json(res, 200, { items: state.activity.length });
   }
+  if (path === "/__test/faults" && req.method === "POST") {
+    state.faults = { activityStatus: 0, activityDelayMs: 0, ...(await readBody(req)) };
+    return json(res, 200, state.faults);
+  }
   if (path === "/__test/approvals" && req.method === "POST") {
     state.approvals = (await readBody(req)).items ?? [];
     return json(res, 200, { ok: true });
@@ -153,6 +178,7 @@ const server = createServer(async (req, res) => {
     state.streams.clear();
     state.activity = [];
     state.approvals = [];
+    state.faults = { activityStatus: 0, activityDelayMs: 0 };
     state.sequence = 0;
     state.log = { events: [], activity: 0, posts: [], decisions: [] };
     return json(res, 200, { ok: true });

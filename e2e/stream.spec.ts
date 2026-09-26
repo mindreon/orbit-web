@@ -17,8 +17,9 @@
  *   F10 an unknown event type breaks rendering instead of being ignored.
  *   F11 the conversation blanks out while the stream is down.
  *   F12 an event the client missed while disconnected never shows up (the server did not replay it).
- *   F13 (C33) the delta chunk `seq` and the SSE `id:` (per-task event sequence) get mixed: Last-Event-ID carries a
- *       JSON id or a chunk seq, or a replayed frame with an already-seen SSE id is applied again.
+ *   F13 (C33) the delta chunk `seq` and the SSE `id:` (event id) get mixed: Last-Event-ID carries a JSON id or a chunk
+ *       seq; a replayed durable frame with an already-seen SSE id is applied again; or delta frames, which repeat the
+ *       last durable event's SSE id, are dropped as replays.
  *   F14 a tool.result with `truncated: true` gives no hint that the text was cut at 4KB.
  *   F15 modelMode "mock" / "real" is not shown as 假模型 / 真模型.
  * Reset
@@ -42,7 +43,7 @@
  *   P4 batching per frame loses or reorders streamed text.
  */
 import { expect, test } from "@playwright/test";
-import { activity, assistant, control, delta, draft, emit, log, openRoom, toolRows, waitForStreams } from "./helpers";
+import { activity, assistant, control, delta, draft, emit, log, metrics, openRoom, shot, toolRows, waitForStreams } from "./helpers";
 
 test.beforeEach(async ({ request }) => {
   await control(request, "/__test/clear");
@@ -51,7 +52,7 @@ test.beforeEach(async ({ request }) => {
 const toolCall = (sequence: number) =>
   activity("ev-2", sequence, { type: "tool.call", toolName: "execute_shell_command", callId: "c1", turnId: "tn-1", argsPreview: '{"command": "ls -la"}' });
 
-test("reconnect clears unfinished drafts and waits for the final message", async ({ page, request }) => {
+test("reconnect clears unfinished drafts and waits for the final message", { tag: ["@acc-1", "@acc-2", "@acc-4", "@acc-5", "@acc-11"] }, async ({ page, request }) => {
   // JSON ids ("ev-…") and delta chunk seqs (1, 2, 3…) deliberately differ from the SSE ids (per-task sequence).
   await control(request, "/__test/activity", {
     items: [activity("ev-1", 1, { type: "assistant.message", role: "user", text: "介绍一下你自己", turnId: "tn-1", modelMode: "mock" })],
@@ -62,15 +63,15 @@ test("reconnect clears unfinished drafts and waits for the final message", async
   await expect(page.getByText("介绍一下你自己")).toBeVisible();
   await expect(page.getByTestId("model-mode")).toHaveText("假模型"); // F15
 
-  // F1 + F2: chunk seq 2 arrives after seq 3 and is dropped; seq 3 arrives twice. The frames' SSE ids are 2..5, so
-  // assembling by SSE id instead of chunk seq (F13) would splice the late chunk in.
+  // F1 + F2: chunk seq 2 arrives after seq 3 and is dropped; seq 3 arrives twice. F13: every chunk frame repeats the
+  // last durable event's SSE id ("1"), so deduping deltas by SSE id would drop all of them.
   const chunkIds = await emit(request, [
     { data: delta("tn-1", "b1", 1, "你好，") },
     { data: delta("tn-1", "b1", 3, "世界") },
     { data: delta("tn-1", "b1", 2, "（迟到的块）") },
     { data: delta("tn-1", "b1", 3, "世界") },
   ]);
-  expect(chunkIds).toEqual(["2", "3", "4", "5"]);
+  expect(chunkIds).toEqual(["1", "1", "1", "1"]);
   await expect(draft(page)).toHaveText("你好，世界");
   await expect(page.getByText("迟到的块")).toHaveCount(0);
 
@@ -91,7 +92,7 @@ test("reconnect clears unfinished drafts and waits for the final message", async
   await expect(toolRows(page)).toHaveCount(1);
   await expect(toolRows(page).first()).toContainText("执行命令");
   await expect(page.getByText("不应出现")).toHaveCount(0);
-  await page.screenshot({ path: test.info().outputPath("before-drop.png") });
+  await shot(page, "before-drop");
 
   // F12: while the client is disconnected the tool finishes; the server will not replay that event.
   const call = Number(callId);
@@ -145,10 +146,10 @@ test("reconnect clears unfinished drafts and waits for the final message", async
   await expect(assistant(page)).toHaveCount(1);
   await expect(assistant(page).first()).toContainText("新的尝试后半句，这是完整回答。");
   await expect(draft(page)).toHaveCount(0);
-  await page.screenshot({ path: test.info().outputPath("after-reconnect.png") });
+  await shot(page, "after-reconnect");
 });
 
-test("reset refetches /activity and rebuilds the conversation", async ({ page, request }) => {
+test("reset refetches /activity and rebuilds the conversation", { tag: ["@acc-4", "@acc-5", "@acc-11"] }, async ({ page, request }) => {
   await control(request, "/__test/activity", {
     items: [
       activity("ev-1", 1, { type: "assistant.message", role: "user", text: "第一条问题", turnId: "tn-1" }),
@@ -181,7 +182,7 @@ test("reset refetches /activity and rebuilds the conversation", async ({ page, r
   }
   await expect(draft(page)).toHaveCount(0);
   await expect(page.getByTestId("model-mode")).toHaveText("真模型"); // F15
-  await page.screenshot({ path: test.info().outputPath("after-event-reset.png") });
+  await shot(page, "after-event-reset");
 
   // R5: reset as a data frame.
   const fetchesMid = (await log(request)).activity;
@@ -200,7 +201,7 @@ test("reset refetches /activity and rebuilds the conversation", async ({ page, r
   await emit(request, { id: nextId, data: message(Number(nextId)) });
   await expect(page.getByText("重建之后的新消息")).toHaveCount(1);
   await expect(assistant(page)).toHaveCount(2);
-  await page.screenshot({ path: test.info().outputPath("after-data-reset.png") });
+  await shot(page, "after-data-reset");
 });
 
 const HOSTILE_ANSWER = [
@@ -222,7 +223,7 @@ const HOSTILE_ANSWER = [
   "```",
 ].join("\n");
 
-test("assistant content is rendered inert: no script, handlers, javascript: links or silent image loads", async ({ page, request }) => {
+test("assistant content is rendered inert: no script, handlers, javascript: links or silent image loads", { tag: ["@acc-8"] }, async ({ page, request }) => {
   const dialogs: string[] = [];
   page.on("dialog", (dialog) => {
     dialogs.push(dialog.message());
@@ -280,10 +281,10 @@ test("assistant content is rendered inert: no script, handlers, javascript: link
   // S6
   expect(await page.evaluate(() => (window as unknown as { __pwned?: number }).__pwned)).toBeUndefined();
   expect(dialogs).toEqual([]);
-  await page.screenshot({ path: test.info().outputPath("security.png"), fullPage: true });
+  await shot(page, "security", { fullPage: true });
 });
 
-test("1000 messages stay virtualized and streaming commits at most once per frame", async ({ page, request }) => {
+test("1000 messages stay virtualized and streaming commits at most once per frame", { tag: ["@acc-9"] }, async ({ page, request }) => {
   const history = Array.from({ length: 1000 }, (_, index) =>
     activity(`ev-${index + 1}`, index + 1, {
       type: "assistant.message",
@@ -344,6 +345,7 @@ test("1000 messages stay virtualized and streaming commits at most once per fram
     return { max: w.__maxPerFrame, frames: w.__frames };
   });
   expect(stats.frames).toBeGreaterThan(0);
+  await metrics({ mountedRowsOf1000: mounted, streamingFrames: stats.frames, maxCommitsPerFrame: stats.max });
   expect(stats.max).toBeLessThanOrEqual(1); // P3
   const text = (await draft(page).textContent()) ?? "";
   expect(text.replace(/\s+/g, "")).toBe(chunks.join("").replace(/\s+/g, "")); // P4

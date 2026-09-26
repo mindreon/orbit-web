@@ -11,7 +11,7 @@
  *   W4 the conversation column itself scrolls horizontally.
  */
 import { expect, test, type Page } from "@playwright/test";
-import { activity, control, openRoom } from "./helpers";
+import { activity, control, metrics, openRoom, shot } from "./helpers";
 
 const RAW_CODE = [
   'const html = "<div class=\\"x\\">a & b</div>"; // raw markup and entities must survive copying untouched',
@@ -57,22 +57,23 @@ function overflow(page: Page) {
   });
 }
 
-test("copy button copies the raw code and shows a toast", async ({ page, context }) => {
+test("copy button copies the raw code and shows a toast", { tag: ["@acc-15"] }, async ({ page, context }) => {
   await context.grantPermissions(["clipboard-read", "clipboard-write"]);
   await seed(page);
   await page.locator(".md-code").getByRole("button", { name: "复制代码" }).click();
   await expect(page.getByRole("status").filter({ hasText: "已复制" })).toBeVisible(); // Y1
   const copied = await page.evaluate(() => navigator.clipboard.readText());
   expect(copied).toBe(RAW_CODE); // Y2 + Y3
-  await page.screenshot({ path: test.info().outputPath("copy-toast.png") });
+  await shot(page, "copy-toast");
 });
 
 for (const width of [375, 1440]) {
-  test(`no page-level horizontal scroll at ${width}px; code and tables scroll inside their blocks`, async ({ page }) => {
+  test(`no page-level horizontal scroll at ${width}px; code and tables scroll inside their blocks`, { tag: ["@acc-15"] }, async ({ page }) => {
     await page.setViewportSize({ width, height: width === 375 ? 812 : 900 });
     await seed(page);
     await expect(page.getByText("表格如下")).toBeVisible();
     const result = await overflow(page);
+    await metrics({ [`overflowAt${width}px`]: result });
     expect(result.page).toBeLessThanOrEqual(0); // W1
     expect(result.body).toBeLessThanOrEqual(0);
     expect(result.chat).toBeLessThanOrEqual(0); // W4
@@ -81,6 +82,6 @@ for (const width of [375, 1440]) {
     if (width === 375) expect(result.table).toBeGreaterThan(0); // W3
     expect(result.tableOverflow).toBe("auto");
     await expect(page.getByLabel("输入消息")).toBeInViewport();
-    await page.screenshot({ path: test.info().outputPath(`layout-${width}.png`) });
+    await shot(page, `layout-${width}`);
   });
 }

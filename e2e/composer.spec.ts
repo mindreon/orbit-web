@@ -11,7 +11,7 @@
  *   K6 an empty or whitespace-only box sends on Enter, or the send button is enabled for it.
  */
 import { expect, test, type Page } from "@playwright/test";
-import { activity, control, log, openRoom } from "./helpers";
+import { activity, control, log, openRoom, shot } from "./helpers";
 
 async function posts(page: Page) {
   return (await log(page.request)).posts;
@@ -40,7 +40,7 @@ test.beforeEach(async ({ page }) => {
   await expect(page.getByText("你好，今天要办什么？")).toBeVisible();
 });
 
-test("Enter sends, Shift+Enter breaks the line, IME Enter and blank input never send", async ({ page }) => {
+test("Enter sends, Shift+Enter breaks the line, IME Enter and blank input never send", { tag: ["@acc-14"] }, async ({ page }) => {
   const box = page.getByLabel("输入消息");
   const send = page.getByTestId("send-message");
 
@@ -79,4 +79,5 @@ test("Enter sends, Shift+Enter breaks the line, IME Enter and blank input never 
   expect(sent.message).toBe("第一行\n第二行");
   expect(sent.turnId).toMatch(/^tn_web_/);
   await expect(box).toHaveValue("");
+  await shot(page, "composer-after-enter");
 });
