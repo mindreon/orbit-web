@@ -2,7 +2,7 @@ import { memo } from "react";
 import type { TimelineItem } from "../lib/events/timeline";
 import { FailureCard } from "./FailureCard";
 import { Markdown } from "./markdown/Markdown";
-import { CopyButton } from "./markdown/CodeBlock";
+import { CopyButton } from "./CopyButton";
 import { ToolGroup, sameCall } from "./ToolRow";
 
 function agentLabel(agentPath: string) {

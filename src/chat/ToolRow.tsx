@@ -23,7 +23,7 @@ import {
 import { cn } from "../lib/cn";
 import type { ToolCallView, ToolRunState } from "../lib/events/timeline";
 import { describeTool, summarizeTools, toolTitle, type ToolLabel } from "../lib/events/toolLabels";
-import { CopyButton } from "./markdown/CodeBlock";
+import { CopyButton } from "./CopyButton";
 
 type Icon = ComponentType<{ className?: string; "aria-hidden"?: boolean }>;
 
