@@ -9,7 +9,7 @@ export const CodeBlock = memo(function CodeBlock({ code, language, note }: { cod
     <div className="md-code group">
       <div className="md-code-bar">
         <span>{language || "text"}{note ? ` · ${note}` : ""}</span>
-        <CopyButton text={code} label="复制代码" />
+        <CopyButton text={code} label="复制代码" done="已复制代码" />
       </div>
       <pre>
         <code className={language ? `hljs language-${language}` : "hljs"}>{body}</code>

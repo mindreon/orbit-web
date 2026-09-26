@@ -1,23 +1,28 @@
 import { useState } from "react";
 import { Check, Copy } from "lucide-react";
+import { showToast } from "../lib/toast";
 
-export function CopyButton({ text, label = "复制" }: { text: string; label?: string }) {
+/** Copies `text` exactly as given (callers pass raw source, never rendered HTML) and confirms with a toast. */
+export function CopyButton({ text, label = "复制", done = "已复制" }: { text: string; label?: string; done?: string }) {
   const [state, setState] = useState<"idle" | "done" | "failed">("idle");
   return (
     <button
       type="button"
       className="inline-flex items-center gap-1 rounded px-1.5 py-0.5 text-[11px] text-[#666] hover:bg-black/5"
       onClick={() => {
-        const reset = () => setTimeout(() => setState("idle"), 1500);
+        const settle = (next: "done" | "failed") => {
+          setState(next);
+          showToast(next === "done" ? done : "复制失败，请手动选中复制", next === "done" ? "ok" : "error");
+          setTimeout(() => setState("idle"), 1500);
+        };
         if (!navigator.clipboard) {
-          setState("failed");
-          reset();
+          settle("failed");
           return;
         }
         navigator.clipboard.writeText(text).then(
-          () => setState("done"),
-          () => setState("failed"),
-        ).finally(reset);
+          () => settle("done"),
+          () => settle("failed"),
+        );
       }}
     >
       {state === "done" ? <Check className="h-3 w-3" aria-hidden /> : <Copy className="h-3 w-3" aria-hidden />}

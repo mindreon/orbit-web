@@ -13,6 +13,7 @@ import { buildProcess, buildTimeline, draftItems, hasOpenWork, latestModel } fro
 import { getUiPrefs, setUiPrefs, subscribeUiPrefs } from "../lib/uiPrefs";
 import { chordFromEvent, getShortcuts, isShortcutCapture } from "../lib/shortcuts";
 import { ToolRow } from "../chat/ToolRow";
+import { Toaster } from "../chat/Toaster";
 import { ApprovalCard, approvalFromControl, findControlApproval } from "../chat/ApprovalCard";
 import { describeTool, toolTitle } from "../lib/events/toolLabels";
 import type { Approval } from "../lib/rooms";
@@ -29,7 +30,8 @@ type RailTab = (typeof RAIL_TABS)[number];
 export function WorkbenchPage() {
   const loadRooms = useMind((s) => s.loadRooms);
   const activeId = useMind((s) => s.activeId);
-  const [railOpen, setRailOpen] = useState(true);
+  // Narrow screens start with the rail closed; opened, it overlays the conversation (see Inspector).
+  const [railOpen, setRailOpen] = useState(() => window.matchMedia("(min-width: 1024px)").matches);
   useRoomEventStream(activeId);
   useEffect(() => {
     void loadRooms();
@@ -43,8 +45,9 @@ export function WorkbenchPage() {
   }, []);
 
   return (
-    <div className={cn("grid min-h-0 flex-1", railOpen ? "grid-cols-[minmax(0,1fr)_360px]" : "grid-cols-[minmax(0,1fr)]")}>
+    <div className={cn("grid min-h-0 flex-1", railOpen ? "grid-cols-[minmax(0,1fr)] lg:grid-cols-[minmax(0,1fr)_360px]" : "grid-cols-[minmax(0,1fr)]")}>
       <Timeline railOpen={railOpen} onToggleRail={() => setRailOpen((open) => !open)} />
+      <Toaster />
       {railOpen ? <Inspector /> : null}
     </div>
   );
@@ -288,8 +291,8 @@ function Timeline({ railOpen, onToggleRail }: { railOpen: boolean; onToggleRail:
 
   return (
     <section className="bg-background flex min-h-0 flex-col">
-      <div className="relative flex items-center gap-3 border-b px-4 py-3">
-        <h1 className="min-w-0 flex-1 truncate text-base font-semibold">{matterTitle(matter)}</h1>
+      <div className="relative flex flex-wrap items-center gap-x-3 gap-y-1 border-b px-4 py-3 max-md:pl-14">
+        <h1 className="min-w-0 flex-1 basis-40 truncate text-base font-semibold">{matterTitle(matter)}</h1>
         <span
           data-testid="model-mode"
           className={cn("rounded px-2 py-0.5 text-xs", modelModeText === "假模型" ? "bg-amber-50 text-amber-700" : modelModeText === "真模型" ? "bg-emerald-50 text-emerald-700" : "bg-[#f3f3f4] text-[#999]")}
@@ -475,7 +478,7 @@ function Timeline({ railOpen, onToggleRail }: { railOpen: boolean; onToggleRail:
                 }, 0);
               }}
             />
-            <div className="mt-2 flex items-center gap-2 text-xs text-[#666]">
+            <div className="mt-2 flex flex-wrap items-center gap-2 text-xs text-[#666]">
               <button type="button" className="rounded-md px-1 py-1 hover:bg-[#f3f3f4]" onClick={() => setVoiceNotice("当前环境不支持语音输入。")}>
                 语音输入
               </button>
@@ -586,7 +589,7 @@ function Inspector() {
   const selected = items.find((item) => item.id === selectedId) ?? null;
   if (!matter) {
     return (
-      <aside className="text-muted-foreground bg-card border-l p-4 text-sm">
+      <aside className="text-muted-foreground bg-card border-l p-4 text-sm max-lg:fixed max-lg:inset-y-0 max-lg:right-0 max-lg:z-30 max-lg:w-[min(360px,100vw)] max-lg:shadow-xl">
         创建之后，右边是这件云端任务的产物和文件。文件不在你的电脑上。
       </aside>
     );
@@ -594,7 +597,7 @@ function Inspector() {
   const waiting = approval && approval.status === "pending" ? approval : null;
 
   return (
-    <aside className="bg-card flex min-h-0 flex-col border-l text-sm">
+    <aside className="bg-card flex min-h-0 flex-col border-l text-sm max-lg:fixed max-lg:inset-y-0 max-lg:right-0 max-lg:z-30 max-lg:w-[min(360px,100vw)] max-lg:shadow-xl">
       <div className="flex gap-1 overflow-auto border-b px-2 py-2 text-xs">
         {RAIL_TABS.map((item) => (
           <button
@@ -605,6 +608,9 @@ function Inspector() {
             {item}
           </button>
         ))}
+        <button type="button" className="text-muted-foreground ml-auto rounded-md px-2 py-1 lg:hidden" onClick={() => window.dispatchEvent(new Event("mind-toggle-rail"))}>
+          关闭
+        </button>
       </div>
       <div className="min-h-0 flex-1 overflow-auto p-3">
         {tab === "任务进程" ? (
