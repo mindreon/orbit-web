@@ -7,12 +7,15 @@ import { useMind } from "../store";
 import { Area, Button } from "../ui";
 import { cn } from "../lib/cn";
 import { newTurnId, type ActivityEvent } from "../lib/rooms";
-import { useRoomEventStream, useRoomStream, useStreams } from "../lib/events/roomStreams";
+import { resyncActivity, useRoomEventStream, useRoomStream, useStreams } from "../lib/events/roomStreams";
 import { orderedDrafts } from "../lib/events/stream";
-import { buildProcess, buildTimeline, draftItems, hasOpenWork } from "../lib/events/timeline";
+import { buildProcess, buildTimeline, draftItems, hasOpenWork, latestModel } from "../lib/events/timeline";
 import { getUiPrefs, setUiPrefs, subscribeUiPrefs } from "../lib/uiPrefs";
 import { chordFromEvent, getShortcuts, isShortcutCapture } from "../lib/shortcuts";
 import { ToolRow } from "../chat/ToolRow";
+import { ApprovalCard, approvalFromControl, findControlApproval } from "../chat/ApprovalCard";
+import { describeTool, toolTitle } from "../lib/events/toolLabels";
+import type { Approval } from "../lib/rooms";
 import { ModelPicker } from "./ModelPicker";
 import { CreateFailureNotice } from "./CreateFailureNotice";
 
@@ -20,6 +23,7 @@ import { CreateFailureNotice } from "./CreateFailureNotice";
 const ChatList = lazy(() => import("../chat/ChatList").then((module) => ({ default: module.ChatList })));
 
 const RAIL_TABS = ["产物", "概览", "任务进程", "文件"] as const;
+const noApprovals: Approval[] = [];
 type RailTab = (typeof RAIL_TABS)[number];
 
 export function WorkbenchPage() {
@@ -144,6 +148,9 @@ function Timeline({ railOpen, onToggleRail }: { railOpen: boolean; onToggleRail:
   const stream = useRoomStream(matter?.id);
   const streamStatus = useStreams((s) => (matter?.id ? s.status[matter.id] : undefined));
   const streamLoaded = useStreams((s) => (matter?.id ? s.loaded[matter.id] === true : false));
+  const loadError = useStreams((s) => (matter?.id ? (s.loadError[matter.id] ?? null) : null));
+  const roomApprovals = useMind((s) => (s.activeId ? (s.roomApprovals[s.activeId] ?? noApprovals) : noApprovals));
+  const roomsLoading = useMind((s) => s.loading);
   const [params] = useSearchParams();
   const attachedFile = params.get("file");
   const [text, setText] = useState(attachedFile ?? "");
@@ -160,10 +167,10 @@ function Timeline({ railOpen, onToggleRail }: { railOpen: boolean; onToggleRail:
   const imeRef = useRef(false);
   const taskIdRef = useRef(matter?.id);
 
-  const persisted = useMemo(() => buildTimeline(stream.events), [stream.events]);
+  const persisted = useMemo(() => buildTimeline(stream.events, stream.stoppedSequence), [stream.events, stream.stoppedSequence]);
   const drafts = useMemo(() => orderedDrafts(stream), [stream]);
   const items = useMemo(() => [...persisted, ...draftItems(drafts)], [persisted, drafts]);
-  const turnRunning = pending === "send" || pending === "steer" || pending === "decide" || hasOpenWork(stream.events, drafts);
+  const turnRunning = pending === "send" || pending === "steer" || pending === "decide" || hasOpenWork(stream.events, drafts, stream.stoppedSequence);
 
   const findNeedle = findText.trim();
   const findHits = useMemo(
@@ -172,6 +179,16 @@ function Timeline({ railOpen, onToggleRail }: { railOpen: boolean; onToggleRail:
   );
   const currentHitId = findHits.length === 0 ? null : (findHits[findIndex % findHits.length]?.id ?? null);
 
+  const onDecide = useCallback((approvalId: string, decision: "allow" | "reject") => {
+    void decide(approvalId, decision);
+  }, [decide]);
+  /** A pending approval with no approval.asked card in the conversation (e.g. trimmed from history) still gets one card. */
+  const orphanApproval = useMemo(() => {
+    if (!approval || approval.status !== "pending") return null;
+    const shown = persisted.some((item) => item.kind === "approval" && findControlApproval(item, [approval]));
+    return shown ? null : approvalFromControl(approval);
+  }, [approval, persisted]);
+  const model = useMemo(() => latestModel(stream.events), [stream.events]);
   const retry = useCallback((retryText: string) => {
     void send(retryText, newTurnId());
   }, [send]);
@@ -262,19 +279,24 @@ function Timeline({ railOpen, onToggleRail }: { railOpen: boolean; onToggleRail:
     event.preventDefault();
     composerRef.current?.requestSubmit();
   }
-  if (!matter) return <BlankMatter />;
+  if (!matter) {
+    if (roomsLoading) return <p className="text-muted-foreground bg-background flex items-center justify-center text-sm">正在加载任务…</p>;
+    return <BlankMatter />;
+  }
   const continuing = steered || matter.state === "closed";
-  const modelModeText = modelModeLabel(matter.modelMode);
+  const modelModeText = modelModeLabel(matter.modelMode ?? model?.mode);
 
   return (
     <section className="bg-background flex min-h-0 flex-col">
       <div className="relative flex items-center gap-3 border-b px-4 py-3">
         <h1 className="min-w-0 flex-1 truncate text-base font-semibold">{matterTitle(matter)}</h1>
-        {modelModeText ? (
-          <span className="rounded bg-[#f3f3f4] px-2 py-0.5 text-xs text-[#666]" title="当前任务使用的模型模式">
-            {modelModeText}
-          </span>
-        ) : null}
+        <span
+          data-testid="model-mode"
+          className={cn("rounded px-2 py-0.5 text-xs", modelModeText === "假模型" ? "bg-amber-50 text-amber-700" : modelModeText === "真模型" ? "bg-emerald-50 text-emerald-700" : "bg-[#f3f3f4] text-[#999]")}
+          title={model?.name ? `当前任务使用的模型：${model.name}` : "当前任务使用的模型模式"}
+        >
+          {modelModeText ?? "模型模式未上报"}
+        </span>
         <span className="bg-accent text-accent-foreground rounded px-2 py-0.5 text-xs" title="权限在创建这件任务时已经确定">
           {permissionLabel(matter.permission)}
         </span>
@@ -353,30 +375,27 @@ function Timeline({ railOpen, onToggleRail }: { railOpen: boolean; onToggleRail:
             focusId={findOpen ? currentHitId : null}
             retryDisabled={turnRunning || pending !== null || role !== "经办人"}
             onRetry={retry}
+            approvals={roomApprovals}
+            decideDisabled={pending !== null}
+            onDecide={onDecide}
             empty={
-            <p className="text-muted-foreground py-8 text-center text-sm">
-              {streamLoaded ? "还没有消息。发送后，这里显示这件云端任务的真实回复。" : "正在加载对话…"}
-            </p>
-          }
+              loadError ? (
+                <div role="alert" className="py-8 text-center text-sm">
+                  <p className="text-destructive">{loadError}</p>
+                  <button type="button" className="mt-2 rounded-lg border bg-white px-3 py-1 text-xs hover:bg-[#f6f6f7]" onClick={() => void resyncActivity(matter.id).catch(() => undefined)}>
+                    重新加载
+                  </button>
+                </div>
+              ) : (
+                <p className="text-muted-foreground py-8 text-center text-sm">
+                  {streamLoaded ? "还没有消息。发送后，这里显示这件云端任务的真实回复。" : "正在加载对话…"}
+                </p>
+              )
+            }
             footer={
               <>
-                {approval && approval.status === "pending" ? (
-                  <div className="bg-card max-w-xl rounded-lg border p-3">
-                    <p className="text-xs font-semibold">这一次要先确认</p>
-                    <p className="mt-2 text-sm leading-6">
-                      {approval.toolName ? `要调用「${approval.toolName}」。` : "助手要做一次需要确认的操作。"}
-                      {approval.reason ? approval.reason : ""}
-                    </p>
-                    <div className="mt-3 flex gap-2">
-                      <Button disabled={pending === "decide"} onClick={() => void decide(approval.id, "allow")}>
-                        允许这一次
-                      </Button>
-                      <Button variant="outline" disabled={pending === "decide"} onClick={() => void decide(approval.id, "reject")}>
-                        拒绝
-                      </Button>
-                    </div>
-                  </div>
-                ) : null}
+                {orphanApproval ? <ApprovalCard card={orphanApproval} approvals={roomApprovals} disabled={pending !== null} onDecide={onDecide} /> : null}
+                {loadError && items.length > 0 ? <p className="text-destructive text-xs">{loadError}</p> : null}
                 {turnRunning && drafts.length === 0 ? (
                   <p className="flex items-center gap-2 text-xs text-[#888]" data-testid="turn-running">
                     <LoaderCircle className="h-3.5 w-3.5 animate-spin" aria-hidden />
@@ -533,21 +552,31 @@ function activityTitle(event: ActivityEvent) {
   return event.type;
 }
 
+function agentName(event: ActivityEvent) {
+  const path = event.agentPath || event.agentId || "main";
+  return path === "main" ? "主助手" : `子助手 · ${path}`;
+}
+
 function activityBody(event: ActivityEvent) {
   if (event.type === "turn.failed") return event.failure?.errorCode ?? "";
   if (event.type === "approval.asked") {
-    return [event.toolName, event.reason || event.text].filter(Boolean).join(" · ");
+    return [toolTitle(describeTool(event.toolName ?? "", event.argsPreview ?? "")), event.reason].filter(Boolean).join(" · ");
   }
-  if (event.type === "agent.started" || event.type === "agent.finished") {
-    return [event.role, event.text].filter(Boolean).join(" · ") || "子助手";
+  if (event.type === "approval.resolved") {
+    const outcome = (event.outcome || event.status || "").toLowerCase();
+    return outcome.startsWith("allow") ? "已允许这一次" : outcome.startsWith("reject") ? "已拒绝" : "已处理";
   }
-  return event.text || event.reason || "";
+  if (event.type === "agent.started" || event.type === "agent.finished" || event.type === "agent.spawn_rejected") {
+    return agentName(event);
+  }
+  if (event.type === "room.steered") return event.text ?? "";
+  return event.reason ?? "";
 }
 
 function Inspector() {
   const matter = useMind((s) => s.matters.find((item) => item.id === s.activeId));
   const stream = useRoomStream(matter?.id);
-  const process = useMemo(() => buildProcess(stream.events), [stream.events]);
+  const process = useMemo(() => buildProcess(stream.events, stream.stoppedSequence), [stream.events, stream.stoppedSequence]);
   const approval = useMind((s) => (s.activeId ? (s.approvals[s.activeId] ?? null) : null));
   const [tab, setTab] = useState<RailTab>("产物");
   const [selectedId, setSelectedId] = useState<string | null>(null);
@@ -582,7 +611,7 @@ function Inspector() {
           <>
             {waiting ? (
               <p className="bg-primary/10 text-primary mb-3 rounded px-2 py-1.5 text-xs">
-                等待批准{waiting.toolName ? ` · ${waiting.toolName}` : ""}
+                等待批准{waiting.toolName ? ` · ${toolTitle(describeTool(waiting.toolName, ""))}` : ""}
                 {waiting.reason ? ` · ${waiting.reason}` : ""}
               </p>
             ) : null}

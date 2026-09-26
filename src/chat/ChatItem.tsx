@@ -1,6 +1,9 @@
 import { memo } from "react";
+import type { Approval } from "../lib/rooms";
 import type { TimelineItem } from "../lib/events/timeline";
+import { ApprovalCard } from "./ApprovalCard";
 import { FailureCard } from "./FailureCard";
+import { QuestionCard } from "./QuestionCard";
 import { Markdown } from "./markdown/Markdown";
 import { CopyButton } from "./CopyButton";
 import { ToolGroup, sameCall } from "./ToolRow";
@@ -20,9 +23,12 @@ export interface ChatItemProps {
   focused: boolean;
   retryDisabled: boolean;
   onRetry: (text: string) => void;
+  approvals: readonly Approval[];
+  decideDisabled: boolean;
+  onDecide: (approvalId: string, decision: "allow" | "reject") => void;
 }
 
-function ChatItemView({ item, highlight, focused, retryDisabled, onRetry }: ChatItemProps) {
+function ChatItemView({ item, highlight, focused, retryDisabled, onRetry, approvals, decideDisabled, onDecide }: ChatItemProps) {
   if (item.kind === "user") {
     return (
       <div data-testid="chat-item" data-kind="user" data-item-id={item.id} className="group flex flex-col items-end">
@@ -67,6 +73,20 @@ function ChatItemView({ item, highlight, focused, retryDisabled, onRetry }: Chat
       </div>
     );
   }
+  if (item.kind === "approval") {
+    return (
+      <div data-testid="chat-item" data-kind="approval" data-item-id={item.id}>
+        <ApprovalCard card={item} approvals={approvals} disabled={decideDisabled} onDecide={onDecide} />
+      </div>
+    );
+  }
+  if (item.kind === "question") {
+    return (
+      <div data-testid="chat-item" data-kind="question" data-item-id={item.id}>
+        <QuestionCard card={item} />
+      </div>
+    );
+  }
   return (
     <div data-testid="chat-item" data-kind="failure" data-item-id={item.id}>
       <FailureCard errorCode={item.errorCode} retryable={item.retryable} retryText={item.retryText} disabled={retryDisabled} onRetry={onRetry} />
@@ -78,11 +98,23 @@ function sameItem(a: TimelineItem, b: TimelineItem) {
   if (a.kind !== b.kind || a.id !== b.id) return false;
   if (a.kind === "tools" && b.kind === "tools") return a.calls.length === b.calls.length && a.calls.every((call, index) => sameCall(call, b.calls[index]));
   if (a.kind === "failure" && b.kind === "failure") return a.retryText === b.retryText;
+  if (a.kind === "approval" && b.kind === "approval") {
+    return a.outcome === b.outcome && a.approvalId === b.approvalId && a.approvalRequestId === b.approvalRequestId && a.reason === b.reason && a.argsPreview === b.argsPreview;
+  }
+  if (a.kind === "question" && b.kind === "question") return a.answer?.text === b.answer?.text && a.answer?.choiceIds.join() === b.answer?.choiceIds.join();
   if ("text" in a && "text" in b) return a.text === b.text;
   return false;
 }
 
 export const ChatItem = memo(
   ChatItemView,
-  (a, b) => a.highlight === b.highlight && a.focused === b.focused && a.retryDisabled === b.retryDisabled && a.onRetry === b.onRetry && sameItem(a.item, b.item),
+  (a, b) =>
+    a.highlight === b.highlight &&
+    a.focused === b.focused &&
+    a.retryDisabled === b.retryDisabled &&
+    a.onRetry === b.onRetry &&
+    a.approvals === b.approvals &&
+    a.decideDisabled === b.decideDisabled &&
+    a.onDecide === b.onDecide &&
+    sameItem(a.item, b.item),
 );
