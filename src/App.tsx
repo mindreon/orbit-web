@@ -1,6 +1,6 @@
 import { useEffect, useState, useSyncExternalStore } from "react";
 import { NavLink, Outlet, useLocation, useNavigate, useParams } from "react-router";
-import { PRIMARY_NAV } from "./shell/nav";
+import { GREYED_NAV_LABELS, PRIMARY_NAV } from "./shell/nav";
 import { getBuddyApps, subscribeBuddyApps } from "./lib/buddyApps";
 import { chordFromEvent, getShortcuts, isShortcutCapture, subscribeShortcuts } from "./lib/shortcuts";
 import { fontSizePx, getUiPrefs, stepFontSize, subscribeUiPrefs } from "./lib/uiPrefs";
@@ -67,7 +67,6 @@ export function App() {
   const shortcuts = useSyncExternalStore(subscribeShortcuts, getShortcuts);
   const [accountOpen, setAccountOpen] = useState(false);
   const [tasksOpen, setTasksOpen] = useState(true);
-  const [spacesOpen, setSpacesOpen] = useState(true);
   const [collapsed, setCollapsed] = useState(false);
   const [searchOpen, setSearchOpen] = useState(false);
   const [query, setQuery] = useState("");
@@ -341,6 +340,19 @@ export function App() {
           {primaryLabels.map((label) => {
             const item = PRIMARY_NAV.find((entry) => entry.label === label);
             if (!item) return null;
+            if (GREYED_NAV_LABELS.has(item.label)) {
+              return (
+                <button
+                  key={item.label}
+                  type="button"
+                  disabled
+                  aria-disabled="true"
+                  className="mb-0.5 flex h-8 w-full cursor-not-allowed items-center rounded-lg px-3 text-left text-sm text-[#b0b0b0] disabled:cursor-not-allowed"
+                >
+                  {item.label} · 未接入
+                </button>
+              );
+            }
             return (
               <NavLink
                 key={item.to}
@@ -503,10 +515,6 @@ export function App() {
                 </div>
               ))
             : null}
-          <button type="button" className="mt-2 flex w-full items-center px-3 py-1 text-xs text-[#888]" onClick={() => setSpacesOpen((open) => !open)}>
-            空间 (0)
-          </button>
-          {spacesOpen ? <p className="px-3 py-2 text-sm text-[#999]">暂无任务</p> : null}
         </div>
         <div className="relative border-t border-[#e8e8ea] p-3">
           <div className="flex items-center gap-1">
@@ -618,7 +626,14 @@ export function App() {
                 </button>
               ))}
               <hr className="my-1 border-[#f0f0f1]" />
-              <MenuLink label="企业智能体" to="/assistants?group=企业智能体" onDone={() => setAccountOpen(false)} />
+              <button
+                type="button"
+                disabled
+                aria-disabled="true"
+                className="block w-full cursor-not-allowed rounded-lg px-3 py-2 text-left text-sm text-[#b0b0b0] disabled:cursor-not-allowed"
+              >
+                记忆 · 未接入
+              </button>
               <MenuLink label="已归档任务" to="/archived" onDone={() => setAccountOpen(false)} />
               <MenuLink label="系统设置" to="/settings" onDone={() => setAccountOpen(false)} />
               <MenuLink label="账户管理" to="/settings?section=个人主页" onDone={() => setAccountOpen(false)} />

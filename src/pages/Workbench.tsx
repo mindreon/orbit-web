@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState, useSyncExternalStore, type ReactNode } from "react";
 import { useNavigate, useSearchParams } from "react-router";
+import { modelModeLabel } from "../lib/modelMode";
 import { matterTitle, permissionLabel, stateLabel, type PermissionPreset } from "../model";
 import { useMind } from "../store";
 import { Area, Button } from "../ui";
@@ -258,11 +259,17 @@ function Timeline({ railOpen, onToggleRail }: { railOpen: boolean; onToggleRail:
   }
   if (!matter) return <BlankMatter />;
   const continuing = steered || matter.state === "closed";
+  const modelModeText = modelModeLabel(matter.modelMode);
 
   return (
     <section className="bg-background flex min-h-0 flex-col">
       <div className="relative flex items-center gap-3 border-b px-4 py-3">
         <h1 className="min-w-0 flex-1 truncate text-base font-semibold">{matterTitle(matter)}</h1>
+        {modelModeText ? (
+          <span className="rounded bg-[#f3f3f4] px-2 py-0.5 text-xs text-[#666]" title="当前任务使用的模型模式">
+            {modelModeText}
+          </span>
+        ) : null}
         <span className="bg-accent text-accent-foreground rounded px-2 py-0.5 text-xs" title="权限在创建这件任务时已经确定">
           {permissionLabel(matter.permission)}
         </span>

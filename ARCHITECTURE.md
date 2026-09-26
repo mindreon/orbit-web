@@ -62,9 +62,9 @@ When a later wave needs types, generate them from the control spec. Do not inven
 
 ## App shape (W1)
 
-- Next.js App Router shell
+- Vite + React 19 single-page app (React Router)
 - Four locked destinations: Agents, Rooms, Approvals, Settings
-- Default route: Rooms (`/` → `/rooms`)
+- Default route: home task composer (`/` → `/`)
 - Rooms creates `solo|collab` tasks with a pinned permission preset, sends
   turns, steers, aborts and renders a normalized execution timeline
 - Approvals lists live HITL records and decides allow-once or reject

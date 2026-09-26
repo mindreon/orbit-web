@@ -95,6 +95,7 @@ function roomToMatter(room: Room, previous?: Matter): Matter {
     permission: room.permissionPreset,
     state: room.state,
     createdAt: room.createdAt,
+    modelMode: room.modelMode ?? previous?.modelMode,
   };
 }
 

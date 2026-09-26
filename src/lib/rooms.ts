@@ -7,6 +7,8 @@ export interface Room {
   state: RoomState;
   permissionPreset: PermissionPreset;
   createdAt: string;
+  /** When orbit-control exposes ORBIT_MODEL_MODE on room payloads, e.g. "fake" | "real". */
+  modelMode?: string;
 }
 
 export interface ChatMessage {

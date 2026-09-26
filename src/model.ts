@@ -68,6 +68,8 @@ export interface Matter {
   externalId: string;
   mcpIds: string[];
   pinned?: boolean;
+  /** From orbit-control room payload when `modelMode` is present. */
+  modelMode?: string;
 }
 
 export interface Catalog {
