@@ -4,7 +4,7 @@ import { EXPERT_TABS, SETTINGS_NAV, SKILL_TABS } from "../shell/nav";
 import { useMind } from "../store";
 import { getUiPrefs, setUiPrefs, subscribeUiPrefs } from "../lib/uiPrefs";
 import { cn } from "../lib/cn";
-import { getConnectorOverrides, isConnectorLinked, setConnectorLinked, subscribeConnectorLinks } from "../lib/connectorLinks";
+import { getConnectorOverrides, setConnectorLinked, subscribeConnectorLinks } from "../lib/connectorLinks";
 import { getHandoffs, subscribeHandoffs, updateHandoff } from "../lib/handoffs";
 import type { McpTool } from "../model";
 
@@ -2372,7 +2372,6 @@ function ConnectorBoard({ tools }: { tools: McpTool[] }) {
   useSyncExternalStore(subscribeConnectorLinks, getConnectorOverrides);
   const [tab, setTab] = useState<"官方内置" | "企业连接器">("官方内置");
   const [query, setQuery] = useState("");
-  const [linkingId, setLinkingId] = useState<string | null>(null);
   const [authId, setAuthId] = useState<string | null>(null);
   const [dropId, setDropId] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
@@ -2405,22 +2404,23 @@ function ConnectorBoard({ tools }: { tools: McpTool[] }) {
       {tab === "官方内置" && visible.length === 0 ? <p className="text-sm text-[#888]">未找到匹配的连接器，换个关键词试试</p> : null}
       {tab === "官方内置" && visible.length > 0 ? (
         <ul className="grid max-w-3xl gap-2">
-          {visible.map((tool) => {
-            const linked = isConnectorLinked(tool.id, tool.connected);
-            const linking = linkingId === tool.id;
-            return (
+          {visible.map((tool) => (
               <li key={tool.id} className="rounded-xl border border-[#ececee] bg-white p-4 text-sm">
                 <div className="flex items-center gap-3">
                   <p className="font-medium">{tool.name}</p>
-                  <button type="button" className="ml-auto text-[#666]" disabled={linking} onClick={() => (linked ? setDropId(tool.id) : setAuthId(tool.id))}>
-                    {linking ? "连接中..." : linked ? "断开" : "连接"}
+                  <button
+                    type="button"
+                    disabled
+                    aria-disabled="true"
+                    className="ml-auto cursor-not-allowed text-[#b0b0b0] disabled:cursor-not-allowed"
+                  >
+                    未接入
                   </button>
                 </div>
                 <p className="mt-1 text-[#666]">{tool.purpose}</p>
-                <p className="mt-1 text-xs text-[#888]">{linking ? "连接中..." : linked ? "已连接" : "未连接"}</p>
+                <p className="mt-1 text-xs text-[#888]">未接入</p>
               </li>
-            );
-          })}
+          ))}
         </ul>
       ) : null}
       {authTool ? (
@@ -2437,21 +2437,11 @@ function ConnectorBoard({ tools }: { tools: McpTool[] }) {
               <button type="button" onClick={() => setAuthId(null)}>取消</button>
               <button
                 type="button"
-                className="rounded-lg bg-[#1a1a1a] px-3 py-1.5 text-white"
-                onClick={() => {
-                  const id = authTool.id;
-                  const name = authTool.name;
-                  setAuthId(null);
-                  setLinkingId(id);
-                  setNotice("将跳转页面授权连接...");
-                  window.setTimeout(() => {
-                    setConnectorLinked(id, true);
-                    setLinkingId(null);
-                    setNotice(`连接器 ${name} 已连接`);
-                  }, 400);
-                }}
+                disabled
+                aria-disabled="true"
+                className="cursor-not-allowed rounded-lg bg-[#f3f3f4] px-3 py-1.5 text-[#b0b0b0] disabled:cursor-not-allowed"
               >
-                授权并继续
+                授权并继续 · 未接入
               </button>
             </div>
           </div>
@@ -3546,8 +3536,6 @@ export function SettingsPage() {
 
 function SettingsBody({ section }: { section: string }) {
   const role = useMind((s) => s.role);
-  const [nickname, setNickname] = useState("经办人");
-  const [editingName, setEditingName] = useState(false);
   const uiPrefs = useSyncExternalStore(subscribeUiPrefs, getUiPrefs);
 
   if (section === "个人主页") {
@@ -3556,27 +3544,17 @@ function SettingsBody({ section }: { section: string }) {
         <p className="text-[#666]">当前身份：{role}</p>
         <div className="rounded-xl bg-white p-4">
           <p className="text-xs text-[#999]">昵称</p>
-          {editingName ? (
-            <form
-              className="mt-2 flex gap-2"
-              onSubmit={(event) => {
-                event.preventDefault();
-                if (nickname.trim()) setEditingName(false);
-              }}
+          <div className="mt-2 flex items-center">
+            <span>经办人</span>
+            <button
+              type="button"
+              disabled
+              aria-disabled="true"
+              className="ml-auto cursor-not-allowed text-[#b0b0b0] disabled:cursor-not-allowed"
             >
-              <input aria-label="昵称" value={nickname} className="h-9 flex-1 rounded-lg border border-[#e6e6e8] px-3" onChange={(event) => setNickname(event.target.value)} />
-              <button className="rounded-lg bg-[#1a1a1a] px-3 text-white" type="submit">
-                修改昵称
-              </button>
-            </form>
-          ) : (
-            <div className="mt-2 flex items-center">
-              <span>{nickname}</span>
-              <button className="ml-auto text-[#666]" type="button" onClick={() => setEditingName(true)}>
-                修改昵称
-              </button>
-            </div>
-          )}
+              修改昵称 · 未接入
+            </button>
+          </div>
         </div>
       </div>
     );
