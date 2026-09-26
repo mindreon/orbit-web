@@ -60,3 +60,70 @@ body {
     "Helvetica Neue", Arial, "Noto Sans", "PingFang SC", "Microsoft YaHei",
     sans-serif;
 }
+
+/* 助手回复的 Markdown */
+.md {
+  font-size: 14px;
+  line-height: 1.75;
+  color: #1f2328;
+  overflow-wrap: anywhere;
+}
+.md > :first-child { margin-top: 0; }
+.md > :last-child { margin-bottom: 0; }
+.md p, .md ul, .md ol, .md blockquote, .md .md-table-wrap, .md .md-code, .md .md-mermaid, .md .katex-display { margin: 0.6em 0; }
+.md h1, .md h2, .md h3, .md h4 { margin: 1.1em 0 0.5em; font-weight: 600; line-height: 1.4; }
+.md h1 { font-size: 1.35em; }
+.md h2 { font-size: 1.2em; }
+.md h3 { font-size: 1.07em; }
+.md h4 { font-size: 1em; }
+.md ul { list-style: disc; padding-left: 1.4em; }
+.md ol { list-style: decimal; padding-left: 1.6em; }
+.md li + li { margin-top: 0.2em; }
+.md li > ul, .md li > ol { margin: 0.2em 0; }
+.md li:has(> input[type="checkbox"]) { list-style: none; margin-left: -1.2em; }
+.md input[type="checkbox"] { margin-right: 0.4em; vertical-align: -1px; }
+.md a { color: hsl(var(--primary)); text-decoration: underline; text-underline-offset: 2px; }
+.md blockquote { border-left: 3px solid #e3e5e8; padding-left: 0.9em; color: #57606a; }
+.md hr { border: 0; border-top: 1px solid #ececee; margin: 1.2em 0; }
+.md strong { font-weight: 600; }
+.md .md-inline-code { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size: 0.88em; background: #f3f4f6; border-radius: 4px; padding: 0.1em 0.35em; }
+.md .md-table-wrap { overflow-x: auto; }
+.md table { border-collapse: collapse; font-size: 13px; min-width: 50%; }
+.md th, .md td { border: 1px solid #e3e5e8; padding: 0.35em 0.7em; text-align: left; vertical-align: top; }
+.md th { background: #f6f7f8; font-weight: 600; }
+.md tr:nth-child(2n) td { background: #fbfbfc; }
+.md .katex-display { overflow-x: auto; overflow-y: hidden; padding: 0.2em 0; }
+.md-mark { background: #fff3c4; border-radius: 2px; }
+
+.md-code { border: 1px solid #ececee; border-radius: 8px; overflow: hidden; background: #fafafb; }
+.md-code-bar { display: flex; align-items: center; justify-content: space-between; padding: 2px 6px 2px 10px; border-bottom: 1px solid #f0f0f1; font-size: 11px; color: #888; background: #f6f6f7; }
+.md-code pre { margin: 0; padding: 10px 12px; overflow-x: auto; font-size: 12.5px; line-height: 1.6; }
+.md-code code { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; background: none; padding: 0; }
+.md-mermaid { border: 1px solid #ececee; border-radius: 8px; padding: 12px; overflow-x: auto; background: #fff; }
+.md-mermaid svg { max-width: 100%; height: auto; margin: 0 auto; display: block; }
+.md-image-blocked { display: inline-flex; align-items: center; gap: 8px; max-width: 100%; margin: 4px 0; padding: 6px 8px; border: 1px dashed #d8dadf; border-radius: 8px; background: #fafafb; vertical-align: middle; }
+
+.md-streaming .md > :last-child::after {
+  content: "";
+  display: inline-block;
+  width: 0.45em;
+  height: 1em;
+  margin-left: 2px;
+  vertical-align: -0.15em;
+  background: currentColor;
+  opacity: 0.55;
+  animation: md-caret 1s steps(2, start) infinite;
+}
+@keyframes md-caret { to { visibility: hidden; } }
+
+/* highlight.js 配色（接近 GitHub 亮色） */
+.hljs-comment, .hljs-quote { color: #6e7781; font-style: italic; }
+.hljs-keyword, .hljs-selector-tag, .hljs-type, .hljs-doctag { color: #cf222e; }
+.hljs-string, .hljs-regexp, .hljs-addition, .hljs-attribute, .hljs-meta .hljs-string { color: #0a3069; }
+.hljs-number, .hljs-literal, .hljs-variable, .hljs-template-variable, .hljs-selector-attr, .hljs-selector-pseudo { color: #0550ae; }
+.hljs-title, .hljs-section, .hljs-title.function_ { color: #8250df; }
+.hljs-name, .hljs-tag, .hljs-selector-id, .hljs-selector-class, .hljs-built_in { color: #116329; }
+.hljs-symbol, .hljs-bullet, .hljs-link, .hljs-meta { color: #953800; }
+.hljs-deletion { color: #82071e; background: #ffebe9; }
+.hljs-emphasis { font-style: italic; }
+.hljs-strong { font-weight: 600; }
