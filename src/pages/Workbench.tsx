@@ -8,7 +8,6 @@ import type { ActivityEvent, ChatMessage } from "../lib/rooms";
 import { getUiPrefs, setUiPrefs, subscribeUiPrefs } from "../lib/uiPrefs";
 import { chordFromEvent, getShortcuts, isShortcutCapture } from "../lib/shortcuts";
 import { ModelPicker } from "./ModelPicker";
-import { AppMenu } from "./AppMenu";
 import { CreateFailureNotice } from "./CreateFailureNotice";
 
 const emptyMessages: ChatMessage[] = [];
@@ -160,8 +159,6 @@ function Timeline({ railOpen, onToggleRail }: { railOpen: boolean; onToggleRail:
   const attachedFile = params.get("file");
   const [text, setText] = useState(attachedFile ?? "");
   const [copiedId, setCopiedId] = useState<string | null>(null);
-  const [model, setModel] = useState("Auto");
-  const [modelNotice, setModelNotice] = useState("");
   const [findOpen, setFindOpen] = useState(false);
   const [findText, setFindText] = useState("");
   const [findIndex, setFindIndex] = useState(0);
@@ -424,7 +421,7 @@ function Timeline({ railOpen, onToggleRail }: { railOpen: boolean; onToggleRail:
           }}
         >
           <div className="bg-card rounded-xl border p-3">
-            <TaskComposerExtras matterId={matter.id} text={text} setText={setText} />
+            <TaskComposerExtras text={text} setText={setText} />
             <ComposerSuggest text={text} setText={setText} />
             {attachedFile ? <p className="mb-2 text-xs text-[#666]">已添加到任务 · {attachedFile}</p> : null}
             <Area
@@ -438,15 +435,7 @@ function Timeline({ railOpen, onToggleRail }: { railOpen: boolean; onToggleRail:
                 语音输入
               </button>
               <span className="rounded-md px-1 py-1">云端工作空间</span>
-              <ModelPicker
-                value={model}
-                onChange={(next) => {
-                  if (next !== model) setModelNotice(`模型已从 ${model} 更改为 ${next}`);
-                  setModel(next);
-                }}
-              />
-              {model !== "Auto" ? <span>使用外部模型，注意数据安全</span> : null}
-              {modelNotice ? <span title="在对话中途切换模型会使上下文缓存失效，积分消耗增加，背景信息可能会自动压缩，降低性能表现">{modelNotice}</span> : null}
+              <ModelPicker value="Auto" />
               <span className="rounded-md px-1 py-1" title="权限在创建这件任务时已经确定">
                 {matter.permission === "danger-full-access" ? "允许完全访问" : matter.permission === "read-only" ? "云端只读" : "默认权限"}
               </span>
@@ -669,9 +658,9 @@ function ArtifactPane({
   );
 }
 
-const ADD_ITEMS = ["添加文件", "引用对话中的文件", "应用", "模式", "专家", "技能", "连接器"] as const;
+const ADD_ITEMS = ["添加文件", "引用对话中的文件", "模式", "专家", "技能", "连接器"] as const;
 
-function TaskComposerExtras({ matterId, text, setText }: { matterId: string; text: string; setText: (value: string) => void }) {
+function TaskComposerExtras({ text, setText }: { text: string; setText: (value: string) => void }) {
   const catalog = useMind((s) => s.catalog);
   const [addOpen, setAddOpen] = useState(false);
   const [addPanel, setAddPanel] = useState<(typeof ADD_ITEMS)[number] | null>(null);
@@ -723,12 +712,6 @@ function TaskComposerExtras({ matterId, text, setText }: { matterId: string; tex
           {addPanel === "技能" ? <MiniList items={catalog.skills.map((item) => item.name)} empty="暂无可用技能" onPick={(name) => attach(`/${name}`)} /> : null}
           {addPanel === "连接器" ? <MiniList items={catalog.mcps.map((item) => item.name)} empty="暂无可用连接器" onPick={(name) => attach(name)} /> : null}
           {addPanel === "模式" ? <MiniList items={["计划", "仅问答"]} empty="" onPick={(name) => attach(name)} /> : null}
-          {addPanel === "应用" ? (
-            <AppMenu
-              matterId={matterId}
-              onPick={(app) => attach(app.name)}
-            />
-          ) : null}
           {addPanel === "引用对话中的文件" ? (
             <div className="border-t border-[#f0f0f1] px-1 py-1">
               <p className="px-2 py-1 text-xs text-[#999]">对话中的文件</p>

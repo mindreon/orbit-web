@@ -1,4 +1,9 @@
-/** Remove client-side model key material from older builds. Keys belong on the control plane. */
+/**
+ * Defensive cleanup for model-key material that older experimental builds might have
+ * persisted. On main through 3d74ad9, custom models lived only in module memory
+ * (`src/lib/customModels.ts`, deleted in trim PR) and never wrote browser storage.
+ * These key names are reserved for any side-loaded or forked builds that did.
+ */
 
 export const LEGACY_MODEL_STORAGE_KEYS = [
   "mindbuddy:custom-models",

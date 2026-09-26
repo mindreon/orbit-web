@@ -5,12 +5,11 @@ import { useMind } from "../store";
 import type { PermissionPreset } from "../model";
 import { cn } from "../lib/cn";
 import { ModelPicker } from "./ModelPicker";
-import { AppMenu } from "./AppMenu";
 import { CloudFileDialog, ComposerSuggest } from "./Workbench";
 import { CreateFailureNotice } from "./CreateFailureNotice";
 import { getUiPrefs, subscribeUiPrefs } from "../lib/uiPrefs";
 
-const ADD_ITEMS = ["添加文件", "引用对话中的文件", "应用", "模式", "权限", "专家", "技能", "连接器"] as const;
+const ADD_ITEMS = ["添加文件", "引用对话中的文件", "模式", "权限", "专家", "技能", "连接器"] as const;
 
 export function HomePage() {
   const navigate = useNavigate();
@@ -43,7 +42,6 @@ export function HomePage() {
   const [skill, setSkill] = useState<string | null>(null);
   const [connector, setConnector] = useState<string | null>(null);
   const [mode, setMode] = useState<string | null>(null);
-  const [model, setModel] = useState("Auto");
   const scene = SCENES.find((item) => item.id === sceneId) ?? SCENES[0];
   const casePageSize = 3;
   const casePageCount = Math.max(1, Math.ceil(scene.chips.length / casePageSize));
@@ -244,15 +242,6 @@ export function HomePage() {
                 {addPanel === "模式" ? (
                   <PickerList items={["计划", "仅问答"]} empty="" onPick={(name) => { setMode(name); setAddOpen(false); }} />
                 ) : null}
-                {addPanel === "应用" ? (
-                  <AppMenu
-                    matterId={null}
-                    onPick={(app) => {
-                      setDraft((current) => (current.includes(app.name) ? current : `${app.name}${current ? ` ${current}` : ""}`));
-                      setAddOpen(false);
-                    }}
-                  />
-                ) : null}
                 {addPanel === "引用对话中的文件" ? (
                   <p className="px-3 py-2 text-xs text-[#888]">当前对话中暂无文件</p>
                 ) : null}
@@ -275,8 +264,7 @@ export function HomePage() {
           <span className="text-xs text-[#888]">云端工作空间</span>
           {uiPrefs.customPrompt ? <span className="text-xs text-[#888]">{`自定义指令 · ${uiPrefs.customPrompt}`}</span> : null}
           {uiPrefs.tone !== "默认" ? <span className="text-xs text-[#888]">{`回复风格 · ${uiPrefs.tone}`}</span> : null}
-          <ModelPicker value={model} onChange={setModel} />
-          {model !== "Auto" ? <span className="text-xs text-[#888]">使用外部模型，注意数据安全</span> : null}
+          <ModelPicker value="Auto" />
           <div className="relative">
             <button
               type="button"
