@@ -1,7 +1,8 @@
 import { useEffect } from "react";
 import { create } from "zustand";
-import { isCallerAbort, listActivity } from "../rooms";
+import { describeRoomFailure, isCallerAbort, listActivity } from "../rooms";
 import { parseActivityEvent, type ActivityEvent } from "./activity";
+import { scheduleFrame } from "../frame";
 import { openEventStream, type SseFrame, type StreamStatus } from "./sse";
 import { emptyStream, reduceStream, type RoomStream, type StreamAction, type StreamInput } from "./stream";
 
@@ -10,15 +11,18 @@ interface StreamsState {
   status: Record<string, StreamStatus>;
   /** The first /activity request for the room has finished, successfully or not. */
   loaded: Record<string, boolean>;
+  /** Why the last /activity request failed; cleared by the next success. */
+  loadError: Record<string, string | null>;
   dispatch: (roomId: string, action: StreamAction) => void;
   setStatus: (roomId: string, status: StreamStatus) => void;
-  markLoaded: (roomId: string) => void;
+  markLoaded: (roomId: string, error: string | null) => void;
 }
 
 export const useStreams = create<StreamsState>((set, get) => ({
   rooms: {},
   status: {},
   loaded: {},
+  loadError: {},
   dispatch: (roomId, action) => {
     const current = get().rooms[roomId] ?? emptyStream();
     const next = reduceStream(current, action);
@@ -27,8 +31,9 @@ export const useStreams = create<StreamsState>((set, get) => ({
   setStatus: (roomId, status) => {
     if (get().status[roomId] !== status) set({ status: { ...get().status, [roomId]: status } });
   },
-  markLoaded: (roomId) => {
-    if (!get().loaded[roomId]) set({ loaded: { ...get().loaded, [roomId]: true } });
+  markLoaded: (roomId, error) => {
+    if (get().loaded[roomId] && (get().loadError[roomId] ?? null) === error) return;
+    set({ loaded: { ...get().loaded, [roomId]: true }, loadError: { ...get().loadError, [roomId]: error } });
   },
 }));
 
@@ -53,16 +58,21 @@ async function fetchActivity(roomId: string): Promise<ActivityEvent[]> {
  * even if the SSE connection was down while the turn ran.
  */
 export async function resyncActivity(roomId: string): Promise<void> {
+  const { dispatch, markLoaded } = useStreams.getState();
   try {
     const items = await fetchActivity(roomId);
-    useStreams.getState().dispatch(roomId, { type: "snapshot", items, mode: "merge" });
+    dispatch(roomId, { type: "snapshot", items, mode: "merge" });
+    markLoaded(roomId, null);
   } catch (error) {
-    if (!isCallerAbort(error)) throw error;
+    if (isCallerAbort(error)) return;
+    markLoaded(roomId, describeRoomFailure("对话加载失败", error));
+    throw error;
   }
 }
 
-export function abandonDrafts(roomId: string) {
-  useStreams.getState().dispatch(roomId, { type: "abandonDrafts" });
+/** The user stopped the turn: live drafts end, and calls still marked running stop counting as running. */
+export function markStopped(roomId: string) {
+  useStreams.getState().dispatch(roomId, { type: "stopped" });
 }
 
 function isReset(frame: SseFrame, parsed: unknown) {
@@ -72,7 +82,7 @@ function isReset(frame: SseFrame, parsed: unknown) {
 
 /**
  * Keeps the room's conversation live: loads /activity, then follows /events with Last-Event-ID.
- * Frames are applied once per animation frame so a fast delta stream costs one render per frame.
+ * Frames are applied on the shared frame scheduler (lib/frame.ts): a fast delta stream costs one commit per frame.
  */
 export function useRoomEventStream(roomId: string | null | undefined) {
   useEffect(() => {
@@ -82,28 +92,15 @@ export function useRoomEventStream(roomId: string | null | undefined) {
     let disposed = false;
     let closeStream: (() => void) | null = null;
     let pending: StreamInput[] = [];
-    let flushHandle: number | null = null;
     /** Non-null while a reset refetch is in flight; frames that arrive meanwhile wait here. */
     let held: StreamInput[] | null = null;
     let resetToken = 0;
 
     const flush = () => {
-      if (flushHandle !== null) {
-        cancelAnimationFrame(flushHandle);
-        flushHandle = null;
-      }
       if (pending.length === 0) return;
       const items = pending;
       pending = [];
       dispatch(id, { type: "events", items });
-    };
-
-    const schedule = () => {
-      if (flushHandle !== null) return;
-      flushHandle = requestAnimationFrame(() => {
-        flushHandle = null;
-        flush();
-      });
     };
 
     const rebuild = async () => {
@@ -145,21 +142,15 @@ export function useRoomEventStream(roomId: string | null | undefined) {
         return;
       }
       pending.push(input);
-      schedule();
+      scheduleFrame(flush);
     };
 
     const start = async () => {
       setStatus(id, "connecting");
       // Drafts left from an earlier visit were cut off when that connection closed; their deltas are not replayed.
       dispatch(id, { type: "abandonDrafts" });
-      try {
-        const items = await fetchActivity(id);
-        if (disposed) return;
-        dispatch(id, { type: "snapshot", items, mode: "merge" });
-      } catch {
-        // The stream still opens; the next resync fills history.
-      }
-      useStreams.getState().markLoaded(id);
+      // A failure is shown in the conversation; the stream still opens and the next resync fills history.
+      await resyncActivity(id).catch(() => undefined);
       if (disposed) return;
       closeStream = openEventStream({
         url: `/v1/rooms/${encodeURIComponent(id)}/events`,
@@ -168,6 +159,8 @@ export function useRoomEventStream(roomId: string | null | undefined) {
           if (!reconnect) return;
           flush();
           dispatch(id, { type: "abandonDrafts" });
+          // Last-Event-ID lets the server replay what was missed; merging /activity (dedupe by id) covers a server that cannot.
+          void resyncActivity(id).catch(() => undefined);
         },
         onFrame,
         onStatus: (status) => setStatus(id, status),

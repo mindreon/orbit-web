@@ -16,7 +16,7 @@ import {
   type Approval,
   type Room,
 } from "./lib/rooms";
-import { abandonDrafts, resyncActivity } from "./lib/events/roomStreams";
+import { markStopped, resyncActivity } from "./lib/events/roomStreams";
 import {
   defaultEquipment,
   seedCatalog,
@@ -37,6 +37,8 @@ interface MindState {
   catalog: Catalog;
   matters: Matter[];
   approvals: Record<string, Approval | null>;
+  /** Every approval of the room, pending or decided, so each approval card in the conversation can find its own. */
+  roomApprovals: Record<string, Approval[]>;
   /** 这间房间刚点过停止，下一句走转向。 */
   steered: Record<string, boolean>;
   activeId: string | null;
@@ -106,6 +108,7 @@ export const useMind = create<MindState>((set, get) => ({
   matters: [],
   hiddenIds: [],
   approvals: {},
+  roomApprovals: {},
   steered: {},
   activeId: null,
   composing: false,
@@ -183,18 +186,19 @@ export const useMind = create<MindState>((set, get) => ({
     }
   },
   loadRoomDetail: async (id) => {
-    const activity = resyncActivity(id).catch(() => {
-      if (get().activeId === id) set({ error: "活动读取失败" });
-    });
+    // A failed /activity read is shown inside the conversation (see lib/events/roomStreams.ts loadError).
+    const activity = resyncActivity(id).catch(() => undefined);
     await Promise.all([activity, get().loadApproval(id)]);
   },
   loadApproval: async (id) => {
     try {
       const body = await listApprovals();
-      const pending = (body.items ?? [])
-        .filter((item) => item.roomId === id && item.status === "pending")
-        .sort((a, b) => b.createdAt.localeCompare(a.createdAt))[0];
-      set({ approvals: { ...get().approvals, [id]: pending ?? null } });
+      const mine = (body.items ?? []).filter((item) => item.roomId === id);
+      const pending = mine.filter((item) => item.status === "pending").sort((a, b) => b.createdAt.localeCompare(a.createdAt))[0];
+      set({
+        approvals: { ...get().approvals, [id]: pending ?? null },
+        roomApprovals: { ...get().roomApprovals, [id]: mine },
+      });
     } catch (error) {
       if (isCallerAbort(error)) return;
       if (get().activeId === id) {
@@ -259,7 +263,7 @@ export const useMind = create<MindState>((set, get) => ({
     set({ pending: "abort", error: null });
     try {
       await abortRoom(id);
-      abandonDrafts(id);
+      markStopped(id);
       const room = await getRoom(id);
       set({
         matters: get().matters.map((matter) => (matter.id === room.id ? roomToMatter(room, matter) : matter)),

@@ -16,6 +16,8 @@ export interface Room {
 export interface Approval {
   id: string;
   roomId: string;
+  /** The runtime's id for this ask; matches approval.asked / approval.resolved events. */
+  approvalRequestId?: string;
   toolName?: string;
   reason?: string;
   status: string;

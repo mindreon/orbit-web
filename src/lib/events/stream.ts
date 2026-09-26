@@ -8,8 +8,8 @@ export interface Draft {
   agentPath: string;
   blockId: string;
   attempt: number;
-  /** [seq, delta] sorted by seq. */
-  chunks: readonly (readonly [number, string])[];
+  /** Highest seq appended so far. A chunk at or below it is a duplicate or arrived out of order, and is dropped. */
+  lastSeq: number;
   text: string;
   order: number;
 }
@@ -18,7 +18,6 @@ export interface RoomStream {
   /** Persisted events, ordered by sequence, unique by id. */
   events: readonly ActivityEvent[];
   seen: ReadonlySet<string>;
-  deltaSeen: ReadonlySet<string>;
   drafts: Readonly<Record<string, Draft>>;
   /** Highest activityAttempt seen per turnId|agentId. Deltas from lower attempts are stale. */
   attempts: Readonly<Record<string, number>>;
@@ -28,6 +27,8 @@ export interface RoomStream {
   abandoned: ReadonlySet<string>;
   lastEventId: string | null;
   lastSequence: number;
+  /** lastSequence when the user pressed stop. Work started at or before it is over. */
+  stoppedSequence: number;
   nextDraftOrder: number;
 }
 
@@ -36,20 +37,22 @@ export type StreamInput = { event: ActivityEvent | null; sseId?: string };
 export type StreamAction =
   | { type: "snapshot"; items: readonly ActivityEvent[]; mode: "merge" | "rebuild" }
   | { type: "events"; items: readonly StreamInput[] }
-  /** The SSE connection came back after a drop, or the user stopped the turn. */
-  | { type: "abandonDrafts" };
+  /** The SSE connection came back after a drop: unfinished drafts cannot be completed from deltas any more. */
+  | { type: "abandonDrafts" }
+  /** The user stopped the turn. */
+  | { type: "stopped" };
 
 export function emptyStream(): RoomStream {
   return {
     events: [],
     seen: new Set(),
-    deltaSeen: new Set(),
     drafts: {},
     attempts: {},
     finalBlocks: new Set(),
     abandoned: new Set(),
     lastEventId: null,
     lastSequence: 0,
+    stoppedSequence: 0,
     nextDraftOrder: 0,
   };
 }
@@ -61,25 +64,25 @@ const attemptKey = (turnId: string, agentId: string) => `${turnId}|${agentId}`;
 class Draftable {
   events: ActivityEvent[];
   seen: Set<string>;
-  deltaSeen: Set<string>;
   drafts: Record<string, Draft>;
   attempts: Record<string, number>;
   finalBlocks: Set<string>;
   abandoned: Set<string>;
   lastEventId: string | null;
   lastSequence: number;
+  stoppedSequence: number;
   nextDraftOrder: number;
 
   constructor(state: RoomStream) {
     this.events = [...state.events];
     this.seen = new Set(state.seen);
-    this.deltaSeen = new Set(state.deltaSeen);
     this.drafts = { ...state.drafts };
     this.attempts = { ...state.attempts };
     this.finalBlocks = new Set(state.finalBlocks);
     this.abandoned = new Set(state.abandoned);
     this.lastEventId = state.lastEventId;
     this.lastSequence = state.lastSequence;
+    this.stoppedSequence = state.stoppedSequence;
     this.nextDraftOrder = state.nextDraftOrder;
   }
 
@@ -87,13 +90,13 @@ class Draftable {
     return {
       events: this.events,
       seen: this.seen,
-      deltaSeen: this.deltaSeen,
       drafts: this.drafts,
       attempts: this.attempts,
       finalBlocks: this.finalBlocks,
       abandoned: this.abandoned,
       lastEventId: this.lastEventId,
       lastSequence: this.lastSequence,
+      stoppedSequence: this.stoppedSequence,
       nextDraftOrder: this.nextDraftOrder,
     };
   }
@@ -170,16 +173,9 @@ class Draftable {
     const key = blockKey(turnId, blockId);
     if (this.finalBlocks.has(key) || this.abandoned.has(`${key}|${attempt}`)) return;
 
-    const dedupe = `${turnId}|${blockId}|${seq}|${attempt}`;
-    if (this.deltaSeen.has(dedupe)) return;
-    this.deltaSeen.add(dedupe);
-    if (!text) return;
-
     const previous = this.drafts[key];
-    const chunks = previous ? [...previous.chunks] : [];
-    let at = chunks.length;
-    while (at > 0 && chunks[at - 1][0] > seq) at -= 1;
-    chunks.splice(at, 0, [seq, text] as const);
+    if (previous && seq <= previous.lastSeq) return;
+    if (!text && !previous) return;
     this.drafts[key] = {
       key,
       turnId,
@@ -187,8 +183,8 @@ class Draftable {
       agentPath: event.agentPath ?? agentId,
       blockId,
       attempt,
-      chunks,
-      text: chunks.map((chunk) => chunk[1]).join(""),
+      lastSeq: seq,
+      text: (previous?.text ?? "") + text,
       order: previous?.order ?? this.nextDraftOrder++,
     };
   }
@@ -204,10 +200,11 @@ function lastPersisted(items: readonly ActivityEvent[]) {
 }
 
 export function reduceStream(state: RoomStream, action: StreamAction): RoomStream {
-  if (action.type === "abandonDrafts") {
-    if (Object.keys(state.drafts).length === 0) return state;
+  if (action.type === "abandonDrafts" || action.type === "stopped") {
+    if (action.type === "abandonDrafts" && Object.keys(state.drafts).length === 0) return state;
     const next = new Draftable(state);
     next.abandonAll();
+    if (action.type === "stopped") next.stoppedSequence = next.lastSequence;
     return next.done();
   }
 
