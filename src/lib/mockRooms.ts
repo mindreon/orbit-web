@@ -19,7 +19,7 @@ export const MOCK_MATTERS: Matter[] = [
   },
   {
     id: "mock-summary",
-    title: "阅读并总结 workbuddy 文章",
+    title: "阅读并总结 MindBuddy 文章",
     permission: "read-only",
     state: "idle",
     createdAt: daysAgo(13),
@@ -63,7 +63,7 @@ const messages: Record<string, ChatMessage[]> = {
       id: "mock-summary-u",
       roomId: "mock-summary",
       role: "user",
-      text: "阅读并总结 workbuddy 的使用方式。",
+      text: "阅读并总结 MindBuddy 的使用方式。",
       createdAt: daysAgo(13),
     },
     {

@@ -47,11 +47,6 @@ export type CustomModelInput = {
 };
 
 export const MODEL_PROVIDERS = [
-  "腾讯云 Token Plan / Token Plan 企业版专业套餐",
-  "腾讯云 Token Plan / Token Plan 企业版轻享套餐",
-  "腾讯云 Token Plan / 通用 Token Plan（个人版）",
-  "腾讯云 Token Plan / Hy Token Plan（个人版）",
-  "腾讯云 Coding Plan",
   "智谱 Coding Plan",
   "Kimi Coding Plan",
   "智谱开放平台",
