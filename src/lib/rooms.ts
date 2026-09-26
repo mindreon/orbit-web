@@ -46,14 +46,51 @@ interface ErrorBody {
   code?: string;
 }
 
+/** 有 HTTP 响应但是非 2xx。没有响应（断网、超时、fetch 被拒绝）用 kind "unreachable"。 */
+export class RoomRequestError extends Error {
+  readonly kind: "unreachable" | "http";
+  readonly status: number | null;
+  readonly serverMessage: string;
+
+  constructor(kind: "unreachable" | "http", status: number | null, serverMessage: string) {
+    super(serverMessage.trim() || (status ? `请求失败（${status}）` : "Failed to fetch"));
+    this.name = "RoomRequestError";
+    this.kind = kind;
+    this.status = status;
+    this.serverMessage = serverMessage.trim();
+  }
+}
+
+export function describeRoomFailure(action: string, error: unknown) {
+  if (error instanceof RoomRequestError && error.kind === "http") {
+    const status = error.status != null ? `（HTTP ${error.status}）` : "";
+    const server = error.serverMessage;
+    return server ? `${action}：后端返回错误${status}：${server}` : `${action}：后端返回错误${status}。`;
+  }
+  return `${action}：后端连不上（网络错误或超时）。请稍后重试。`;
+}
+
+function serverMessage(body: unknown) {
+  if (body && typeof body === "object" && "message" in body) {
+    return String((body as ErrorBody).message ?? "");
+  }
+  return "";
+}
+
 async function api<T>(path: string, init?: RequestInit): Promise<T> {
-  const response = await fetch(path, {
-    ...init,
-    headers: {
-      "content-type": "application/json",
-      ...(init?.headers ?? {}),
-    },
-  });
+  let response: Response;
+  try {
+    response = await fetch(path, {
+      ...init,
+      headers: {
+        "content-type": "application/json",
+        ...(init?.headers ?? {}),
+      },
+    });
+  } catch (error) {
+    const detail = error instanceof Error ? error.message : "";
+    throw new RoomRequestError("unreachable", null, detail);
+  }
   const text = await response.text();
   let body: unknown = null;
   if (text) {
@@ -64,11 +101,7 @@ async function api<T>(path: string, init?: RequestInit): Promise<T> {
     }
   }
   if (!response.ok) {
-    const message =
-      body && typeof body === "object" && "message" in body
-        ? String((body as ErrorBody).message ?? "")
-        : "";
-    throw new Error(message || `请求失败（${response.status}）`);
+    throw new RoomRequestError("http", response.status, serverMessage(body));
   }
   return body as T;
 }

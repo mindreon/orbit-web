@@ -5,7 +5,6 @@ import { useMind } from "../store";
 import { disconnectBuddyApp, getBuddyApps, subscribeBuddyApps } from "../lib/buddyApps";
 import { assignShortcut, chordFromEvent, getShortcuts, resetAllShortcuts, resetShortcut, setShortcutCapture, shortcutProblem, subscribeShortcuts } from "../lib/shortcuts";
 import { getUiPrefs, setUiPrefs, subscribeUiPrefs, type FontSize, type LinkOpen, type TipSound } from "../lib/uiPrefs";
-import { mockArtifacts } from "../lib/mockRooms";
 import { getCustomModels, subscribeCustomModels } from "../lib/customModels";
 import { cancelSharedFile, cancelSharedTask, getSharedFiles, getSharedTasks, refreshSharedFile, subscribeShares } from "../lib/shares";
 import { getPublishedApps, subscribePublishedApps, unpublishApp } from "../lib/publishedApps";
@@ -470,7 +469,7 @@ function ProjectTasks({
   onOpen: (id: string) => void;
   onNew: () => void;
 }) {
-  const [shared, setShared] = useState([{ id: "mock-approval", title: "起草供应商准入说明", state: "idle" }]);
+  const [shared, setShared] = useState<{ id: string; title: string; state: string }[]>([]);
   const [menuId, setMenuId] = useState<string | null>(null);
   const [leaveFor, setLeaveFor] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
@@ -3563,21 +3562,6 @@ export function FilesPage() {
   const folders = entries.filter((item) => item.kind === "文件夹" && item.id !== moveId);
   const docs = bases.flatMap((base) => base.docs.map((doc) => ({ ...doc, base: base.name }))).filter((doc) => !needle || doc.title.includes(needle));
   const deleting = entries.find((item) => item.id === deleteId);
-
-  useEffect(() => {
-    if (entries.length > 0 || matters.length === 0) return;
-    const seeded = matters.flatMap((matter) =>
-      mockArtifacts(matter.id).map((artifact) => ({
-        id: artifact.id,
-        name: artifact.name,
-        kind: "文件" as const,
-        favorite: false,
-        folderId: null,
-        matterId: matter.id,
-      })),
-    );
-    if (seeded.length > 0) setEntries(seeded);
-  }, [entries.length, matters]);
 
   return (
     <Page title="我的文件" subtitle="快捷查看任务成果，上传到云端网盘开启跨端同步。">

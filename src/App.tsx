@@ -40,27 +40,6 @@ type Notice = {
   taskId: string;
 };
 
-const INITIAL_NOTICES: Notice[] = [
-  {
-    id: "notice-approval",
-    title: "起草供应商准入说明",
-    body: "这一件云端任务正在等待你确认。",
-    time: "1 天前",
-    pending: true,
-    read: false,
-    taskId: "mock-approval",
-  },
-  {
-    id: "notice-summary",
-    title: "阅读并总结 MindBuddy 文章",
-    body: "任务已记下。产物留在这件云端任务里。",
-    time: "13 天前",
-    pending: false,
-    read: false,
-    taskId: "mock-summary",
-  },
-];
-
 function ageLabel(createdAt: string) {
   const then = new Date(createdAt).getTime();
   if (Number.isNaN(then)) return "";
@@ -105,7 +84,7 @@ export function App() {
   const [appliedRange, setAppliedRange] = useState({ start: "", end: "" });
   const [messagesOpen, setMessagesOpen] = useState(false);
   const [messageTab, setMessageTab] = useState<"全部" | "待处理">("全部");
-  const [notices, setNotices] = useState(INITIAL_NOTICES);
+  const [notices, setNotices] = useState<Notice[]>([]);
   const [noticeLimit, setNoticeLimit] = useState(1);
   const [openNotice, setOpenNotice] = useState<string | null>(null);
   const renameMatter = useMind((s) => s.renameMatter);
@@ -489,12 +468,12 @@ export function App() {
           <button type="button" className="flex w-full items-center px-3 py-1 text-xs text-[#888]" onClick={() => setTasksOpen((open) => !open)}>
             任务 ({openTasks.length})
           </button>
-          {tasksOpen && error && openTasks.length === 0 && !filtering ? <p className="px-3 py-2 text-xs text-[#c04545]">{error}</p> : null}
           {tasksOpen && openTasks.length === 0 && filtering ? <p className="px-3 py-2 text-sm text-[#999]">没有匹配的任务</p> : null}
-          {tasksOpen && openTasks.length === 0 && !filtering && !error ? (
+          {tasksOpen && openTasks.length === 0 && !filtering ? (
             <div className="px-3 py-2">
-              <p className="text-sm text-[#666]">暂无任务</p>
-              <p className="mt-1 text-xs text-[#888]">点击上方按钮开始新任务</p>
+              {error ? <p className="text-sm text-[#c04545]">{error}</p> : null}
+              <p className={cn("text-sm text-[#666]", error && "mt-2")}>暂无任务</p>
+              {error ? null : <p className="mt-1 text-xs text-[#888]">点击上方按钮开始新任务</p>}
             </div>
           ) : null}
           {tasksOpen && pinnedTasks.length > 0 ? <p className="px-3 pt-1 text-xs text-[#888]">置顶任务</p> : null}
