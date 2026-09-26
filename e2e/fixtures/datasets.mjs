@@ -90,6 +90,55 @@ export function longReply(chars) {
   return parts.join("\n\n");
 }
 
+const PARAGRAPH_EN =
+  "Clause 7 sets a daily penalty of 0.05% with no cap. Under Article 585 of the Civil Code a court may reduce a penalty that is excessively higher than the actual loss, so the supplement should cap it at 20% of the contract amount and move the payment milestone to acceptance.";
+
+function wideTableEn(section) {
+  const head = ["Clause", "Original text", "Risk", "Proposed change", "Basis", "Owner", "Due", "Status"];
+  const rows = [`| ${head.join(" | ")} |`, `|${head.map(() => "---").join("|")}|`];
+  for (let row = 0; row < 10; row += 1) {
+    rows.push(`| ${section}.${row + 1} | Party A pays the full price within thirty days after acceptance | ${["low", "medium", "high"][row % 3]} | Pay in instalments and keep a 10% retention | Civil Code art. 585 | Legal | 2026-10-${String((row % 28) + 1).padStart(2, "0")} | open |`);
+  }
+  return rows.join("\n");
+}
+
+/**
+ * A reply of at least `chars` characters that is mostly ASCII, for the running stack: the mock model echoes the prompt
+ * back, and orbit-runtime's AgentScope compresses a context beyond roughly 105 KB, which a 50,000-character CJK
+ * prompt would exceed. Same structure as longReply: headings, paragraphs, lists, code blocks, wide tables.
+ */
+export function longReplyAscii(chars) {
+  const parts = ["# Contract review report（合同审阅报告）\n"];
+  let length = parts[0].length;
+  for (let section = 1; length < chars; section += 1) {
+    const block = [
+      `## Section ${section}（第 ${section} 节）`,
+      `${PARAGRAPH_EN} ${PARAGRAPH_EN}`,
+      `- Risk ${section}.1: payment milestone too early\n- Risk ${section}.2: uncapped penalty\n- Risk ${section}.3: unfavourable venue`,
+      section % 2 === 1 ? codeBlock(section) : wideTableEn(section),
+      PARAGRAPH_EN,
+    ].join("\n\n");
+    parts.push(block);
+    length += block.length + 2;
+  }
+  return parts.join("\n\n");
+}
+
+/** Splits text into roughly `size`-character parts on line boundaries, for the mock model's `stream:` prompt. */
+export function streamParts(text, size = 400) {
+  const parts = [];
+  let current = "";
+  for (const line of text.split(/(?<=\n)/)) {
+    if (current.length + line.length > size && current) {
+      parts.push(current);
+      current = "";
+    }
+    current += line;
+  }
+  if (current) parts.push(current);
+  return parts;
+}
+
 /** The conversation used by the perf checks: `messages` history, then one user question and a `replyChars` reply. */
 export function perfDataset({ messages = 1000, replyChars = 50000 } = {}) {
   const items = conversation(messages);
