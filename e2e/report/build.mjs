@@ -24,11 +24,11 @@ const runs = existsSync(runsDir)
 const stackFile = [join(OUT, "stack.json"), ".stack/stack.json"].find((file) => existsSync(file));
 const stack = stackFile ? JSON.parse(readFileSync(stackFile, "utf8")) : null;
 
-let commit = process.env.GITHUB_SHA ?? "";
+let commit = "";
 try {
-  commit ||= execFileSync("git", ["rev-parse", "HEAD"], { encoding: "utf8" }).trim();
+  commit = execFileSync("git", ["rev-parse", "HEAD"], { encoding: "utf8" }).trim();
 } catch {
-  // not a git checkout
+  commit = process.env.GITHUB_SHA ?? "";
 }
 
 const items = acceptance.items.map((item) => {

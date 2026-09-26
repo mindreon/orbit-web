@@ -18,7 +18,10 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 30
     steps:
+      # The PR head, not the merge commit, so the report names the commit under review.
       - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
 
       - uses: pnpm/action-setup@v4
         with:
@@ -73,6 +76,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
           fetch-depth: 0
 
       - uses: pnpm/action-setup@v4
@@ -111,6 +115,8 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
 
       - uses: pnpm/action-setup@v4
         with:
@@ -148,6 +154,8 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
 
       - uses: actions/download-artifact@v4
         with:
