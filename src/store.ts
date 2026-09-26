@@ -174,7 +174,6 @@ export const useMind = create<MindState>((set, get) => ({
       const current = get().error;
       const keepCreate = current?.startsWith("创建任务失败") ?? false;
       set({
-        matters: get().matters.filter((matter) => !matter.id.startsWith("mock-")),
         loading: false,
         error: keepCreate ? current : describeRoomFailure("任务列表加载失败", error),
       });
