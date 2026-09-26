@@ -12,11 +12,8 @@ import {
   AssistantsPage,
   AutomationPage,
   ExpertsPage,
-  DocsPage,
   FilesPage,
-  ImaPage,
   InspirationPage,
-  LexiangPage,
   LibraryPage,
   MailPage,
   ProjectsPage,
@@ -69,7 +66,7 @@ const INITIAL_NOTICES: Notice[] = [
   },
   {
     id: "notice-summary",
-    title: "阅读并总结 workbuddy 文章",
+    title: "阅读并总结 MindBuddy 文章",
     body: "任务已记下。产物留在这件云端任务里。",
     time: "13 天前",
     pending: false,
@@ -107,7 +104,6 @@ export function App() {
   const uiPrefs = useSyncExternalStore(subscribeUiPrefs, getUiPrefs);
   const shortcuts = useSyncExternalStore(subscribeShortcuts, getShortcuts);
   const [accountOpen, setAccountOpen] = useState(false);
-  const [wecomConnected, setWecomConnected] = useState(false);
   const [tasksOpen, setTasksOpen] = useState(true);
   const [spacesOpen, setSpacesOpen] = useState(true);
   const [collapsed, setCollapsed] = useState(false);
@@ -309,8 +305,8 @@ export function App() {
             {appsOpen ? (
               <div className="absolute right-0 z-20 mt-1 w-56 rounded-xl border border-[#ececee] bg-white p-2 shadow-lg">
                 <p className="px-2 py-1 text-xs text-[#999]">最近使用</p>
-                <p className="px-2 py-1 text-xs text-[#999]">Buddy 应用</p>
-                {buddyApps.length === 0 ? <p className="px-2 py-2 text-sm text-[#888]">暂无已连接的 Buddy 应用</p> : null}
+                <p className="px-2 py-1 text-xs text-[#999]">MindBuddy 应用</p>
+                {buddyApps.length === 0 ? <p className="px-2 py-2 text-sm text-[#888]">暂无已连接的 MindBuddy 应用</p> : null}
                 {buddyApps.map((app) => (
                   <button
                     key={app.id}
@@ -719,13 +715,6 @@ export function App() {
                 </button>
               ))}
               <hr className="my-1 border-[#f0f0f1]" />
-              <div className="flex items-center gap-2 px-3 py-2 text-sm">
-                <span>企业微信</span>
-                <span className="text-xs text-[#888]">{wecomConnected ? "已连接" : "未连接"}</span>
-                <button type="button" className="ml-auto text-[#444]" onClick={() => setWecomConnected((connected) => !connected)}>
-                  {wecomConnected ? "关闭" : "开启"}
-                </button>
-              </div>
               <MenuLink label="企业智能体" to="/assistants?group=企业智能体" onDone={() => setAccountOpen(false)} />
               <MenuLink label="检查更新" to="/settings?section=关于&check=1" onDone={() => setAccountOpen(false)} />
               <MenuLink label="已归档任务" to="/archived" onDone={() => setAccountOpen(false)} />
@@ -898,9 +887,6 @@ function renderMain(pathname: string) {
   if (pathname === "/library") return <LibraryPage />;
   if (pathname === "/files") return <FilesPage />;
   if (pathname === "/mail") return <MailPage />;
-  if (pathname === "/docs") return <DocsPage />;
-  if (pathname === "/ima") return <ImaPage />;
-  if (pathname === "/lexiang") return <LexiangPage />;
   if (pathname === "/inspiration") return <InspirationPage />;
   if (pathname === "/settings") return <SettingsPage />;
   if (pathname === "/archived") return <ArchivedPage />;

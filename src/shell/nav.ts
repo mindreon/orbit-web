@@ -1,4 +1,4 @@
-/** 菜单结构来自本机 WorkBuddy 的侧栏配置。已去掉活动、积分，以及本地工作区入口。 */
+/** 侧栏菜单。已去掉活动、积分，以及本地工作区入口。 */
 
 export const PRIMARY_NAV = [
   { to: "/", label: "新建任务", end: true },
@@ -12,9 +12,6 @@ export const PRIMARY_NAV = [
 export const MORE_NAV = [
   { to: "/files", label: "我的文件" },
   { to: "/mail", label: "我的邮箱" },
-  { to: "/docs", label: "腾讯文档" },
-  { to: "/ima", label: "ima" },
-  { to: "/lexiang", label: "乐享知识库" },
   { to: "/inspiration", label: "灵感" },
 ] as const;
 
@@ -24,7 +21,7 @@ export const EXPERT_TABS = [
   { to: "/experts/connectors", label: "连接器", end: false },
 ] as const;
 
-export const SKILL_TABS = ["推荐", "SkillHub", "套件", "Knot", "企业 Skill", "已安装"] as const;
+export const SKILL_TABS = ["推荐", "套件", "企业 Skill", "已安装"] as const;
 
 export const SETTINGS_NAV = [
   {

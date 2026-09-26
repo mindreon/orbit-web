@@ -1,4 +1,4 @@
-/** WorkBuddy 文案里自带的示例应用。撤销授权后，侧栏和设置页一起变空。 */
+/** 示例应用。撤销授权后，侧栏和设置页一起变空。 */
 
 export type BuddyApp = {
   id: string;

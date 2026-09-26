@@ -2584,7 +2584,6 @@ export function ExpertsPage({ tab }: { tab: "experts" | "skills" | "connectors" 
           <Search label={skillTab === "已安装" ? "搜索已安装的技能" : "搜索技能"} value={query} onValue={setQuery} />
           {skillNotice ? <p className="mb-2 text-sm text-[#444]">{skillNotice}</p> : null}
           {skillTab === "企业 Skill" ? <p className="text-sm text-[#888]">当前企业暂无可见的自建 Skill</p> : null}
-          {skillTab === "SkillHub" || skillTab === "Knot" ? <p className="text-sm text-[#888]">{needle ? "未找到匹配的 Skill，换个关键词试试" : "暂无 Skill"}</p> : null}
           {skillTab === "套件" ? <p className="text-sm text-[#888]">暂无已安装的套件</p> : null}
           {skillTab === "推荐" && skills.length === 0 ? <p className="text-sm text-[#888]">未找到匹配的 Skill，换个关键词试试</p> : null}
           {skillTab === "推荐" ? (
@@ -3604,11 +3603,9 @@ export function FilesPage() {
                   <button type="button" className="block w-full rounded-lg px-2 py-1.5 text-left hover:bg-[#f6f6f7]" onClick={() => { setUploadMenu(false); setUploadName(""); setUploadOpen(true); }}>
                     我的云端网盘
                   </button>
-                  {(["我的资料库", "腾讯文档", "ima", "乐享知识库"] as const).map((target) => (
-                    <button key={target} type="button" className="block w-full rounded-lg px-2 py-1.5 text-left hover:bg-[#f6f6f7]" onClick={() => { setUploadMenu(false); setToast("该功能暂未开启"); }}>
-                      {target}
-                    </button>
-                  ))}
+                  <button type="button" className="block w-full rounded-lg px-2 py-1.5 text-left hover:bg-[#f6f6f7]" onClick={() => { setUploadMenu(false); setToast("该功能暂未开启"); }}>
+                    我的资料库
+                  </button>
                 </div>
               ) : null}
             </div>
@@ -3994,11 +3991,11 @@ const INSPIRATION_SAMPLES = [
     summary: "一条灵感不会只给你一段资讯摘要，而会把重点变化、为什么值得看，以及下一步能做什么整理成更适合行动的研究结果。",
   },
   {
-    title: "第一次用 WorkBuddy，这三件事帮你快速上手",
+    title: "第一次用 MindBuddy，这三件事帮你快速上手",
     summary: "从查资料、整理结构，到直接做成页面或文档，第一批样例先帮你建立它不只是聊天框的直觉。",
   },
   {
-    title: "一个模糊想法，怎么被 WorkBuddy 推进成可交付结果",
+    title: "一个模糊想法，怎么被 MindBuddy 推进成可交付结果",
     summary: "从一句模糊需求开始，逐步补成结构化方向，再推进成原型、文档或其他交付物。重点是事情真的往前走。",
   },
 ] as const;
@@ -4141,7 +4138,7 @@ export function MailPage() {
   const [mails, setMails] = useState([
     { id: "mail-in", box: "收信记录" as const, when: "今天", subject: "供应商准入材料请确认", from: "合规", to: "经办人", unread: true, body: "草案已写好。提交审批前需要你确认这一次。" },
     { id: "mail-week", box: "收信记录" as const, when: "本周", subject: "起草供应商准入说明", from: "合规", to: "经办人", unread: false, body: "草案已写好。提交审批前需要你确认这一次。" },
-    { id: "mail-last", box: "收信记录" as const, when: "上周", subject: "阅读并总结 workbuddy 文章", from: "合规", to: "经办人", unread: false, body: "草案已写好。提交审批前需要你确认这一次。" },
+    { id: "mail-last", box: "收信记录" as const, when: "上周", subject: "阅读并总结 MindBuddy 文章", from: "合规", to: "经办人", unread: false, body: "草案已写好。提交审批前需要你确认这一次。" },
     { id: "mail-old", box: "收信记录" as const, when: "更早", subject: "制作泡泡玛特品牌介绍幻灯片", from: "合规", to: "经办人", unread: false, body: "8 页大纲：品牌一句话、产品线、会员、门店。" },
     { id: "mail-out", box: "发信记录" as const, when: "昨天", subject: "泡泡玛特品牌介绍", from: "经办人", to: "合规", unread: false, body: "8 页大纲：品牌一句话、产品线、会员、门店。" },
   ]);
@@ -4165,7 +4162,7 @@ export function MailPage() {
             }}
           >
             <p className="font-medium">开通 MindBuddy 智能体邮箱</p>
-            <p className="mt-2 text-[#666]">智能体邮箱是为你的 Workbuddy 创建的邮箱。你可以在 Workbuddy 对话中接收或发送邮件。</p>
+            <p className="mt-2 text-[#666]">智能体邮箱是为你的 MindBuddy 创建的邮箱。你可以在 MindBuddy 对话中接收或发送邮件。</p>
             <label className="mt-4 flex items-center gap-2">
               <input type="checkbox" checked={agreed} onChange={(event) => setAgreed(event.target.checked)} />
               我已阅读并同意《Agent Mail 服务协议》
@@ -4313,129 +4310,6 @@ export function MailPage() {
           </div>
         </div>
       ) : null}
-    </Page>
-  );
-}
-
-const DOC_PROMPTS = [
-  { label: "总结全文要点", text: "总结这份文档的全文要点，分条列出。" },
-  { label: "检查错别字和语病", text: "检查这份文档的错别字和语病，指出位置并给出修改建议。" },
-  { label: "润色全文", text: "在保持原意的前提下润色这份文档，让表达更专业流畅。" },
-  { label: "生成大纲", text: "根据这份文档的内容生成一份层级清晰的大纲。" },
-] as const;
-
-export function DocsPage() {
-  const navigate = useNavigate();
-  const [authorized, setAuthorized] = useState(false);
-  const [query, setQuery] = useState("");
-  if (!authorized) {
-    return (
-      <Page title="腾讯文档" subtitle="检索、阅读和编辑文档">
-        <div className="max-w-lg rounded-xl bg-white p-5 text-sm">
-          <p className="font-medium">连接 腾讯文档</p>
-          <p className="mt-2 text-[#666]">授权后，助理可读取你在腾讯文档中的内容，用于搜索、引用与分析。</p>
-          <p className="mt-2 text-[#666]">安全稳定的在线文档、支持多人协作与权限管理</p>
-          <ul className="mt-3 space-y-1 text-[#666]">
-            <li>基于文档内容进行问答、总结与分析</li>
-            <li>生成文档、表格、思维导图等内容</li>
-            <li>自动提取关键信息，生成结构化知识</li>
-            <li>支持将生成内容存回腾讯文档，形成知识复利</li>
-          </ul>
-          <button type="button" className="mt-4 rounded-lg bg-[#1a1a1a] px-3 py-1.5 text-white" onClick={() => setAuthorized(true)}>
-            立即授权 腾讯文档
-          </button>
-        </div>
-      </Page>
-    );
-  }
-  return (
-    <Page title="腾讯文档" subtitle="已自动连接腾讯文档">
-      <h2 className="mb-3 text-sm font-medium">选择腾讯文档文件</h2>
-      <Search label="搜索文件名" value={query} onValue={setQuery} />
-      <div className="mt-4 flex max-w-xl flex-wrap gap-2">
-        {DOC_PROMPTS.map((item) => (
-          <button
-            key={item.label}
-            type="button"
-            className="rounded-full border border-[#e6e6e8] bg-white px-3 py-1.5 text-sm"
-            onClick={() => navigate(`/?prompt=${encodeURIComponent(item.text)}`)}
-          >
-            {item.label}
-          </button>
-        ))}
-      </div>
-    </Page>
-  );
-}
-
-export function ImaPage() {
-  const [connected, setConnected] = useState(false);
-  const [query, setQuery] = useState("");
-  if (!connected) {
-    return (
-      <Page title="连接 ima" subtitle="授权后，WorkBuddy 将能访问你的 ima 知识库，为你提供浏览文件、搜索内容，以及引用知识库文件作为上下文。">
-        <p className="mb-3 max-w-lg text-sm text-[#666]">个人知识管理·私域知识共享·公域知识探索</p>
-        <ul className="mb-4 max-w-lg space-y-1 text-sm text-[#666]">
-          <li>统一沉淀企业知识资产，随时检索取用</li>
-          <li>私域知识按需共享，团队协作更高效</li>
-          <li>AI 语义检索，快速定位所需资料</li>
-          <li>任务中直接引用知识库内容作为上下文</li>
-        </ul>
-        <div className="flex gap-2">
-          <button type="button" className="rounded-lg bg-[#1a1a1a] px-3 py-1.5 text-sm text-white" onClick={() => setConnected(true)}>
-            在此登录
-          </button>
-          <button type="button" className="rounded-lg bg-white px-3 py-1.5 text-sm" onClick={() => setConnected(true)}>
-            用浏览器登录
-          </button>
-        </div>
-      </Page>
-    );
-  }
-  return (
-    <Page title="ima" subtitle="已自动连接ima">
-      <h2 className="mb-3 text-sm font-medium">知识库</h2>
-      <Search label="搜索文件名" value={query} onValue={setQuery} />
-      <p className="text-sm text-[#888]">暂无知识库</p>
-    </Page>
-  );
-}
-
-export function LexiangPage() {
-  const [connected, setConnected] = useState(false);
-  if (!connected) {
-    return (
-      <Page title="乐享知识库" subtitle="团队知识共享、协同与管理">
-        <p className="mb-3 max-w-lg text-sm text-[#666]">知识协同管理·安全权限管控·自主治理体系</p>
-        <ul className="mb-4 max-w-lg space-y-1 text-sm text-[#666]">
-          <li>团队共享知识库，多人协作，精细化权限管理</li>
-          <li>用团队知识助力任务达成，让AI把活干得漂亮</li>
-          <li>结构化整理知识，打造人和AI的协作空间</li>
-          <li>将生成内容存回乐享，持续积累，让知识成为资产</li>
-        </ul>
-        <button type="button" className="rounded-lg bg-[#1a1a1a] px-3 py-1.5 text-sm text-white" onClick={() => setConnected(true)}>
-          在浏览器中打开
-        </button>
-      </Page>
-    );
-  }
-  return (
-    <Page title="乐享知识库" subtitle="已自动连接乐享知识库">
-      <div className="mb-4 flex flex-wrap gap-2 text-sm">
-        <button type="button" className="rounded-lg bg-white px-3 py-1.5">
-          切换知识库
-        </button>
-        <button type="button" className="rounded-lg bg-white px-3 py-1.5">
-          新建
-        </button>
-        <button type="button" className="rounded-lg bg-white px-3 py-1.5">
-          上传
-        </button>
-        <button type="button" className="ml-auto rounded-lg bg-white px-3 py-1.5">
-          设置
-        </button>
-      </div>
-      <p className="text-sm text-[#666]">个人知识库仅自己可见，快来打造你的知识花园吧！</p>
     </Page>
   );
 }
@@ -5169,7 +5043,7 @@ function SettingsBody({ section }: { section: string }) {
         <div className="rounded-xl bg-white p-4">
           <p className="font-medium">浏览器操控</p>
           <div className="mt-3 flex items-center gap-3">
-            <p>让 WorkBuddy 控制内置浏览器。</p>
+            <p>让 MindBuddy 控制内置浏览器。</p>
             <button type="button" className="ml-auto shrink-0 text-[#666]" aria-label={`浏览器操控 ${browserControlOn ? "已开启" : "已关闭"}`} onClick={() => setBrowserControlOn((on) => !on)}>
               {browserControlOn ? "已开启" : "已关闭"}
             </button>
@@ -5187,16 +5061,16 @@ function SettingsBody({ section }: { section: string }) {
     return (
       <div className="mt-6 max-w-lg text-sm">
         <div className="mb-4 flex gap-2">
-          {(["第三方应用", "buddy应用"] as const).map((item) => (
+          {(["第三方应用", "MindBuddy 应用"] as const).map((item) => (
             <button key={item} type="button" className={cn("rounded-full px-3 py-1", appTab === item && "bg-white font-medium")} onClick={() => setAppTab(item)}>
               {item}
             </button>
           ))}
         </div>
-        <p className="text-[#888]">{appTab === "第三方应用" ? "授权后，第三方应用将能读取你的信息，你可随时取消授权。" : "授权后，Buddy将能读取你的信息，你可随时取消授权。"}</p>
+        <p className="text-[#888]">{appTab === "第三方应用" ? "授权后，第三方应用将能读取你的信息，你可随时取消授权。" : "授权后，MindBuddy 应用将能读取你的信息，你可随时取消授权。"}</p>
         {appTab === "第三方应用" ? <p className="mt-4 text-[#888]">暂无已连接的第三方应用</p> : null}
-        {appTab === "buddy应用" && buddyApps.length === 0 ? <p className="mt-4 text-[#888]">暂无已连接的 Buddy 应用</p> : null}
-        {appTab === "buddy应用"
+        {appTab === "MindBuddy 应用" && buddyApps.length === 0 ? <p className="mt-4 text-[#888]">暂无已连接的 MindBuddy 应用</p> : null}
+        {appTab === "MindBuddy 应用"
           ? buddyApps.map((app) => (
               <div key={app.id} className="mt-4 rounded-xl bg-white p-4">
                 <div className="flex items-center gap-2">
@@ -5214,7 +5088,7 @@ function SettingsBody({ section }: { section: string }) {
           <div className="fixed inset-0 z-30 flex items-center justify-center bg-black/30 p-4">
             <div className="w-full max-w-sm rounded-2xl bg-white p-5">
               <p className="font-medium">{`撤销「${disconnecting.name}」的授权？`}</p>
-              <p className="mt-2 text-[#666]">撤销后，该应用将无法再访问你的 WorkBuddy 数据，相关功能会随之停用。如需恢复，可重新添加并授权。</p>
+              <p className="mt-2 text-[#666]">撤销后，该应用将无法再访问你的 MindBuddy 数据，相关功能会随之停用。如需恢复，可重新添加并授权。</p>
               <div className="mt-4 flex justify-end gap-2">
                 <button type="button" onClick={() => setDisconnectId(null)}>取消</button>
                 <button
