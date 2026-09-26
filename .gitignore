@@ -43,3 +43,7 @@ yarn-error.log*
 *.tsbuildinfo
 next-env.d.ts
 /perf-results
+/.stack
+/acceptance-report
+/playwright-report-stack
+/test-results-stack
