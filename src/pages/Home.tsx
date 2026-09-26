@@ -39,7 +39,6 @@ export function HomePage() {
   const [permOpen, setPermOpen] = useState(false);
   const [fullConfirm, setFullConfirm] = useState(false);
   const [riskChecked, setRiskChecked] = useState(false);
-  const [sent, setSent] = useState(false);
   const [expert, setExpert] = useState<string | null>(null);
   const [skill, setSkill] = useState<string | null>(null);
   const [connector, setConnector] = useState<string | null>(null);
@@ -101,7 +100,6 @@ export function HomePage() {
 
   async function submit() {
     if (role !== "经办人" || !draft.trim() || pending) return;
-    setSent(true);
     await createMatter(draft, permission);
     const id = useMind.getState().activeId;
     if (id && !useMind.getState().error) navigate(`/task/${id}`);
@@ -336,7 +334,19 @@ export function HomePage() {
         ) : null}
         {voiceNotice ? <p className="mt-2 text-xs text-[#666]">{voiceNotice}</p> : null}
         {quickNotice ? <p className="mt-2 text-xs text-[#666]">{quickNotice}</p> : null}
-        {sent && error ? <p className="text-destructive mt-2 text-xs">{error}</p> : null}
+        {error ? (
+          <div role="alert" className="mt-3 flex items-start gap-3 rounded-lg border border-[#f0d0d0] bg-[#fff6f6] px-3 py-2 text-sm text-[#c04545]">
+            <p className="min-w-0 flex-1 text-left">{error}</p>
+            <button
+              type="button"
+              className="shrink-0 rounded-lg bg-[#1a1a1a] px-3 py-1 text-xs text-white disabled:opacity-40"
+              disabled={role !== "经办人" || pending === "create" || !draft.trim()}
+              onClick={() => void submit()}
+            >
+              重试
+            </button>
+          </div>
+        ) : null}
         {role !== "经办人" ? <p className="mt-2 text-xs text-[#888]">当前角色不能新建任务。</p> : null}
       </form>
       <p className="mt-3 text-xs text-[#999]" data-decorative>内容由 AI 生成，请核实重要信息</p>

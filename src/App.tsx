@@ -1,24 +1,10 @@
 import { useEffect, useState, useSyncExternalStore } from "react";
-import { NavLink, useLocation, useNavigate, useParams } from "react-router";
+import { NavLink, Outlet, useLocation, useNavigate, useParams } from "react-router";
 import { MORE_NAV, PRIMARY_NAV } from "./shell/nav";
 import { getBuddyApps, subscribeBuddyApps } from "./lib/buddyApps";
 import { chordFromEvent, getShortcuts, isShortcutCapture, subscribeShortcuts } from "./lib/shortcuts";
 import { fontSizePx, getUiPrefs, stepFontSize, subscribeUiPrefs } from "./lib/uiPrefs";
-import { HomePage } from "./pages/Home";
 import { ShareTaskDialog } from "./pages/ShareTaskDialog";
-import { WorkbenchPage } from "./pages/Workbench";
-import {
-  ArchivedPage,
-  AssistantsPage,
-  AutomationPage,
-  ExpertsPage,
-  FilesPage,
-  InspirationPage,
-  LibraryPage,
-  MailPage,
-  ProjectsPage,
-  SettingsPage,
-} from "./pages/Sections";
 import { matterTitle, ROLES, type Role } from "./model";
 import { useMind } from "./store";
 import { cn } from "./lib/cn";
@@ -735,7 +721,7 @@ export function App() {
             〉
           </button>
         ) : null}
-        {renderMain(location.pathname)}
+        <Outlet />
       </main>
       {renameId ? (
         <div className="fixed inset-0 z-40 flex items-center justify-center bg-black/30 p-4">
@@ -875,20 +861,3 @@ function MenuLink({ label, to, onDone }: { label: string; to: string; onDone: ()
   );
 }
 
-function renderMain(pathname: string) {
-  if (pathname === "/") return <HomePage />;
-  if (pathname.startsWith("/task/")) return <WorkbenchPage />;
-  if (pathname === "/assistants") return <AssistantsPage />;
-  if (pathname === "/projects") return <ProjectsPage />;
-  if (pathname === "/experts") return <ExpertsPage tab="experts" />;
-  if (pathname === "/experts/skills") return <ExpertsPage tab="skills" />;
-  if (pathname === "/experts/connectors") return <ExpertsPage tab="connectors" />;
-  if (pathname === "/automation") return <AutomationPage />;
-  if (pathname === "/library") return <LibraryPage />;
-  if (pathname === "/files") return <FilesPage />;
-  if (pathname === "/mail") return <MailPage />;
-  if (pathname === "/inspiration") return <InspirationPage />;
-  if (pathname === "/settings") return <SettingsPage />;
-  if (pathname === "/archived") return <ArchivedPage />;
-  return <HomePage />;
-}

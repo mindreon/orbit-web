@@ -50,6 +50,11 @@ function BlankMatter() {
   const [draft, setDraft] = useState("");
   const [permission, setPermission] = useState<PermissionPreset>("workspace-write");
 
+  function submit() {
+    if (!draft.trim() || pending) return;
+    void createMatter(draft, permission);
+  }
+
   return (
     <section className="bg-background flex min-h-0 flex-col">
       <div className="border-b px-4 py-3">
@@ -62,8 +67,7 @@ function BlankMatter() {
         className="mx-auto flex w-full max-w-2xl flex-1 flex-col justify-end p-4"
         onSubmit={(event) => {
           event.preventDefault();
-          if (!draft.trim() || pending) return;
-          void createMatter(draft, permission);
+          submit();
         }}
       >
         <div className="bg-card rounded-xl border p-3 shadow-sm">
@@ -95,7 +99,19 @@ function BlankMatter() {
             </p>
           ) : null}
           {pending === "create" ? <p className="text-muted-foreground mt-2 text-xs">Agent 正在接手并进入工作状态。</p> : null}
-          {error ? <p className="text-destructive mt-2 text-xs">{error}</p> : null}
+          {error ? (
+            <div role="alert" className="mt-3 flex items-start gap-3 rounded-lg border border-[#f0d0d0] bg-[#fff6f6] px-3 py-2 text-sm text-[#c04545]">
+              <p className="min-w-0 flex-1">{error}</p>
+              <button
+                type="button"
+                className="shrink-0 rounded-lg bg-[#1a1a1a] px-3 py-1 text-xs text-white disabled:opacity-40"
+                disabled={pending === "create" || !draft.trim()}
+                onClick={submit}
+              >
+                重试
+              </button>
+            </div>
+          ) : null}
         </div>
       </form>
     </section>

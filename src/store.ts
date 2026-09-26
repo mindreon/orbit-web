@@ -247,28 +247,15 @@ export const useMind = create<MindState>((set, get) => ({
         composing: false,
         filter: "进行中",
         pending: null,
+        error: null,
         threadAgentId: null,
         reading: null,
       });
-    } catch {
-      const id = `mock-${Date.now()}`;
-      const matter: Matter = {
-        ...defaultEquipment(),
-        id,
-        title,
-        permission,
-        state: "idle",
-        createdAt: new Date().toISOString(),
-      };
+    } catch (error) {
+      const detail = error instanceof Error ? error.message.trim() : "";
       set({
-        matters: [matter, ...get().matters],
-        messages: { ...get().messages, [id]: [] },
-        activity: { ...get().activity, [id]: [] },
-        approvals: { ...get().approvals, [id]: null },
-        activeId: id,
-        composing: false,
         pending: null,
-        error: null,
+        error: detail ? `创建任务失败：${detail}` : "创建任务失败",
       });
     }
   },

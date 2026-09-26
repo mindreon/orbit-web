@@ -3598,13 +3598,13 @@ export function FilesPage() {
                 上传文件
               </button>
               {uploadMenu ? (
-                <div className="absolute right-0 z-10 mt-1 w-40 rounded-xl bg-white p-1 text-sm shadow">
+                <div className="absolute right-0 z-10 mt-1 w-52 rounded-xl bg-white p-1 text-sm shadow">
                   <p className="px-2 py-1 text-xs text-[#999]">上传到云端</p>
                   <button type="button" className="block w-full rounded-lg px-2 py-1.5 text-left hover:bg-[#f6f6f7]" onClick={() => { setUploadMenu(false); setUploadName(""); setUploadOpen(true); }}>
                     我的云端网盘
                   </button>
-                  <button type="button" className="block w-full rounded-lg px-2 py-1.5 text-left hover:bg-[#f6f6f7]" onClick={() => { setUploadMenu(false); setToast("该功能暂未开启"); }}>
-                    我的资料库
+                  <button type="button" disabled aria-disabled="true" className="block w-full cursor-not-allowed rounded-lg px-2 py-1.5 text-left text-[#b0b0b0] disabled:cursor-not-allowed">
+                    我的资料库 · 未接入
                   </button>
                 </div>
               ) : null}
