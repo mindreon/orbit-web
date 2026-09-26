@@ -42,8 +42,10 @@ export interface ActivityEvent {
 }
 
 interface ErrorBody {
-  message?: string;
-  code?: string;
+  message?: unknown;
+  code?: unknown;
+  id?: unknown;
+  roomId?: unknown;
 }
 
 /** 有 HTTP 响应但是非 2xx。没有响应（断网、超时、fetch 被拒绝）用 kind "unreachable"。 */
@@ -51,15 +53,28 @@ export class RoomRequestError extends Error {
   readonly kind: "unreachable" | "http";
   readonly status: number | null;
   readonly serverMessage: string;
+  readonly code: string;
+  /** 只在错误 JSON 里真有 id / roomId 时才有值，不会从文案里猜。 */
+  readonly roomId: string | null;
 
-  constructor(kind: "unreachable" | "http", status: number | null, serverMessage: string) {
+  constructor(kind: "unreachable" | "http", status: number | null, serverMessage: string, code = "", roomId: string | null = null) {
     super(serverMessage.trim() || (status ? `请求失败（${status}）` : "Failed to fetch"));
     this.name = "RoomRequestError";
     this.kind = kind;
     this.status = status;
     this.serverMessage = serverMessage.trim();
+    this.code = code;
+    this.roomId = roomId;
   }
 }
+
+export const WORKER_START_FAILURE = "任务已创建，但启动失败，刷新后可以在任务列表里看到它";
+
+export type RoomCreateAlert = {
+  message: string;
+  retry: boolean;
+  roomId: string | null;
+};
 
 export function describeRoomFailure(action: string, error: unknown) {
   if (error instanceof RoomRequestError && error.kind === "http") {
@@ -70,11 +85,22 @@ export function describeRoomFailure(action: string, error: unknown) {
   return `${action}：后端连不上（网络错误或超时）。请稍后重试。`;
 }
 
-function serverMessage(body: unknown) {
-  if (body && typeof body === "object" && "message" in body) {
-    return String((body as ErrorBody).message ?? "");
+/** 502 且 code 为 WORKER_ERROR：房间已在服务端写下，但响应体不一定带 id。 */
+export function roomCreateAlert(error: unknown): RoomCreateAlert {
+  if (error instanceof RoomRequestError && error.kind === "http" && error.status === 502 && error.code === "WORKER_ERROR") {
+    return { message: WORKER_START_FAILURE, retry: false, roomId: error.roomId };
   }
-  return "";
+  return { message: describeRoomFailure("创建任务失败", error), retry: true, roomId: null };
+}
+
+function readErrorBody(body: unknown) {
+  if (!body || typeof body !== "object") return { message: "", code: "", roomId: null as string | null };
+  const record = body as ErrorBody;
+  const message = typeof record.message === "string" ? record.message.trim() : "";
+  const code = typeof record.code === "string" ? record.code.trim() : "";
+  const rawId = typeof record.roomId === "string" ? record.roomId : typeof record.id === "string" ? record.id : "";
+  const roomId = rawId.trim() ? rawId.trim() : null;
+  return { message, code, roomId };
 }
 
 async function api<T>(path: string, init?: RequestInit): Promise<T> {
@@ -101,7 +127,8 @@ async function api<T>(path: string, init?: RequestInit): Promise<T> {
     }
   }
   if (!response.ok) {
-    throw new RoomRequestError("http", response.status, serverMessage(body));
+    const parsed = readErrorBody(body);
+    throw new RoomRequestError("http", response.status, parsed.message, parsed.code, parsed.roomId);
   }
   return body as T;
 }

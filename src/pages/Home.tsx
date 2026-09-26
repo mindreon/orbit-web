@@ -7,6 +7,8 @@ import { cn } from "../lib/cn";
 import { ModelPicker } from "./ModelPicker";
 import { AppMenu } from "./AppMenu";
 import { CloudFileDialog, ComposerSuggest } from "./Workbench";
+import { CreateFailureNotice } from "./CreateFailureNotice";
+import type { RoomCreateAlert } from "../lib/rooms";
 import { getUiPrefs, subscribeUiPrefs } from "../lib/uiPrefs";
 
 const ADD_ITEMS = ["添加文件", "引用对话中的文件", "应用", "模式", "权限", "专家", "技能", "连接器"] as const;
@@ -17,7 +19,7 @@ export function HomePage() {
   const createMatter = useMind((s) => s.createMatter);
   const pending = useMind((s) => s.pending);
   const catalog = useMind((s) => s.catalog);
-  const [createError, setCreateError] = useState<string | null>(null);
+  const [createAlert, setCreateAlert] = useState<RoomCreateAlert | null>(null);
   const uiPrefs = useSyncExternalStore(subscribeUiPrefs, getUiPrefs);
   const [sceneId, setSceneId] = useState<(typeof SCENES)[number]["id"]>("work");
   const [recommendQuick, setRecommendQuick] = useState(true);
@@ -98,15 +100,15 @@ export function HomePage() {
 
   async function submit() {
     if (role !== "经办人" || !draft.trim() || pending === "create") return;
-    setCreateError(null);
-    await createMatter(draft, permission);
-    const state = useMind.getState();
-    if (state.error) {
-      setCreateError(state.error);
+    setCreateAlert(null);
+    const result = await createMatter(draft, permission);
+    if (result.alert) {
+      setCreateAlert(result.alert);
       return;
     }
+    if (!result.createdId) return;
     setDraft("");
-    if (state.activeId) navigate(`/task/${state.activeId}`);
+    navigate(`/task/${result.createdId}`);
   }
 
   return (
@@ -338,18 +340,12 @@ export function HomePage() {
         ) : null}
         {voiceNotice ? <p className="mt-2 text-xs text-[#666]">{voiceNotice}</p> : null}
         {quickNotice ? <p className="mt-2 text-xs text-[#666]">{quickNotice}</p> : null}
-        {createError ? (
-          <div role="alert" className="mt-3 flex items-start gap-3 rounded-lg border border-[#f0d0d0] bg-[#fff6f6] px-3 py-2 text-sm text-[#c04545]">
-            <p className="min-w-0 flex-1 text-left">{createError}</p>
-            <button
-              type="button"
-              className="shrink-0 rounded-lg bg-[#1a1a1a] px-3 py-1 text-xs text-white disabled:opacity-40"
-              disabled={role !== "经办人" || pending === "create" || !draft.trim()}
-              onClick={() => void submit()}
-            >
-              重试
-            </button>
-          </div>
+        {createAlert ? (
+          <CreateFailureNotice
+            alert={createAlert}
+            retryDisabled={role !== "经办人" || pending === "create" || !draft.trim()}
+            onRetry={() => void submit()}
+          />
         ) : null}
         {role !== "经办人" ? <p className="mt-2 text-xs text-[#888]">当前角色不能新建任务。</p> : null}
       </form>

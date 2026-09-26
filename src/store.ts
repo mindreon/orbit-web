@@ -8,6 +8,8 @@ import {
   listApprovals,
   listMessages,
   describeRoomFailure,
+  roomCreateAlert,
+  type RoomCreateAlert,
   listRooms,
   postMessage,
   steerRoom,
@@ -60,7 +62,7 @@ interface MindState {
   loadActivity: (id: string) => Promise<void>;
   loadApproval: (id: string) => Promise<void>;
   loadRoomDetail: (id: string) => Promise<void>;
-  createMatter: (text: string, permission: PermissionPreset) => Promise<void>;
+  createMatter: (text: string, permission: PermissionPreset) => Promise<{ createdId: string | null; alert: RoomCreateAlert | null }>;
   startBlank: () => void;
   renameMatter: (id: string, title: string) => void;
   archiveMatter: (id: string) => void;
@@ -220,7 +222,7 @@ export const useMind = create<MindState>((set, get) => ({
   },
   createMatter: async (text, permission) => {
     const title = text.trim();
-    if (!title || get().pending) return;
+    if (!title || get().pending) return { createdId: null, alert: null };
     set({ pending: "create", error: null });
     await new Promise((resolve) => window.setTimeout(resolve, 400));
     try {
@@ -239,11 +241,11 @@ export const useMind = create<MindState>((set, get) => ({
         threadAgentId: null,
         reading: null,
       });
+      return { createdId: matter.id, alert: null };
     } catch (error) {
-      set({
-        pending: null,
-        error: describeRoomFailure("创建任务失败", error),
-      });
+      const alert = roomCreateAlert(error);
+      set({ pending: null, error: alert.message });
+      return { createdId: null, alert };
     }
   },
   send: async (text) => {

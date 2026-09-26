@@ -13,6 +13,8 @@ import { ModelPicker } from "./ModelPicker";
 import { ShareTaskDialog } from "./ShareTaskDialog";
 import { AppMenu } from "./AppMenu";
 import { addHandoff } from "../lib/handoffs";
+import { CreateFailureNotice } from "./CreateFailureNotice";
+import type { RoomCreateAlert } from "../lib/rooms";
 
 const emptyMessages: ChatMessage[] = [];
 const emptyActivity: ActivityEvent[] = [];
@@ -46,19 +48,18 @@ function BlankMatter() {
   const createMatter = useMind((s) => s.createMatter);
   const pending = useMind((s) => s.pending);
   const [draft, setDraft] = useState("");
-  const [createError, setCreateError] = useState<string | null>(null);
+  const [createAlert, setCreateAlert] = useState<RoomCreateAlert | null>(null);
   const [permission, setPermission] = useState<PermissionPreset>("workspace-write");
 
   function submit() {
     if (!draft.trim() || pending === "create") return;
-    setCreateError(null);
-    void createMatter(draft, permission).then(() => {
-      const state = useMind.getState();
-      if (state.error) {
-        setCreateError(state.error);
+    setCreateAlert(null);
+    void createMatter(draft, permission).then((result) => {
+      if (result.alert) {
+        setCreateAlert(result.alert);
         return;
       }
-      setDraft("");
+      if (result.createdId) setDraft("");
     });
   }
 
@@ -106,18 +107,8 @@ function BlankMatter() {
             </p>
           ) : null}
           {pending === "create" ? <p className="text-muted-foreground mt-2 text-xs">Agent 正在接手并进入工作状态。</p> : null}
-          {createError ? (
-            <div role="alert" className="mt-3 flex items-start gap-3 rounded-lg border border-[#f0d0d0] bg-[#fff6f6] px-3 py-2 text-sm text-[#c04545]">
-              <p className="min-w-0 flex-1">{createError}</p>
-              <button
-                type="button"
-                className="shrink-0 rounded-lg bg-[#1a1a1a] px-3 py-1 text-xs text-white disabled:opacity-40"
-                disabled={pending === "create" || !draft.trim()}
-                onClick={submit}
-              >
-                重试
-              </button>
-            </div>
+          {createAlert ? (
+            <CreateFailureNotice alert={createAlert} retryDisabled={pending === "create" || !draft.trim()} onRetry={submit} />
           ) : null}
         </div>
       </form>
