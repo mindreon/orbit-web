@@ -65,8 +65,19 @@ export class RoomRequestError extends Error {
 
 export const WORKER_START_FAILURE = "任务已创建，但启动失败，刷新后可以在任务列表里看到它";
 
-/** 后端接受了连接但一直不回时，到这个时间就放弃。单位是毫秒。 */
+/**
+ * 很快能返回的请求，后端接受了连接但一直不回时，到这个时间就放弃。单位是毫秒。
+ * 会等到模型回合结束的请求不要用这个默认值，见 api() 的 timeoutMs。
+ */
 export const ROOM_REQUEST_TIMEOUT_MS = 15000;
+
+type ApiInit = RequestInit & {
+  /**
+   * 这次请求最多等多少毫秒。不传则用 ROOM_REQUEST_TIMEOUT_MS。
+   * 传 0 表示不限时。发消息和审批决定要等模型回合，必须传 0。
+   */
+  timeoutMs?: number;
+};
 
 /** 调用方自己取消（例如组件卸载时 abort）时为 true。超时是 TimeoutError，不会算进来。 */
 export function isCallerAbort(error: unknown) {
@@ -103,35 +114,45 @@ function readErrorBody(body: unknown) {
   return { message, code };
 }
 
-async function api<T>(path: string, init?: RequestInit): Promise<T> {
-  const callerSignal = init?.signal;
+/**
+ * 普通 JSON 请求。
+ * 将来如果接上 GET /v1/rooms/{roomId}/events，那是一直开着的 SSE，不能走 api() 的超时，否则会被掐断。
+ */
+async function api<T>(path: string, init?: ApiInit): Promise<T> {
+  const timeoutMs = init?.timeoutMs === undefined ? ROOM_REQUEST_TIMEOUT_MS : init.timeoutMs;
+  const fetchInit: RequestInit = { ...(init ?? {}) };
+  delete (fetchInit as ApiInit).timeoutMs;
+  const callerSignal = fetchInit.signal;
   // 没有调用方 signal 时，直接用 AbortSignal.timeout。
   // 有调用方 signal 时要两边一起听。不用 AbortSignal.any：Safari 16.4 还没有它。
   // 改用自己的 AbortController，调用方取消或 setTimeout 到点都会 abort，finally 里清掉计时器。
+  // timeoutMs 为 0 时不设超时：发消息、审批决定会一直等到模型回合结束。
   const controller = new AbortController();
   let timer: ReturnType<typeof setTimeout> | undefined;
   const onCallerAbort = () => {
     controller.abort(callerSignal?.reason);
   };
-  let signal: AbortSignal;
-  if (callerSignal) {
+  let signal: AbortSignal | undefined;
+  if (timeoutMs > 0 && callerSignal) {
     if (callerSignal.aborted) controller.abort(callerSignal.reason);
     else callerSignal.addEventListener("abort", onCallerAbort);
     timer = setTimeout(() => {
       controller.abort(new DOMException("The operation timed out.", "TimeoutError"));
-    }, ROOM_REQUEST_TIMEOUT_MS);
+    }, timeoutMs);
     signal = controller.signal;
+  } else if (timeoutMs > 0) {
+    signal = AbortSignal.timeout(timeoutMs);
   } else {
-    signal = AbortSignal.timeout(ROOM_REQUEST_TIMEOUT_MS);
+    signal = callerSignal ?? undefined;
   }
 
   try {
     const response = await fetch(path, {
-      ...init,
+      ...fetchInit,
       signal,
       headers: {
         "content-type": "application/json",
-        ...(init?.headers ?? {}),
+        ...(fetchInit.headers ?? {}),
       },
     });
     const text = await response.text();
@@ -181,9 +202,11 @@ export function listMessages(roomId: string) {
 }
 
 export function postMessage(roomId: string, message: string) {
+  // orbit-control PostMessage 会等 runTurn Update 跑完整个模型回合才返回，不能 15 秒就放弃。
   return api<{ room: Room; approval?: Approval | null }>(`/v1/rooms/${encodeURIComponent(roomId)}/messages`, {
     method: "POST",
     body: JSON.stringify({ message }),
+    timeoutMs: 0,
   });
 }
 
@@ -200,9 +223,11 @@ export function listApprovals() {
 }
 
 export function decideApproval(approvalId: string, decision: "allow" | "reject") {
+  // 审批决定会等 decide Update（里面的 resolveApproval，允许时接着跑回合）结束才返回。
   return api<Approval>(`/v1/approvals/${encodeURIComponent(approvalId)}/decide`, {
     method: "POST",
     body: JSON.stringify({ decision }),
+    timeoutMs: 0,
   });
 }
 
@@ -214,8 +239,10 @@ export function abortRoom(roomId: string) {
 }
 
 export function steerRoom(roomId: string, instruction: string) {
+  // 没有 Temporal 时 steer 会等工人把这一回合跑完。不设超时，避免 15 秒后重试再发一次。
   return api<{ accepted: boolean }>(`/v1/rooms/${encodeURIComponent(roomId)}/steer`, {
     method: "POST",
     body: JSON.stringify({ instruction }),
+    timeoutMs: 0,
   });
 }
