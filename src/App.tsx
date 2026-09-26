@@ -1,6 +1,6 @@
 import { useEffect, useState, useSyncExternalStore } from "react";
 import { NavLink, Outlet, useLocation, useNavigate, useParams } from "react-router";
-import { MORE_NAV, PRIMARY_NAV } from "./shell/nav";
+import { MORE_NAV, PRIMARY_NAV, UNWIRED_NAV_LABELS } from "./shell/nav";
 import { getBuddyApps, subscribeBuddyApps } from "./lib/buddyApps";
 import { chordFromEvent, getShortcuts, isShortcutCapture, subscribeShortcuts } from "./lib/shortcuts";
 import { fontSizePx, getUiPrefs, stepFontSize, subscribeUiPrefs } from "./lib/uiPrefs";
@@ -346,6 +346,19 @@ export function App() {
           {primaryLabels.map((label) => {
             const item = [...PRIMARY_NAV, ...MORE_NAV].find((entry) => entry.label === label);
             if (!item) return null;
+            if (UNWIRED_NAV_LABELS.has(item.label)) {
+              return (
+                <button
+                  key={item.label}
+                  type="button"
+                  disabled
+                  aria-disabled="true"
+                  className="mb-0.5 flex h-8 w-full cursor-not-allowed items-center rounded-lg px-3 text-left text-sm text-[#b0b0b0] disabled:cursor-not-allowed"
+                >
+                  {item.label} · 未接入
+                </button>
+              );
+            }
             return (
               <NavLink
                 key={item.to}
@@ -377,6 +390,19 @@ export function App() {
                 {moreLabels.map((label) => {
                   const item = [...PRIMARY_NAV, ...MORE_NAV].find((entry) => entry.label === label);
                   if (!item) return null;
+                  if (UNWIRED_NAV_LABELS.has(item.label)) {
+                    return (
+                      <button
+                        key={item.label}
+                        type="button"
+                        disabled
+                        aria-disabled="true"
+                        className="block w-full cursor-not-allowed rounded-lg px-3 py-2 text-left text-sm text-[#b0b0b0] disabled:cursor-not-allowed"
+                      >
+                        {item.label} · 未接入
+                      </button>
+                    );
+                  }
                   return (
                     <NavLink
                       key={item.to}

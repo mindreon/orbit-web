@@ -157,14 +157,11 @@ function Timeline({ railOpen, onToggleRail }: { railOpen: boolean; onToggleRail:
   const [findOpen, setFindOpen] = useState(false);
   const [findText, setFindText] = useState("");
   const [findIndex, setFindIndex] = useState(0);
-  const [collabOpen, setCollabOpen] = useState(false);
-  const [inviteOpen, setInviteOpen] = useState(false);
   const [queue, setQueue] = useState<{ id: string; text: string }[]>([]);
   const [queueOpen, setQueueOpen] = useState(true);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editText, setEditText] = useState("");
   const [voiceNotice, setVoiceNotice] = useState<string | null>(null);
-  const team = ["合规", "财务"];
   const findRef = useRef<HTMLInputElement>(null);
   const composerRef = useRef<HTMLFormElement>(null);
   const taskIdRef = useRef(matter?.id);
@@ -206,8 +203,6 @@ function Timeline({ railOpen, onToggleRail }: { railOpen: boolean; onToggleRail:
     const previousId = taskIdRef.current;
     taskIdRef.current = nextId;
     if (!previousId || !nextId || previousId === nextId) return;
-    setCollabOpen(false);
-    setInviteOpen(false);
     setQueue([]);
     setEditingId(null);
   }, [matter?.id]);
@@ -268,8 +263,13 @@ function Timeline({ railOpen, onToggleRail }: { railOpen: boolean; onToggleRail:
         </span>
         <span className="text-muted-foreground text-xs">{stateLabel(matter.state)}</span>
         <TaskMenu matterId={matter.id} running={matter.state === "running"} title={matter.title} />
-        <button type="button" className="text-xs text-[#666]" onClick={() => setCollabOpen((open) => !open)}>
-          协作
+        <button
+          type="button"
+          disabled
+          aria-disabled="true"
+          className="cursor-not-allowed text-xs text-[#b0b0b0] disabled:cursor-not-allowed"
+        >
+          协作 · 未接入
         </button>
         <button
           type="button"
@@ -319,31 +319,6 @@ function Timeline({ railOpen, onToggleRail }: { railOpen: boolean; onToggleRail:
           <button type="button" onClick={() => stepFind(1)}>下一个（Enter）</button>
           <button type="button" onClick={() => setFindOpen(false)}>关闭搜索（Esc）</button>
           {findNeedle && findHits.length === 0 ? <span className="text-[#888]">未找到匹配内容</span> : null}
-        </div>
-      ) : null}
-      {collabOpen ? (
-        <div className="border-b px-4 py-3 text-sm">
-          <p className="font-medium">任务协作成员 · 1</p>
-          <p className="mt-1 text-xs text-[#888]">已加入协作 · 0</p>
-          <ul className="mt-2 space-y-1">
-            <li className="flex items-center gap-2">
-              <span>经办人</span>
-              <span className="text-xs text-[#888]">所有者</span>
-            </li>
-          </ul>
-          <div className="mt-3 flex gap-2 text-xs">
-            <button type="button" className="rounded-lg bg-[#1a1a1a] px-3 py-1.5 text-white" onClick={() => setInviteOpen(true)}>
-              邀请
-            </button>
-            <button
-              type="button"
-              disabled
-              aria-disabled="true"
-              className="cursor-not-allowed rounded-lg border border-[#e6e6e8] bg-[#f3f3f4] px-3 py-1.5 text-[#b0b0b0] disabled:cursor-not-allowed"
-            >
-              复制链接 · 未接入
-            </button>
-          </div>
         </div>
       ) : null}
       <div className="min-h-0 flex-1 space-y-3 overflow-auto p-4">
@@ -489,32 +464,6 @@ function Timeline({ railOpen, onToggleRail }: { railOpen: boolean; onToggleRail:
           <span>思考中</span>
           <button type="button" className="text-[#888]" onClick={() => setUiPrefs({ welcome: false })}>不再显示</button>
         </p>
-      ) : null}
-      {inviteOpen ? (
-        <div className="fixed inset-0 z-30 flex items-center justify-center bg-black/30 p-4">
-          <div className="w-full max-w-sm rounded-2xl bg-white p-5 text-sm" role="dialog" aria-label="邀请团队成员协作">
-            <p className="font-medium">邀请团队成员协作</p>
-            <p className="mt-2 text-xs text-[#888]">非项目成员申请加入后方可进入协作</p>
-            <ul className="mt-3 space-y-2">
-              {team.map((name) => (
-                <li key={name} className="flex items-center gap-2">
-                  <span>{name}</span>
-                  <button
-                    type="button"
-                    disabled
-                    aria-disabled="true"
-                    className="ml-auto cursor-not-allowed text-[#b0b0b0] disabled:cursor-not-allowed"
-                  >
-                    邀请 · 未接入
-                  </button>
-                </li>
-              ))}
-            </ul>
-            <button type="button" className="mt-4 text-xs text-[#666]" onClick={() => setInviteOpen(false)}>
-              取消
-            </button>
-          </div>
-        </div>
       ) : null}
       {editingId ? (
         <div className="fixed inset-0 z-30 flex items-center justify-center bg-black/30 p-4">
