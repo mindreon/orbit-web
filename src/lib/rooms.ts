@@ -65,6 +65,14 @@ export class RoomRequestError extends Error {
 
 export const WORKER_START_FAILURE = "任务已创建，但启动失败，刷新后可以在任务列表里看到它";
 
+/** 后端接受了连接但一直不回时，到这个时间就放弃。单位是毫秒。 */
+export const ROOM_REQUEST_TIMEOUT_MS = 15000;
+
+/** 调用方自己取消（例如组件卸载时 abort）时为 true。超时是 TimeoutError，不会算进来。 */
+export function isCallerAbort(error: unknown) {
+  return error instanceof DOMException && error.name === "AbortError";
+}
+
 export type RoomCreateAlert = {
   message: string;
   retry: boolean;
@@ -96,33 +104,61 @@ function readErrorBody(body: unknown) {
 }
 
 async function api<T>(path: string, init?: RequestInit): Promise<T> {
-  let response: Response;
+  const callerSignal = init?.signal;
+  // 没有调用方 signal 时，直接用 AbortSignal.timeout。
+  // 有调用方 signal 时要两边一起听。不用 AbortSignal.any：Safari 16.4 还没有它。
+  // 改用自己的 AbortController，调用方取消或 setTimeout 到点都会 abort，finally 里清掉计时器。
+  const controller = new AbortController();
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  const onCallerAbort = () => {
+    controller.abort(callerSignal?.reason);
+  };
+  let signal: AbortSignal;
+  if (callerSignal) {
+    if (callerSignal.aborted) controller.abort(callerSignal.reason);
+    else callerSignal.addEventListener("abort", onCallerAbort);
+    timer = setTimeout(() => {
+      controller.abort(new DOMException("The operation timed out.", "TimeoutError"));
+    }, ROOM_REQUEST_TIMEOUT_MS);
+    signal = controller.signal;
+  } else {
+    signal = AbortSignal.timeout(ROOM_REQUEST_TIMEOUT_MS);
+  }
+
   try {
-    response = await fetch(path, {
+    const response = await fetch(path, {
       ...init,
+      signal,
       headers: {
         "content-type": "application/json",
         ...(init?.headers ?? {}),
       },
     });
+    const text = await response.text();
+    let body: unknown = null;
+    if (text) {
+      try {
+        body = JSON.parse(text) as unknown;
+      } catch {
+        body = text;
+      }
+    }
+    if (!response.ok) {
+      const parsed = readErrorBody(body);
+      throw new RoomRequestError("http", response.status, parsed.message, parsed.code);
+    }
+    return body as T;
   } catch (error) {
+    if (error instanceof RoomRequestError) throw error;
+    // 调用方主动取消：原样抛出，不换成「后端连不上」，这样界面不会弹出失败提示。
+    if (callerSignal?.aborted && isCallerAbort(error)) throw error;
+    // TimeoutError（到点放弃）和 AbortError（超时信号中断）都算连不上，和断网一样可以重试。
     const detail = error instanceof Error ? error.message : "";
     throw new RoomRequestError("unreachable", null, detail);
+  } finally {
+    if (timer !== undefined) clearTimeout(timer);
+    callerSignal?.removeEventListener("abort", onCallerAbort);
   }
-  const text = await response.text();
-  let body: unknown = null;
-  if (text) {
-    try {
-      body = JSON.parse(text) as unknown;
-    } catch {
-      body = text;
-    }
-  }
-  if (!response.ok) {
-    const parsed = readErrorBody(body);
-    throw new RoomRequestError("http", response.status, parsed.message, parsed.code);
-  }
-  return body as T;
 }
 
 export function listRooms() {

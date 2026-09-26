@@ -8,6 +8,7 @@ import {
   listApprovals,
   listMessages,
   describeRoomFailure,
+  isCallerAbort,
   roomCreateAlert,
   type RoomCreateAlert,
   listRooms,
@@ -173,6 +174,10 @@ export const useMind = create<MindState>((set, get) => ({
       set({ matters, activeId: nextId, loading: false, error: null });
       if (nextId) await get().loadRoomDetail(nextId);
     } catch (error) {
+      if (isCallerAbort(error)) {
+        set({ loading: false });
+        return;
+      }
       const current = get().error;
       const keepCreate = current?.startsWith("创建任务失败") ?? false;
       set({
@@ -188,6 +193,7 @@ export const useMind = create<MindState>((set, get) => ({
       const items = [...(body.items ?? [])].sort((a, b) => a.createdAt.localeCompare(b.createdAt));
       set({ messages: { ...get().messages, [id]: items } });
     } catch (error) {
+      if (isCallerAbort(error)) return;
       if (get().activeId === id) {
         set({ error: error instanceof Error ? error.message : "消息读取失败" });
       }
@@ -202,6 +208,7 @@ export const useMind = create<MindState>((set, get) => ({
       const items = [...(body.items ?? [])].sort((a, b) => a.sequence - b.sequence);
       set({ activity: { ...get().activity, [id]: items } });
     } catch (error) {
+      if (isCallerAbort(error)) return;
       if (get().activeId === id) {
         set({ error: error instanceof Error ? error.message : "活动读取失败" });
       }
@@ -215,6 +222,7 @@ export const useMind = create<MindState>((set, get) => ({
         .sort((a, b) => b.createdAt.localeCompare(a.createdAt))[0];
       set({ approvals: { ...get().approvals, [id]: pending ?? null } });
     } catch (error) {
+      if (isCallerAbort(error)) return;
       if (get().activeId === id) {
         set({ error: error instanceof Error ? error.message : "批准读取失败" });
       }
@@ -243,6 +251,10 @@ export const useMind = create<MindState>((set, get) => ({
       });
       return { createdId: matter.id, alert: null };
     } catch (error) {
+      if (isCallerAbort(error)) {
+        set({ pending: null });
+        return { createdId: null, alert: null };
+      }
       const alert = roomCreateAlert(error);
       set({ pending: null, error: alert.message });
       return { createdId: null, alert };
@@ -261,7 +273,11 @@ export const useMind = create<MindState>((set, get) => ({
         pending: null,
       });
       await get().loadRoomDetail(id);
-    } catch {
+    } catch (error) {
+      if (isCallerAbort(error)) {
+        set({ pending: null });
+        return;
+      }
       set({ pending: null, error: "发送失败" });
     }
   },
@@ -281,6 +297,10 @@ export const useMind = create<MindState>((set, get) => ({
       });
       await get().loadRoomDetail(id);
     } catch (error) {
+      if (isCallerAbort(error)) {
+        set({ pending: null });
+        return;
+      }
       set({ pending: null, error: error instanceof Error ? error.message : "停止失败" });
     }
   },
@@ -294,6 +314,10 @@ export const useMind = create<MindState>((set, get) => ({
       set({ pending: null });
       await get().loadRoomDetail(id);
     } catch (error) {
+      if (isCallerAbort(error)) {
+        set({ pending: null });
+        return;
+      }
       set({ pending: null, error: error instanceof Error ? error.message : "接着说失败" });
       await get().loadRoomDetail(id);
     }
@@ -311,6 +335,10 @@ export const useMind = create<MindState>((set, get) => ({
       });
       await get().loadRoomDetail(id);
     } catch (error) {
+      if (isCallerAbort(error)) {
+        set({ pending: null });
+        return;
+      }
       set({ pending: null, error: error instanceof Error ? error.message : "批准失败" });
       if (id) await get().loadRoomDetail(id);
     }
