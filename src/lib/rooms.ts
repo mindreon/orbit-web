@@ -1,5 +1,7 @@
 import type { PermissionPreset, RoomState } from "../model";
 
+export type { ActivityEvent } from "./events/activity";
+
 export interface Room {
   id: string;
   kind: string;
@@ -11,15 +13,6 @@ export interface Room {
   modelMode?: string;
 }
 
-export interface ChatMessage {
-  id: string;
-  roomId: string;
-  role: string;
-  text: string;
-  createdAt: string;
-  type?: string;
-}
-
 export interface Approval {
   id: string;
   roomId: string;
@@ -28,19 +21,6 @@ export interface Approval {
   status: string;
   decision?: string;
   createdAt: string;
-}
-
-export interface ActivityEvent {
-  id: string;
-  sequence: number;
-  type: string;
-  roomId: string;
-  role?: string;
-  text?: string;
-  toolName?: string;
-  reason?: string;
-  status?: string;
-  occurredAt: string;
 }
 
 interface ErrorBody {
@@ -126,7 +106,7 @@ function readErrorBody(body: unknown) {
 
 /**
  * 普通 JSON 请求。
- * 将来如果接上 GET /v1/rooms/{roomId}/events，那是一直开着的 SSE，不能走 api() 的超时，否则会被掐断。
+ * GET /v1/rooms/{roomId}/events 是一直开着的 SSE，不走这里，见 lib/events/sse.ts。
  */
 async function api<T>(path: string, init?: ApiInit): Promise<T> {
   const timeoutMs = init?.timeoutMs === undefined ? ROOM_REQUEST_TIMEOUT_MS : init.timeoutMs;
@@ -208,15 +188,17 @@ export function createRoom(input: { title: string; permissionPreset: PermissionP
   });
 }
 
-export function listMessages(roomId: string) {
-  return api<{ items: ChatMessage[] | null }>(`/v1/rooms/${encodeURIComponent(roomId)}/messages`);
+/** 每次发送（包括失败后重试）都用新的 turnId，服务端据此区分回合。 */
+export function newTurnId() {
+  const random = typeof crypto.randomUUID === "function" ? crypto.randomUUID() : `${Date.now()}-${Math.random().toString(16).slice(2)}`;
+  return `tn_web_${random}`;
 }
 
-export function postMessage(roomId: string, message: string) {
+export function postMessage(roomId: string, message: string, turnId: string) {
   // orbit-control PostMessage 会等 runTurn Update 跑完整个模型回合才返回，不能 15 秒就放弃。
   return api<{ room: Room; approval?: Approval | null }>(`/v1/rooms/${encodeURIComponent(roomId)}/messages`, {
     method: "POST",
-    body: JSON.stringify({ message }),
+    body: JSON.stringify({ message, turnId }),
     timeoutMs: 0,
   });
 }
@@ -225,8 +207,9 @@ export function getRoom(roomId: string) {
   return api<Room>(`/v1/rooms/${encodeURIComponent(roomId)}`);
 }
 
+/** 原始条目。按 lib/events/activity.ts 的 parseActivityEvent 过滤后再用，未知类型会被丢掉。 */
 export function listActivity(roomId: string) {
-  return api<{ items: ActivityEvent[] | null }>(`/v1/rooms/${encodeURIComponent(roomId)}/activity`);
+  return api<{ items: unknown[] | null }>(`/v1/rooms/${encodeURIComponent(roomId)}/activity`);
 }
 
 export function listApprovals() {
