@@ -104,7 +104,7 @@ function sameItem(a: TimelineItem, b: TimelineItem) {
   if (a.kind === "tools" && b.kind === "tools") return a.calls.length === b.calls.length && a.calls.every((call, index) => sameCall(call, b.calls[index]));
   if (a.kind === "failure" && b.kind === "failure") return a.retryText === b.retryText;
   if (a.kind === "approval" && b.kind === "approval") {
-    return a.outcome === b.outcome && a.approvalId === b.approvalId && a.approvalRequestId === b.approvalRequestId && a.reason === b.reason && a.argsPreview === b.argsPreview;
+    return a.outcome === b.outcome && a.stopped === b.stopped && a.approvalId === b.approvalId && a.approvalRequestId === b.approvalRequestId && a.reason === b.reason && a.argsPreview === b.argsPreview;
   }
   if (a.kind === "question" && b.kind === "question") return a.answer?.text === b.answer?.text && a.answer?.choiceIds.join() === b.answer?.choiceIds.join();
   if ("text" in a && "text" in b) return a.text === b.text;

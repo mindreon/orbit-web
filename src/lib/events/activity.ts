@@ -45,11 +45,31 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 }
 
 /**
+ * orbit-control wraps events as `{id, type, taskId, ts, source, payload}` (docs/contract-notes/sse-resume.md): `id` is
+ * the event id and the SSE `id:` (absent on assistant.delta and reset), `payload` is the runtime event unchanged.
+ * Flattens that to one object; an already-flat item (older control) passes through.
+ */
+function unwrapEnvelope(input: unknown): unknown {
+  if (!isRecord(input) || !isRecord(input.payload)) return input;
+  const payload = input.payload;
+  return {
+    ...payload,
+    type: typeof input.type === "string" ? input.type : payload.type,
+    id: typeof payload.eventId === "string" && payload.eventId ? payload.eventId : typeof input.id === "number" ? `ev:${input.id}` : "",
+    sequence: typeof input.id === "number" ? input.id : 0,
+    roomId: typeof payload.roomId === "string" ? payload.roomId : input.taskId,
+    occurredAt: typeof payload.occurredAt === "string" ? payload.occurredAt : input.ts,
+    source: input.source,
+  };
+}
+
+/**
  * Accepts only event types this build knows. Anything else returns null so callers drop it without touching state.
  * `sseId` is the frame's `id:` line (the per-task sequence). It fills a missing `sequence` on persisted events; it is
  * never used as the event id, and never as a delta's chunk seq.
  */
-export function parseActivityEvent(raw: unknown, sseId?: string): ActivityEvent | null {
+export function parseActivityEvent(input: unknown, sseId?: string): ActivityEvent | null {
+  const raw = unwrapEnvelope(input);
   if (!isRecord(raw)) return null;
   const type = raw.type;
   if (typeof type !== "string" || !KNOWN_TYPES.has(type)) return null;

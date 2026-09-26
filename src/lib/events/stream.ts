@@ -134,10 +134,11 @@ class Draftable {
   }
 
   /** Returns true when the event was new. `key` is its stream key: the SSE id / per-task sequence. */
-  insert(event: ActivityEvent, key: string): boolean {
+  insert(incoming: ActivityEvent, key: string): boolean {
     if (key && this.seen.has(key)) return false;
     this.ownEvents();
     if (key) this.seen.add(key);
+    const event = this.adoptDraftBlock(incoming);
     const list = this.events;
     let at = list.length;
     if (event.sequence > 0) {
@@ -148,6 +149,18 @@ class Draftable {
     if (event.sequence > this.lastSequence) this.lastSequence = event.sequence;
     this.settleDrafts(event);
     return true;
+  }
+
+  /**
+   * orbit-runtime's final assistant.message carries no blockId. When exactly one draft of that turn and agent is
+   * live, the final text is that block: give it the draft's blockId so it keeps the draft's row instead of
+   * re-mounting the whole reply.
+   */
+  adoptDraftBlock(event: ActivityEvent): ActivityEvent {
+    if (event.type !== "assistant.message" || event.role === "user" || event.blockId || !event.turnId) return event;
+    const agentId = event.agentId ?? "main";
+    const live = Object.values(this.drafts).filter((draft) => draft.turnId === event.turnId && draft.agentId === agentId);
+    return live.length === 1 ? { ...event, blockId: live[0].blockId } : event;
   }
 
   /** A persisted event can end live drafts: the final text replaces them, a failed turn discards them. */
@@ -248,13 +261,17 @@ export function reduceStream(state: RoomStream, action: StreamAction): RoomStrea
 
   const next = new Draftable(state);
   for (const { event, sseId } of action.items) {
+    // Delta frames carry no event id of their own: their SSE `id:` repeats the last durable event's. They are
+    // deduped by (turnId, blockId, seq, activityAttempt) only, and never move the replay high-water mark.
+    if (event?.type === "assistant.delta") {
+      next.delta(event);
+      continue;
+    }
     const position = sseSequence(sseId);
     if (position !== null && position <= next.streamSeq) continue;
     if (sseId) next.lastEventId = sseId;
     if (position !== null) next.streamSeq = position;
-    if (!event) continue;
-    if (event.type === "assistant.delta") next.delta(event);
-    else next.insert(event, streamKey(event, sseId));
+    if (event) next.insert(event, streamKey(event, sseId));
   }
   return next.done();
 }

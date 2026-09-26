@@ -28,6 +28,9 @@ export interface ApprovalCardView {
   id: string;
   /** One card per call: callId, else the runtime's approvalRequestId, else control's approvalId. */
   key: string;
+  sequence: number;
+  /** The user stopped the turn before deciding; the ask is void. */
+  stopped: boolean;
   callId: string;
   approvalId: string;
   approvalRequestId: string;
@@ -125,13 +128,12 @@ function applyResult(call: ToolCallView, event: ActivityEvent) {
   }
 }
 
-/** Events after which a tool call that still has no result will never get one. */
+/**
+ * Events after which a tool call that still has no result will never get one: the turn failed, or a new turn began.
+ * An assistant message does not end a call: the runtime also posts one while the call waits for an approval.
+ */
 function endsOpenCalls(event: ActivityEvent) {
-  return (
-    event.type === "turn.failed" ||
-    event.type === "room.steered" ||
-    (event.type === "assistant.message" && (event.role === "user" || (event.agentId ?? "main") === "main"))
-  );
+  return event.type === "turn.failed" || event.type === "room.steered" || (event.type === "assistant.message" && event.role === "user");
 }
 
 /** Pairs tool.call with tool.result by callId. A result whose call fell out of history still gets a row. */
@@ -188,13 +190,32 @@ function approvalMatches(card: ApprovalCardView, event: ActivityEvent) {
 }
 
 /**
+ * The same ask arrives twice: the worker's approval.asked (callId, approvalRequestId) and control's own
+ * (approvalId only). Match by id first; otherwise pair an event that carries only one side with the latest
+ * undecided card of the same tool that lacks that side.
+ */
+function findApprovalCard(cards: readonly ApprovalCardView[], event: ActivityEvent) {
+  const exact = cards.find((card) => approvalMatches(card, event));
+  if (exact) return exact;
+  const controlSide = Boolean(event.approvalId) && !event.callId && !event.approvalRequestId;
+  const workerSide = !event.approvalId && Boolean(event.callId || event.approvalRequestId);
+  for (let index = cards.length - 1; index >= 0; index -= 1) {
+    const card = cards[index];
+    if (card.outcome !== null || (event.toolName && card.toolName && card.toolName !== event.toolName)) continue;
+    if (controlSide && !card.approvalId) return card;
+    if (workerSide && !card.callId && !card.approvalRequestId) return card;
+  }
+  return undefined;
+}
+
+/**
  * Projects persisted events into chat items. Approval and question cards stay where they were asked.
  * `stoppedSequence` is where the user pressed stop: calls started up to there that are still running are over.
  */
 export function buildTimeline(events: readonly ActivityEvent[], stoppedSequence = 0): TimelineItem[] {
   const items: TimelineItem[] = [];
   const tools = new ToolPairing();
-  const approvals = new Map<string, ApprovalCardView>();
+  const cards: ApprovalCardView[] = [];
   const questions = new Map<string, QuestionCardView>();
   const userTextByTurn = new Map<string, string>();
   let lastUserText: string | null = null;
@@ -238,12 +259,13 @@ export function buildTimeline(events: readonly ActivityEvent[], stoppedSequence 
         break;
       }
       case "approval.asked": {
-        const key = approvalKey(event);
-        const existing = approvals.get(key);
+        const existing = findApprovalCard(cards, event);
         const card: ApprovalCardView = {
           kind: "approval",
           id: existing?.id ?? `approval-${event.id}`,
-          key,
+          key: existing?.key ?? approvalKey(event),
+          sequence: existing?.sequence ?? event.sequence,
+          stopped: false,
           callId: event.callId || existing?.callId || "",
           approvalId: event.approvalId || existing?.approvalId || "",
           approvalRequestId: event.approvalRequestId || existing?.approvalRequestId || "",
@@ -251,19 +273,19 @@ export function buildTimeline(events: readonly ActivityEvent[], stoppedSequence 
           argsPreview: event.argsPreview || existing?.argsPreview || "",
           reason: event.reason || event.text || existing?.reason || "",
           risk: event.risk || existing?.risk || "",
-          agentPath: agentPathOf(event),
+          agentPath: existing && existing.agentPath !== "main" ? existing.agentPath : agentPathOf(event),
           outcome: existing?.outcome ?? null,
           decidedBy: existing?.decidedBy ?? "",
         };
         if (existing) Object.assign(existing, card);
         else {
-          approvals.set(key, card);
+          cards.push(card);
           items.push(card);
         }
         break;
       }
       case "approval.resolved": {
-        for (const card of approvals.values()) {
+        for (const card of cards) {
           if (!approvalMatches(card, event)) continue;
           card.outcome = event.outcome || event.status || "decided";
           card.decidedBy = event.decidedBy ?? "";
@@ -311,7 +333,10 @@ export function buildTimeline(events: readonly ActivityEvent[], stoppedSequence 
         break;
     }
   }
-  if (stoppedSequence > 0) tools.close("任务已停止，这一步没有完成。", stoppedSequence);
+  if (stoppedSequence > 0) {
+    tools.close("任务已停止，这一步没有完成。", stoppedSequence);
+    for (const card of cards) if (card.outcome === null && card.sequence <= stoppedSequence) card.stopped = true;
+  }
   return items;
 }
 

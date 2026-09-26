@@ -33,6 +33,8 @@ export function approvalFromControl(item: Approval): ApprovalCardView {
     kind: "approval",
     id: `approval-${item.id}`,
     key: item.id,
+    sequence: 0,
+    stopped: false,
     callId: "",
     approvalId: item.id,
     approvalRequestId: item.approvalRequestId ?? "",
@@ -64,6 +66,7 @@ export const ApprovalCard = memo(function ApprovalCard({
   const [detailOpen, setDetailOpen] = useState(false);
   const control = findControlApproval(card, approvals);
   const decision = readDecision(card, control);
+  const settled = decision !== null || card.stopped;
   const approvalId = control?.id || card.approvalId;
   const label = describeTool(card.toolName, card.argsPreview);
   const risk = card.risk ? RISK_TEXT[card.risk] : "";
@@ -71,12 +74,12 @@ export const ApprovalCard = memo(function ApprovalCard({
   return (
     <div
       data-testid="approval-card"
-      data-state={decision ? "decided" : "pending"}
-      className={cn("max-w-2xl rounded-lg border px-3 py-2.5 text-sm", decision ? "border-[#ececee] bg-[#fafafb]" : "border-amber-200 bg-amber-50/60")}
+      data-state={decision ? "decided" : card.stopped ? "stopped" : "pending"}
+      className={cn("max-w-2xl rounded-lg border px-3 py-2.5 text-sm", settled ? "border-[#ececee] bg-[#fafafb]" : "border-amber-200 bg-amber-50/60")}
     >
       <div className="flex flex-wrap items-center gap-2 text-xs">
-        <ShieldAlert className={cn("h-4 w-4", decision ? "text-[#999]" : "text-amber-600")} aria-hidden />
-        <span className="font-semibold text-[#222]">{decision ? "确认记录" : "这一步要先确认"}</span>
+        <ShieldAlert className={cn("h-4 w-4", settled ? "text-[#999]" : "text-amber-600")} aria-hidden />
+        <span className="font-semibold text-[#222]">{settled ? "确认记录" : "这一步要先确认"}</span>
         {card.agentPath && card.agentPath !== "main" ? <span className="rounded bg-white px-1.5 py-0.5 text-[11px] text-[#666]">子助手 · {card.agentPath}</span> : null}
         {risk ? <span className="rounded bg-white px-1.5 py-0.5 text-[11px] text-amber-700">{risk}</span> : null}
       </div>
@@ -88,6 +91,11 @@ export const ApprovalCard = memo(function ApprovalCard({
           {decision.allowed === false ? <CircleSlash className="h-3.5 w-3.5 text-amber-600" aria-hidden /> : <CircleCheck className="h-3.5 w-3.5 text-emerald-600" aria-hidden />}
           {decision.allowed === true ? "已允许这一次" : decision.allowed === false ? "已拒绝" : "已处理"}
           {decision.by ? <span className="text-[#999]">· {decision.by}</span> : null}
+        </p>
+      ) : card.stopped ? (
+        <p className="mt-2 flex items-center gap-1.5 text-xs text-[#555]" data-testid="approval-decision">
+          <CircleSlash className="h-3.5 w-3.5 text-[#999]" aria-hidden />
+          任务已停止，这一步没有执行
         </p>
       ) : (
         <div className="mt-2.5 flex flex-wrap items-center gap-2">
