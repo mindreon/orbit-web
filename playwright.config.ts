@@ -5,12 +5,16 @@ const WEB_PORT = 3310;
 
 export default defineConfig({
   testDir: "./e2e",
-  testIgnore: ["perf/**"],
+  testIgnore: ["perf/**", "stack/**"],
   fullyParallel: false,
   workers: 1,
   retries: 0,
   timeout: 60_000,
-  reporter: [["list"], ["html", { open: "never", outputFolder: "playwright-report" }]],
+  reporter: [
+    ["list"],
+    ["html", { open: "never", outputFolder: "playwright-report" }],
+    ["./e2e/report/acceptance-reporter.ts", { run: "scripted", environment: "orbit-web (vite) against e2e/fake-control.mjs, a scripted control for what the mock model cannot produce on demand (dropped streams at exact points, duplicate and out-of-order frames, turn.failed, sub-agent paths, 1000 messages, fault states), plus the dependency licence check" }],
+  ],
   outputDir: "test-results",
   use: {
     baseURL: `http://127.0.0.1:${WEB_PORT}`,

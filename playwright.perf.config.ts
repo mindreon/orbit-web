@@ -8,7 +8,10 @@ export default defineConfig({
   workers: 1,
   retries: 0,
   timeout: 180_000,
-  reporter: [["list"]],
+  reporter: [
+    ["list"],
+    ["./e2e/report/acceptance-reporter.ts", { run: "fixture-perf", environment: "orbit-web production build served with e2e/fixtures/datasets.mjs (1000 messages + one 50,000-character reply)" }],
+  ],
   outputDir: "perf-results/artifacts",
   use: {
     baseURL: `http://127.0.0.1:${PORT}`,
