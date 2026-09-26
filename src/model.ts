@@ -67,6 +67,7 @@ export interface Matter {
   kbDocId: string;
   externalId: string;
   mcpIds: string[];
+  pinned?: boolean;
 }
 
 export interface Catalog {

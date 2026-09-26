@@ -1,100 +1,44 @@
-import { useEffect, useState } from "react";
-import { FILTERS, matterTitle, permissionLabel, stateLabel, type FilterId, type PermissionPreset } from "../model";
+import { useEffect, useRef, useState, useSyncExternalStore, type ReactNode } from "react";
+import { useNavigate, useSearchParams } from "react-router";
+import { matterTitle, permissionLabel, stateLabel, type PermissionPreset } from "../model";
 import { useMind } from "../store";
-import { Area, Button, Field } from "../ui";
+import { Area, Button } from "../ui";
 import { cn } from "../lib/cn";
+import { mockArtifacts } from "../lib/mockRooms";
 import type { ActivityEvent, ChatMessage } from "../lib/rooms";
+import { publishFileShare } from "../lib/shares";
+import { getPublishedApps, publishApp, subscribePublishedApps } from "../lib/publishedApps";
+import { getUiPrefs, setUiPrefs, subscribeUiPrefs } from "../lib/uiPrefs";
+import { chordFromEvent, getShortcuts, isShortcutCapture } from "../lib/shortcuts";
+import { ModelPicker } from "./ModelPicker";
+import { ShareTaskDialog } from "./ShareTaskDialog";
+import { AppMenu } from "./AppMenu";
+import { addHandoff } from "../lib/handoffs";
 
 const emptyMessages: ChatMessage[] = [];
 const emptyActivity: ActivityEvent[] = [];
 
-const RAIL_TABS = ["轨迹", "产物", "全部文件", "变更", "预览"] as const;
+const RAIL_TABS = ["产物", "概览", "任务进程", "文件"] as const;
 type RailTab = (typeof RAIL_TABS)[number];
 
 export function WorkbenchPage() {
   const loadRooms = useMind((s) => s.loadRooms);
+  const [railOpen, setRailOpen] = useState(true);
   useEffect(() => {
     void loadRooms();
   }, [loadRooms]);
-
-  const role = useMind((s) => s.role);
-  const filter = useMind((s) => s.filter);
-  const setFilter = useMind((s) => s.setFilter);
-  const matters = useMind((s) => s.matters);
-  const activeId = useMind((s) => s.activeId);
-  const loading = useMind((s) => s.loading);
-  const error = useMind((s) => s.error);
-  const selectMatter = useMind((s) => s.selectMatter);
-  const startBlank = useMind((s) => s.startBlank);
-  const [query, setQuery] = useState("");
-  const [railOpen, setRailOpen] = useState(true);
-
-  const needle = query.trim();
-  const visible = matters.filter((matter) => {
-    if (needle && !matterTitle(matter).includes(needle)) return false;
-    if (filter === "已完成") return matter.state === "closed";
-    if (filter === "待我确认") return matter.state === "awaiting_approval";
-    return matter.state !== "closed";
-  });
+  useEffect(() => {
+    function onToggle() {
+      setRailOpen((open) => !open);
+    }
+    window.addEventListener("mind-toggle-rail", onToggle);
+    return () => window.removeEventListener("mind-toggle-rail", onToggle);
+  }, []);
 
   return (
-    <div className="flex min-h-0 flex-1 flex-col">
-      <div className={cn("grid min-h-0 flex-1", railOpen ? "grid-cols-[280px_minmax(0,1fr)_360px]" : "grid-cols-[280px_minmax(0,1fr)]")}>
-        <aside className="bg-sidebar flex min-h-0 flex-col border-r border-sidebar-border">
-          <div className="border-b border-sidebar-border p-3">
-            <p className="text-muted-foreground mb-2 text-[11px]">云端任务。每件任务各自一份云端空间，不读你电脑上的文件夹。</p>
-            {role === "经办人" ? (
-              <Button className="w-full" variant={activeId === null ? "primary" : "outline"} onClick={startBlank}>
-                新建任务
-              </Button>
-            ) : null}
-            <Field className="mt-2" value={query} placeholder="搜索任务" aria-label="搜索任务" onChange={(event) => setQuery(event.target.value)} />
-          </div>
-          <div className="flex gap-1 p-2 text-xs">
-            {FILTERS.map((item) => (
-              <button
-                key={item}
-                className={cn(
-                  "rounded-md px-2 py-1",
-                  filter === item ? "bg-sidebar-accent text-accent-foreground" : "text-muted-foreground",
-                )}
-                onClick={() => setFilter(item as FilterId)}
-              >
-                {item}
-              </button>
-            ))}
-          </div>
-          <div className="min-h-0 flex-1 overflow-auto">
-            {error && matters.length === 0 ? <p className="text-destructive p-4 text-sm">{error}</p> : null}
-            {loading && matters.length === 0 ? <p className="text-muted-foreground p-4 text-sm">正在读取任务…</p> : null}
-            {visible.map((matter) => (
-              <button
-                key={matter.id}
-                className={cn(
-                  "block w-full border-b border-sidebar-border px-3 py-3 text-left",
-                  matter.id === activeId && "bg-card",
-                )}
-                onClick={() => selectMatter(matter.id)}
-              >
-                <div className="flex items-center justify-between gap-2">
-                  <span className="text-sm font-medium">{matterTitle(matter)}</span>
-                  {matter.state === "awaiting_approval" ? (
-                    <span className="bg-primary/10 text-primary rounded px-1.5 py-0.5 text-[11px]">待我确认</span>
-                  ) : null}
-                </div>
-                <p className="text-muted-foreground mt-1 text-xs">
-                  云端 · {permissionLabel(matter.permission)} · {stateLabel(matter.state)}
-                </p>
-              </button>
-            ))}
-            {!loading && visible.length === 0 ? (
-              <p className="text-muted-foreground p-4 text-sm">这个筛选下没有任务。</p>
-            ) : null}
-          </div>
-        </aside>
-        <Timeline railOpen={railOpen} onToggleRail={() => setRailOpen((open) => !open)} />
-        {railOpen ? <Inspector /> : null}
-      </div>
+    <div className={cn("grid min-h-0 flex-1", railOpen ? "grid-cols-[minmax(0,1fr)_360px]" : "grid-cols-[minmax(0,1fr)]")}>
+      <Timeline railOpen={railOpen} onToggleRail={() => setRailOpen((open) => !open)} />
+      {railOpen ? <Inspector /> : null}
     </div>
   );
 }
@@ -139,7 +83,7 @@ function BlankMatter() {
               </select>
             </label>
             <Button type="submit" disabled={pending === "create"}>
-              {pending === "create" ? "正在创建…" : "发送"}
+              {pending === "create" ? "正在准备执行" : "发送"}
             </Button>
           </div>
           {permission === "read-only" ? (
@@ -150,6 +94,7 @@ function BlankMatter() {
               完全访问只作用于这件云端任务，会关闭默认审批。它不是整个客户端的开关。
             </p>
           ) : null}
+          {pending === "create" ? <p className="text-muted-foreground mt-2 text-xs">Agent 正在接手并进入工作状态。</p> : null}
           {error ? <p className="text-destructive mt-2 text-xs">{error}</p> : null}
         </div>
       </form>
@@ -163,6 +108,138 @@ function speaker(role: string) {
   return role || "系统";
 }
 
+function escapeRegExp(value: string) {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
+/** 把命中的原文包进高亮。当前这一条用更深的底色，方便和其余命中区分。 */
+function markedText(text: string, query: string, active: boolean) {
+  const needle = query.trim();
+  if (!needle || !text.includes(needle)) return text;
+  const parts = text.split(new RegExp(`(${escapeRegExp(needle)})`, "g"));
+  return parts.map((part, index) =>
+    part === needle ? (
+      <mark key={index} className={active ? "bg-[#ffe08a]" : "bg-[#fff3c4]"}>
+        {part}
+      </mark>
+    ) : (
+      <span key={index}>{part}</span>
+    ),
+  );
+}
+
+function HandoffDialog({
+  taskTitle,
+  artifacts,
+  rounds,
+  onClose,
+  onDone,
+}: {
+  taskTitle: string;
+  artifacts: { name: string }[];
+  rounds: number;
+  onClose: () => void;
+  onDone: (notice: string) => void;
+}) {
+  const [todoTitle, setTodoTitle] = useState("");
+  const [description, setDescription] = useState("");
+  const [assignee, setAssignee] = useState("");
+  const [memberQuery, setMemberQuery] = useState("");
+  const [pickerOpen, setPickerOpen] = useState(false);
+  const [summaryOpen, setSummaryOpen] = useState(false);
+  const [submitting, setSubmitting] = useState(false);
+  const [error, setError] = useState("");
+  const names = artifacts.map((item) => item.name).filter(Boolean);
+  const summary =
+    rounds === 0 && artifacts.length === 0
+      ? ""
+      : `该任务「${taskTitle || "当前任务"}」已产出 ${artifacts.length} 个文件产物${names.length ? `（${names.join("、")}）` : ""}。对话共 ${rounds} 轮交互，任务整体进展顺利，可接续后续环节。`;
+  const members = ["经办人", "合规", "财务"].filter((name) => !memberQuery.trim() || name.includes(memberQuery.trim()));
+  function confirm() {
+    if (!todoTitle.trim()) {
+      setError("请先填写待办标题");
+      return;
+    }
+    if (!assignee) {
+      setError("请选择处理人");
+      return;
+    }
+    if (!summary) {
+      setError("任务进展摘要为空，请稍后重试");
+      return;
+    }
+    setError("");
+    setSubmitting(true);
+    const title = todoTitle.trim();
+    const note = description.trim();
+    const owner = assignee;
+    const source = taskTitle || "当前任务";
+    window.setTimeout(() => {
+      addHandoff({ title, description: note, owner, source });
+      onDone("任务正在转交中，稍后可在计划看板中查看");
+    }, 400);
+  }
+  return (
+    <div className="fixed inset-0 z-30 flex items-center justify-center bg-black/30 p-4" aria-label="关闭新建待办" onClick={onClose}>
+      <div className="max-h-[80vh] w-full max-w-md overflow-auto rounded-2xl bg-white p-5 text-sm" role="dialog" aria-label="新建待办" onClick={(event) => event.stopPropagation()}>
+        <div className="flex items-center gap-2">
+          <p className="font-medium">新建待办</p>
+          <button type="button" className="ml-auto text-xs text-[#666]" onClick={onClose}>关闭</button>
+        </div>
+        <p className="mt-3 text-xs text-[#888]">任务信息</p>
+        <p className="mt-1">{`来自「${taskTitle || "当前任务"}」`}</p>
+        <label className="mt-3 block">
+          标题
+          <input aria-label="标题" placeholder="请输入标题" className="mt-1 h-9 w-full rounded-lg border border-[#e6e6e8] px-3" value={todoTitle} onChange={(event) => setTodoTitle(event.target.value)} />
+        </label>
+        <label className="mt-3 block">
+          描述
+          <textarea aria-label="描述" placeholder="添加描述（可选）" className="mt-1 w-full rounded-lg border border-[#e6e6e8] px-3 py-2" rows={2} value={description} onChange={(event) => setDescription(event.target.value)} />
+        </label>
+        <div className="mt-3" aria-label="待办属性">
+          <button type="button" className="rounded-full border border-[#e6e6e8] px-3 py-1" onClick={() => setPickerOpen((open) => !open)}>
+            {assignee || "处理人"}
+          </button>
+          {pickerOpen ? (
+            <div className="mt-2 rounded-xl border border-[#ececee] p-2">
+              <input aria-label="搜索成员" placeholder="搜索成员" className="h-8 w-full rounded-lg border border-[#e6e6e8] px-2" value={memberQuery} onChange={(event) => setMemberQuery(event.target.value)} />
+              {members.length === 0 ? <p className="mt-2 text-xs text-[#888]">没有匹配的处理人</p> : null}
+              <ul className="mt-1">
+                {members.map((name) => (
+                  <li key={name}>
+                    <button type="button" className="w-full rounded-lg px-2 py-1 text-left hover:bg-[#f6f6f7]" onClick={() => { setAssignee(name); setPickerOpen(false); }}>
+                      {name}
+                    </button>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          ) : null}
+        </div>
+        <p className="mt-3 text-xs text-[#888]">{`任务产物 · 共 ${artifacts.length} 项`}</p>
+        {artifacts.length === 0 ? <p className="mt-1 text-xs text-[#888]">暂无产物</p> : null}
+        <ul>
+          {artifacts.map((item) => (
+            <li key={item.name} className="mt-1 text-xs">{item.name} · 文件</li>
+          ))}
+        </ul>
+        <div className="mt-3">
+          <button type="button" className="text-xs text-[#666]" onClick={() => setSummaryOpen((open) => !open)}>
+            {summaryOpen ? "收起" : "展开"}
+          </button>
+          <p className="mt-1 text-xs text-[#888]">任务进度摘要 <span className="rounded bg-[#f3f3f4] px-1">AI生成</span></p>
+          {summaryOpen ? <p className="mt-1 text-xs leading-5">{summary || "任务进展摘要为空，请稍后重试"}</p> : null}
+        </div>
+        {error ? <p className="mt-3 text-xs text-[#c4554d]">{error}</p> : null}
+        <div className="mt-4 flex justify-end gap-3">
+          <button type="button" onClick={onClose}>取消</button>
+          <button type="button" disabled={submitting} onClick={confirm}>{submitting ? "提交中..." : "确认"}</button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function Timeline({ railOpen, onToggleRail }: { railOpen: boolean; onToggleRail: () => void }) {
   const role = useMind((s) => s.role);
   const matter = useMind((s) => s.matters.find((item) => item.id === s.activeId));
@@ -173,32 +250,316 @@ function Timeline({ railOpen, onToggleRail }: { railOpen: boolean; onToggleRail:
   const error = useMind((s) => s.error);
   const send = useMind((s) => s.send);
   const stop = useMind((s) => s.stop);
+  const uiPrefs = useSyncExternalStore(subscribeUiPrefs, getUiPrefs);
   const steer = useMind((s) => s.steer);
   const decide = useMind((s) => s.decide);
-  const [text, setText] = useState("");
+  const rewindTo = useMind((s) => s.rewindTo);
+  const replayFrom = useMind((s) => s.replayFrom);
+  const [params] = useSearchParams();
+  const attachedFile = params.get("file");
+  const [text, setText] = useState(attachedFile ?? "");
+  const [copiedId, setCopiedId] = useState<string | null>(null);
+  const [feedbackId, setFeedbackId] = useState<string | null>(null);
+  const [feedbackReason, setFeedbackReason] = useState("");
+  const [feedbackDone, setFeedbackDone] = useState<string | null>(null);
+  const [replayId, setReplayId] = useState<string | null>(null);
+  const [model, setModel] = useState("Auto");
+  const [modelNotice, setModelNotice] = useState("");
+  const [findOpen, setFindOpen] = useState(false);
+  const [findText, setFindText] = useState("");
+  const [findIndex, setFindIndex] = useState(0);
+  const [collabOpen, setCollabOpen] = useState(false);
+  const [collaborators, setCollaborators] = useState<string[]>([]);
+  const [inviteOpen, setInviteOpen] = useState(false);
+  const [inviting, setInviting] = useState<string | null>(null);
+  const [collabToast, setCollabToast] = useState<string | null>(null);
+  const [removeCollab, setRemoveCollab] = useState<string | null>(null);
+  const [linkCopied, setLinkCopied] = useState(false);
+  const [handoffOpen, setHandoffOpen] = useState(false);
+  const [handoffNotice, setHandoffNotice] = useState<string | null>(null);
+  const [handoffBusy, setHandoffBusy] = useState(false);
+  const [handoffQueued, setHandoffQueued] = useState(false);
+  const [queue, setQueue] = useState<{ id: string; text: string }[]>([]);
+  const [queueOpen, setQueueOpen] = useState(true);
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [editText, setEditText] = useState("");
+  const [voiceNotice, setVoiceNotice] = useState<string | null>(null);
+  const team = ["合规", "财务"].filter((name) => !collaborators.includes(name));
+  const findRef = useRef<HTMLInputElement>(null);
+  const composerRef = useRef<HTMLFormElement>(null);
+  const taskIdRef = useRef(matter?.id);
+  const findNeedle = findText.trim();
+  const findHits = messages.filter((item) => findNeedle && item.text.includes(findNeedle));
+  const currentHitId = findHits.length === 0 ? null : findHits[findIndex % findHits.length]?.id ?? null;
+  useEffect(() => {
+    setText(attachedFile ?? "");
+  }, [matter?.id, attachedFile]);
+  useEffect(() => {
+    function onSend() {
+      composerRef.current?.requestSubmit();
+    }
+    function onNewline() {
+      const area = composerRef.current?.querySelector("textarea");
+      if (!(area instanceof HTMLTextAreaElement) || document.activeElement !== area) return;
+      const start = area.selectionStart;
+      const next = `${area.value.slice(0, start)}\n${area.value.slice(area.selectionEnd)}`;
+      setText(next);
+      requestAnimationFrame(() => {
+        area.focus();
+        area.selectionStart = area.selectionEnd = start + 1;
+      });
+    }
+    function onVoice() {
+      setVoiceNotice("当前环境不支持语音输入。");
+    }
+    window.addEventListener("mind-send-message", onSend);
+    window.addEventListener("mind-insert-newline", onNewline);
+    window.addEventListener("mind-toggle-voice", onVoice);
+    return () => {
+      window.removeEventListener("mind-send-message", onSend);
+      window.removeEventListener("mind-insert-newline", onNewline);
+      window.removeEventListener("mind-toggle-voice", onVoice);
+    };
+  }, []);
+  useEffect(() => {
+    const nextId = matter?.id;
+    const previousId = taskIdRef.current;
+    taskIdRef.current = nextId;
+    if (!previousId || !nextId || previousId === nextId) return;
+    setCollaborators([]);
+    setCollabOpen(false);
+    setInviteOpen(false);
+    setRemoveCollab(null);
+    setLinkCopied(false);
+    setCollabToast(null);
+    setHandoffOpen(false);
+    setHandoffNotice(null);
+    setHandoffBusy(false);
+    setHandoffQueued(false);
+    setQueue([]);
+    setEditingId(null);
+  }, [matter?.id]);
+  useEffect(() => {
+    if (!collabToast) return;
+    const timer = window.setTimeout(() => setCollabToast(null), 2400);
+    return () => window.clearTimeout(timer);
+  }, [collabToast]);
+  const draining = useRef(false);
+  useEffect(() => {
+    if (pending || editingId || handoffBusy || matter?.state === "running" || queue.length === 0 || draining.current) return;
+    const next = queue[0];
+    draining.current = true;
+    setQueue((items) => items.filter((item) => item.id !== next.id));
+    void send(next.text).finally(() => {
+      draining.current = false;
+    });
+  }, [pending, editingId, handoffBusy, matter?.state, queue, send]);
+  useEffect(() => {
+    if (!handoffNotice) return;
+    const timer = window.setTimeout(() => {
+      setHandoffNotice(null);
+      setHandoffBusy(false);
+      setHandoffQueued(false);
+    }, 2400);
+    return () => window.clearTimeout(timer);
+  }, [handoffNotice]);
+  useEffect(() => {
+    if (findOpen) findRef.current?.focus();
+  }, [findOpen]);
+  useEffect(() => {
+    if (!currentHitId) return;
+    document.querySelector(`[data-message-id="${currentHitId}"]`)?.scrollIntoView({ block: "nearest" });
+  }, [currentHitId, findNeedle]);
+  useEffect(() => {
+    function onKey(event: KeyboardEvent) {
+      if (isShortcutCapture()) return;
+      const chord = chordFromEvent(event);
+      const assigned = getShortcuts().find((item) => item.command === "对话内搜索")?.keys;
+      const assignedHit = Boolean(chord && assigned && chord === assigned);
+      const labeledFind = (event.metaKey || event.ctrlKey) && !event.altKey && !event.shiftKey && event.key.toLowerCase() === "f";
+      if (!assignedHit && !labeledFind) return;
+      event.preventDefault();
+      setFindOpen(true);
+    }
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, []);
+  function stepFind(delta: number) {
+    if (findHits.length === 0) return;
+    setFindIndex((current) => (current + delta + findHits.length) % findHits.length);
+  }
+  function sendQueued(id: string) {
+    const picked = queue.find((item) => item.id === id);
+    if (!picked) return;
+    if (pending || matter?.state === "running") {
+      setQueue((items) => [picked, ...items.filter((item) => item.id !== id)]);
+      return;
+    }
+    setQueue((items) => items.filter((item) => item.id !== id));
+    void send(picked.text);
+  }
+  function inviteMember(name: string) {
+    if (inviting) return;
+    setInviting(name);
+    window.setTimeout(() => {
+      setCollaborators((items) => (items.includes(name) ? items : [...items, name]));
+      setInviting(null);
+      setCollabToast(`已邀请 ${name}`);
+      setInviteOpen(false);
+    }, 400);
+  }
   if (!matter) return <BlankMatter />;
   const continuing = steered || matter.state === "closed";
 
   return (
     <section className="bg-background flex min-h-0 flex-col">
-      <div className="flex items-center gap-3 border-b px-4 py-3">
+      <div className="relative flex items-center gap-3 border-b px-4 py-3">
         <h1 className="min-w-0 flex-1 truncate text-base font-semibold">{matterTitle(matter)}</h1>
         <span className="bg-accent text-accent-foreground rounded px-2 py-0.5 text-xs" title="权限在创建这件任务时已经确定">
           {permissionLabel(matter.permission)}
         </span>
         <span className="text-muted-foreground text-xs">{stateLabel(matter.state)}</span>
-        <button className="text-primary text-xs" onClick={onToggleRail}>
-          {railOpen ? "收起详情" : "打开详情"}
+        <TaskMenu matterId={matter.id} running={matter.state === "running"} title={matter.title} />
+        <button type="button" className="text-xs text-[#666]" onClick={() => setCollabOpen((open) => !open)}>
+          {collaborators.length > 0 ? "协同中" : "协作"}
+        </button>
+        <button
+          type="button"
+          className="text-xs text-[#666] disabled:opacity-40"
+          disabled={matter.state === "running" || pending === "send"}
+          title={matter.state === "running" || pending === "send" ? "请等待当前任务执行完毕后再流转" : undefined}
+          onClick={() => setHandoffOpen(true)}
+        >
+          流转
+        </button>
+        <button
+          type="button"
+          title="对话内搜索（⌘F / Ctrl+F）"
+          aria-label="对话内搜索（⌘F / Ctrl+F）"
+          className="text-xs text-[#666]"
+          onClick={() => setFindOpen(true)}
+        >
+          搜索
+        </button>
+        <button className="text-xs text-[#666]" onClick={onToggleRail}>
+          {railOpen ? "隐藏侧边栏" : "显示侧边栏"}
         </button>
       </div>
+      {findOpen ? (
+        <div className="flex flex-wrap items-center gap-2 border-b px-4 py-2 text-xs">
+          <input
+            ref={findRef}
+            aria-label="搜索对话内容"
+            placeholder="搜索对话内容"
+            value={findText}
+            className="h-8 min-w-0 flex-1 rounded-lg border border-[#e6e6e8] px-2 text-sm"
+            onChange={(event) => {
+              setFindText(event.target.value);
+              setFindIndex(0);
+            }}
+            onKeyDown={(event) => {
+              if (event.key === "Escape") {
+                event.preventDefault();
+                setFindOpen(false);
+              }
+              if (event.key === "Enter") {
+                event.preventDefault();
+                stepFind(event.shiftKey ? -1 : 1);
+              }
+            }}
+          />
+          <button type="button" onClick={() => stepFind(-1)}>上一个（Shift+Enter）</button>
+          <button type="button" onClick={() => stepFind(1)}>下一个（Enter）</button>
+          <button type="button" onClick={() => setFindOpen(false)}>关闭搜索（Esc）</button>
+          {findNeedle && findHits.length === 0 ? <span className="text-[#888]">未找到匹配内容</span> : null}
+        </div>
+      ) : null}
+      {collabOpen ? (
+        <div className="border-b px-4 py-3 text-sm">
+          <p className="font-medium">{`任务协作成员 · ${1 + collaborators.length}`}</p>
+          <p className="mt-1 text-xs text-[#888]">{`已加入协作 · ${collaborators.length}`}</p>
+          <ul className="mt-2 space-y-1">
+            <li className="flex items-center gap-2">
+              <span>经办人</span>
+              <span className="text-xs text-[#888]">所有者</span>
+            </li>
+            {collaborators.map((name) => (
+              <li key={name} className="flex items-center gap-2">
+                <span>{name}</span>
+                <span className="text-xs text-[#888]">协作者</span>
+                <button type="button" className="ml-auto text-xs text-[#666]" onClick={() => setRemoveCollab(name)}>
+                  移除协作者
+                </button>
+              </li>
+            ))}
+          </ul>
+          <div className="mt-3 flex gap-2 text-xs">
+            <button type="button" className="rounded-lg bg-[#1a1a1a] px-3 py-1.5 text-white" onClick={() => { setInviteOpen(true); setLinkCopied(false); }}>
+              邀请
+            </button>
+            <button type="button" className="rounded-lg border border-[#e6e6e8] px-3 py-1.5" onClick={() => setLinkCopied(true)}>
+              {linkCopied ? "邀请链接已复制" : "复制链接"}
+            </button>
+          </div>
+          {collabToast ? <p className="mt-2 text-xs text-[#666]">{collabToast}</p> : null}
+        </div>
+      ) : null}
+      {handoffNotice ? <p className="border-b px-4 py-2 text-xs text-[#666]">{handoffNotice}</p> : null}
+      {handoffQueued ? <p className="border-b px-4 py-2 text-xs text-[#666]">任务转交中，新消息将在转交完成后依次处理</p> : null}
       <div className="min-h-0 flex-1 space-y-3 overflow-auto p-4">
         {messages.length === 0 ? (
           <p className="text-muted-foreground py-8 text-center text-sm">还没有消息。发送后，这里显示这件云端任务的真实回复。</p>
         ) : null}
         {messages.map((item) => (
-          <article key={item.id} className="max-w-2xl">
+          <article key={item.id} data-message-id={item.id} className="max-w-2xl">
             <p className="text-muted-foreground text-xs">{speaker(item.role)}</p>
-            <p className="mt-1 text-sm leading-6">{item.text}</p>
+            <p className="mt-1 text-sm leading-6">{markedText(item.text, findOpen ? findText : "", item.id === currentHitId)}</p>
+            <div className="mt-1 flex flex-wrap gap-2 text-xs text-[#666]">
+              <button
+                type="button"
+                onClick={() => {
+                  void navigator.clipboard?.writeText(item.text);
+                  setCopiedId(item.id);
+                }}
+              >
+                {copiedId === item.id ? "已复制" : "复制 message"}
+              </button>
+              {item.role === "assistant" ? (
+                <button type="button" onClick={() => { setFeedbackId((current) => (current === item.id ? null : item.id)); setFeedbackReason(""); }}>
+                  提交反馈
+                </button>
+              ) : null}
+              {item.role === "user" ? (
+                <>
+                  <button type="button" onClick={() => rewindTo(item.id)}>
+                    回退到此版本
+                  </button>
+                  <button type="button" title="点击将重新生成内容，此会话后的内容都将被覆盖，请谨慎操作" onClick={() => setReplayId(item.id)}>
+                    重放
+                  </button>
+                </>
+              ) : null}
+            </div>
+            {item.role === "assistant" && feedbackId === item.id ? (
+              <div className="mt-2 flex flex-wrap gap-2 text-xs">
+                {["理解错误", "上下文错误", "回答不清晰", "代码错误", "回答不专业", "代码格式错误", "其他"].map((reason) => (
+                  <button key={reason} type="button" aria-pressed={feedbackReason === reason} className={cn("rounded-full px-2 py-1", feedbackReason === reason && "bg-[#ececee] font-medium")} onClick={() => setFeedbackReason(reason)}>
+                    {reason}
+                  </button>
+                ))}
+                <button
+                  type="button"
+                  disabled={!feedbackReason}
+                  onClick={() => {
+                    setFeedbackDone(item.id);
+                    setFeedbackId(null);
+                  }}
+                >
+                  提交反馈
+                </button>
+              </div>
+            ) : null}
+            {feedbackDone === item.id ? <p className="mt-1 text-xs text-[#666]">反馈提交成功，感谢您的反馈！</p> : null}
           </article>
         ))}
         {approval && approval.status === "pending" ? (
@@ -219,42 +580,200 @@ function Timeline({ railOpen, onToggleRail }: { railOpen: boolean; onToggleRail:
           </div>
         ) : null}
         {error ? <p className="text-destructive text-xs">{error}</p> : null}
+        {replayId ? (
+          <div className="bg-card max-w-xl rounded-lg border p-3 text-sm">
+            <p className="font-medium">重放</p>
+            <p className="mt-2 text-[#666]">点击将重新生成内容，此会话后的内容都将被覆盖，请谨慎操作</p>
+            <div className="mt-3 flex gap-2">
+              <button type="button" onClick={() => setReplayId(null)}>取消</button>
+              <Button
+                type="button"
+                onClick={() => {
+                  replayFrom(replayId);
+                  setReplayId(null);
+                }}
+              >
+                重放
+              </Button>
+            </div>
+          </div>
+        ) : null}
       </div>
+      {queue.length > 0 ? (
+        <div className="border-t px-3 py-2 text-sm">
+          <div className="flex items-center gap-2">
+            <button type="button" className="font-medium" onClick={() => setQueueOpen(true)}>队列中</button>
+            {queueOpen ? (
+              <button type="button" className="ml-auto text-xs text-[#666]" onClick={() => setQueueOpen(false)}>收起队列</button>
+            ) : null}
+          </div>
+          {queueOpen ? (
+            <ul className="mt-2 space-y-2">
+              {queue.map((item) => (
+                <li key={item.id}>
+                  <p>{`我的：${item.text}`}</p>
+                  <div className="mt-1 flex gap-2 text-xs text-[#666]">
+                    <button type="button" onClick={() => { setEditingId(item.id); setEditText(item.text); }}>编辑</button>
+                    <button type="button" onClick={() => setQueue((items) => items.filter((entry) => entry.id !== item.id))}>删除</button>
+                    <button type="button" onClick={() => sendQueued(item.id)}>立刻发送</button>
+                  </div>
+                </li>
+              ))}
+            </ul>
+          ) : null}
+        </div>
+      ) : null}
       {role === "经办人" ? (
         <form
-          className="border-t p-3"
+          ref={composerRef}
+          className="relative z-30 border-t bg-[#f7f7f8] p-3"
           onSubmit={(event) => {
             event.preventDefault();
-            if (!text.trim() || pending) return;
-            const submit = continuing ? steer(text) : send(text);
+            const trimmed = text.trim();
+            if (!trimmed) return;
+            if (handoffBusy || pending || matter.state === "running") {
+              setQueue((items) => [...items, { id: `q-${Date.now()}`, text: trimmed }]);
+              setQueueOpen(true);
+              if (handoffBusy) setHandoffQueued(true);
+              setText("");
+              return;
+            }
+            const submit = continuing ? steer(trimmed) : send(trimmed);
             void submit.then(() => {
               if (!useMind.getState().error) setText("");
             });
           }}
         >
           <div className="bg-card rounded-xl border p-3">
+            <TaskComposerExtras matterId={matter.id} text={text} setText={setText} />
+            <ComposerSuggest matterId={matter.id} text={text} setText={setText} />
+            {attachedFile ? <p className="mb-2 text-xs text-[#666]">已添加到任务 · {attachedFile}</p> : null}
             <Area
               rows={2}
               value={text}
-              placeholder={continuing ? "接着说，会沿着这件云端任务改方向" : "给这件云端任务发一句话"}
+              placeholder="今天帮你做些什么？ @ 添加上下文，/调用技能与指令"
               onChange={(event) => setText(event.target.value)}
             />
-            <div className="mt-2 flex items-center gap-2">
-              <p className="text-muted-foreground mr-auto text-[11px]">直接做。运行时没有单独的计划模式，所以这里不能先计划。</p>
+            <div className="mt-2 flex items-center gap-2 text-xs text-[#666]">
+              <button type="button" className="rounded-md px-1 py-1 hover:bg-[#f3f3f4]" onClick={() => setVoiceNotice("当前环境不支持语音输入。")}>
+                语音输入
+              </button>
+              <span className="rounded-md px-1 py-1">云端工作空间</span>
+              <ModelPicker
+                value={model}
+                onChange={(next) => {
+                  if (next !== model) setModelNotice(`模型已从 ${model} 更改为 ${next}`);
+                  setModel(next);
+                }}
+              />
+              {model !== "Auto" ? <span>使用外部模型，注意数据安全</span> : null}
+              {modelNotice ? <span title="在对话中途切换模型会使上下文缓存失效，积分消耗增加，背景信息可能会自动压缩，降低性能表现">{modelNotice}</span> : null}
+              <span className="rounded-md px-1 py-1" title="权限在创建这件任务时已经确定">
+                {matter.permission === "danger-full-access" ? "允许完全访问" : matter.permission === "read-only" ? "云端只读" : "默认权限"}
+              </span>
+              <div className="ml-auto flex items-center gap-2">
               {matter.state === "running" || pending === "send" ? (
                 <Button type="button" variant="outline" disabled={pending === "abort"} onClick={() => void stop()}>
                   {pending === "abort" ? "正在停止…" : "停止"}
                 </Button>
               ) : null}
-              <Button type="submit" disabled={pending === "send" || pending === "steer" || matter.state === "awaiting_approval"}>
+              <Button type="submit" disabled={matter.state === "awaiting_approval" || !text.trim()}>
                 {pending === "send" || pending === "steer" ? "发送中…" : continuing ? "接着说" : "发送"}
               </Button>
+              </div>
             </div>
           </div>
         </form>
       ) : (
         <p className="text-muted-foreground border-t p-3 text-xs">当前角色只查看这件任务的消息。确认卡仍可点。</p>
       )}
+      {voiceNotice ? <p className="border-t px-3 py-2 text-xs text-[#666]">{voiceNotice}</p> : null}
+      {pending === "send" && uiPrefs.welcome ? (
+        <p className="flex items-center gap-3 border-t px-3 py-2 text-xs text-[#666]">
+          <span>思考中</span>
+          <button type="button" className="text-[#888]" onClick={() => setUiPrefs({ welcome: false })}>不再显示</button>
+        </p>
+      ) : null}
+      {pending === "send" && uiPrefs.fileChanges && matter && mockArtifacts(matter.id).some((file) => text.includes(file.name)) ? (
+        <p className="border-t px-3 py-2 text-xs text-[#666]">正在写入文件</p>
+      ) : null}
+      {inviteOpen ? (
+        <div className="fixed inset-0 z-30 flex items-center justify-center bg-black/30 p-4">
+          <div className="w-full max-w-sm rounded-2xl bg-white p-5 text-sm" role="dialog" aria-label="邀请团队成员协作">
+            <p className="font-medium">邀请团队成员协作</p>
+            <p className="mt-2 text-xs text-[#888]">非项目成员申请加入后方可进入协作</p>
+            <ul className="mt-3 space-y-2">
+              {team.map((name) => (
+                <li key={name} className="flex items-center gap-2">
+                  <span>{name}</span>
+                  <button type="button" className="ml-auto text-[#666]" disabled={inviting !== null} onClick={() => inviteMember(name)}>
+                    {inviting === name ? "邀请中..." : "邀请"}
+                  </button>
+                </li>
+              ))}
+            </ul>
+            <button type="button" className="mt-4 text-xs text-[#666]" onClick={() => setInviteOpen(false)}>
+              取消
+            </button>
+          </div>
+        </div>
+      ) : null}
+      {handoffOpen ? (
+        <HandoffDialog
+          taskTitle={matterTitle(matter)}
+          artifacts={mockArtifacts(matter.id)}
+          rounds={messages.filter((item) => item.role === "user").length}
+          onClose={() => setHandoffOpen(false)}
+          onDone={(notice) => {
+            setHandoffOpen(false);
+            setHandoffNotice(notice);
+            setHandoffBusy(true);
+          }}
+        />
+      ) : null}
+      {editingId ? (
+        <div className="fixed inset-0 z-30 flex items-center justify-center bg-black/30 p-4">
+          <div className="w-full max-w-sm rounded-2xl bg-white p-5 text-sm" role="dialog" aria-label="编辑">
+            <p className="font-medium">编辑</p>
+            <textarea aria-label="编辑" className="mt-3 w-full rounded-lg border border-[#e6e6e8] px-3 py-2" rows={3} value={editText} onChange={(event) => setEditText(event.target.value)} />
+            <div className="mt-4 flex justify-end gap-3">
+              <button type="button" onClick={() => setEditingId(null)}>取消</button>
+              <button
+                type="button"
+                onClick={() => {
+                  const id = editingId;
+                  setQueue((items) => items.map((item) => (item.id === id ? { ...item, text: editText } : item)));
+                  setEditingId(null);
+                }}
+              >
+                确定
+              </button>
+            </div>
+          </div>
+        </div>
+      ) : null}
+      {removeCollab ? (
+        <div className="fixed inset-0 z-30 flex items-center justify-center bg-black/30 p-4">
+          <div className="w-full max-w-sm rounded-2xl bg-white p-5 text-sm" role="dialog" aria-label="移除协作者">
+            <p className="font-medium">移除协作者</p>
+            <p className="mt-2 text-[#666]">{`确定将「${removeCollab}」从任务协作中移除吗？移除后对方将无法继续参与本任务。`}</p>
+            <div className="mt-4 flex justify-end gap-3">
+              <button type="button" onClick={() => setRemoveCollab(null)}>取消</button>
+              <button
+                type="button"
+                onClick={() => {
+                  const name = removeCollab;
+                  setCollaborators((items) => items.filter((item) => item !== name));
+                  setRemoveCollab(null);
+                  setCollabToast("已移除协作者");
+                }}
+              >
+                移除协作者
+              </button>
+            </div>
+          </div>
+        </div>
+      ) : null}
     </section>
   );
 }
@@ -286,11 +805,19 @@ function Inspector() {
   const matter = useMind((s) => s.matters.find((item) => item.id === s.activeId));
   const activity = useMind((s) => (s.activeId && s.activity[s.activeId]) || emptyActivity);
   const approval = useMind((s) => (s.activeId ? (s.approvals[s.activeId] ?? null) : null));
-  const [tab, setTab] = useState<RailTab>("轨迹");
+  const [tab, setTab] = useState<RailTab>("产物");
+  const [selectedId, setSelectedId] = useState<string | null>(null);
+  const [followed, setFollowed] = useState(false);
+  const [shareOpen, setShareOpen] = useState(false);
+  const [copied, setCopied] = useState(false);
+  const [notice, setNotice] = useState<string | null>(null);
+  const published = useSyncExternalStore(subscribePublishedApps, getPublishedApps, getPublishedApps);
+  const items = matter ? mockArtifacts(matter.id) : [];
+  const selected = items.find((item) => item.id === selectedId) ?? null;
   if (!matter) {
     return (
       <aside className="text-muted-foreground bg-card border-l p-4 text-sm">
-        创建之后，右边是这件云端任务的轨迹和文件。文件不在你的电脑上。
+        创建之后，右边是这件云端任务的产物和文件。文件不在你的电脑上。
       </aside>
     );
   }
@@ -311,7 +838,7 @@ function Inspector() {
         ))}
       </div>
       <div className="min-h-0 flex-1 overflow-auto p-3">
-        {tab === "轨迹" ? (
+        {tab === "任务进程" ? (
           <>
             {waiting ? (
               <p className="bg-primary/10 text-primary mb-3 rounded px-2 py-1.5 text-xs">
@@ -329,27 +856,481 @@ function Inspector() {
               ))}
             </ol>
           </>
+        ) : tab === "概览" ? (
+          <div>
+            <p className="text-sm font-medium">{matterTitle(matter)}</p>
+            <p className="text-muted-foreground mt-2 text-xs leading-5">
+              {stateLabel(matter.state)} · {permissionLabel(matter.permission)}
+            </p>
+          </div>
         ) : (
-          <CloudEmpty tab={tab} />
+          <ArtifactPane
+            tab={tab === "文件" ? "文件" : "产物"}
+            items={items}
+            selected={selected}
+            followed={followed}
+            shareOpen={shareOpen}
+            copied={copied}
+            notice={notice}
+            onSelect={(id) => {
+              setSelectedId(id);
+              setTab("产物");
+              setShareOpen(false);
+              setCopied(false);
+            }}
+            onFollow={() => setFollowed((value) => !value)}
+            onReview={() => setNotice("审查")}
+            onDownload={(name) => {
+              setNotice("下载中...");
+              window.setTimeout(() => setNotice(`已开始下载「${name}」`), 400);
+            }}
+            onPublish={() => {
+              if (!selected) return;
+              setNotice("正在发布应用…");
+              window.setTimeout(() => {
+                publishApp({ id: selected.id, name: selected.name, matterId: matter.id, taskTitle: matter.title });
+                setNotice("发布成功");
+              }, 400);
+            }}
+            published={published.some((item) => item.id === selected?.id && item.status === "已发布")}
+            onShare={() => {
+              setShareOpen(true);
+              setCopied(false);
+            }}
+            onCopy={() => {
+              if (!selected) return;
+              publishFileShare({ matterId: matter.id, taskTitle: matter.title, fileId: selected.id, name: selected.name });
+              const link = `${location.origin}/task/${matter.id}?file=${encodeURIComponent(selected.name)}`;
+              void navigator.clipboard.writeText(link).finally(() => setCopied(true));
+            }}
+            onCloseShare={() => setShareOpen(false)}
+          />
         )}
       </div>
     </aside>
   );
 }
 
-function CloudEmpty({ tab }: { tab: Exclude<RailTab, "轨迹"> }) {
-  const detail =
-    tab === "产物"
-      ? "产物会放在这件任务的云端空间里。"
-      : tab === "全部文件"
-        ? "全部文件都在云端，没有本机目录可以打开。"
-        : tab === "变更"
-          ? "变更记录的是云端文件，不是你磁盘上的差异。"
-          : "预览要等云端文件出现之后才能看。这里没有内置的本机浏览器。";
+function ArtifactPane({
+  tab,
+  items,
+  selected,
+  followed,
+  shareOpen,
+  copied,
+  notice,
+  onSelect,
+  onFollow,
+  onReview,
+  onDownload,
+  onShare,
+  onCopy,
+  onCloseShare,
+  onPublish,
+  published,
+}: {
+  tab: "产物" | "文件";
+  items: { id: string; name: string; kind: string; body: string }[];
+  selected: { id: string; name: string; kind: string; body: string } | null;
+  followed: boolean;
+  shareOpen: boolean;
+  copied: boolean;
+  notice: string | null;
+  onSelect: (id: string) => void;
+  onFollow: () => void;
+  onReview: () => void;
+  onDownload: (name: string) => void;
+  onShare: () => void;
+  onCopy: () => void;
+  onCloseShare: () => void;
+  onPublish: () => void;
+  published: boolean;
+}) {
+  if (items.length === 0) {
+    return <p className="text-muted-foreground text-xs leading-5">{tab === "产物" ? "请选择一个产物查看详情" : "暂无内容"}</p>;
+  }
+  if (tab === "文件" || !selected) {
+    return (
+      <div>
+        {tab === "产物" && !selected ? <p className="text-muted-foreground mb-2 text-xs">请选择一个产物查看详情</p> : null}
+        <ul className="space-y-1">
+          {items.map((item) => (
+            <li key={item.id}>
+              <button type="button" className="w-full rounded-lg px-2 py-2 text-left hover:bg-[#f6f6f7]" onClick={() => onSelect(item.id)}>
+                <span className="text-xs text-[#999]">{item.kind}</span>
+                <span className="mt-1 block text-sm">{item.name}</span>
+              </button>
+            </li>
+          ))}
+        </ul>
+        {notice ? <p className="text-muted-foreground mt-3 text-xs">{notice}</p> : null}
+      </div>
+    );
+  }
   return (
     <div>
-      <p className="text-sm font-medium">{tab}</p>
-      <p className="text-muted-foreground mt-2 text-xs leading-5">{detail}控制面还没有文件接口，所以这里是空的。</p>
+      <button type="button" className="text-xs text-[#666]" onClick={() => onSelect("")}>
+        产物
+      </button>
+      <p className="mt-2 text-sm font-medium">{selected.name}</p>
+      <p className="text-muted-foreground mt-1 text-xs">{selected.kind}</p>
+      <p className="mt-3 text-sm leading-6">{notice === "审查" ? selected.body : selected.body}</p>
+      <div className="mt-3 flex flex-wrap gap-2 text-xs">
+        <button type="button" className="rounded-lg bg-[#f3f3f4] px-2 py-1" aria-pressed={followed} onClick={onFollow}>
+          关注
+        </button>
+        <button type="button" className="rounded-lg bg-[#f3f3f4] px-2 py-1" onClick={onReview}>
+          审查
+        </button>
+        <button type="button" className="rounded-lg bg-[#f3f3f4] px-2 py-1" onClick={onShare}>
+          分享
+        </button>
+        <button type="button" className="rounded-lg bg-[#f3f3f4] px-2 py-1" onClick={() => onDownload(selected.name)}>
+          下载
+        </button>
+        <button type="button" className="rounded-lg bg-[#f3f3f4] px-2 py-1" onClick={onPublish}>
+          {published ? "更新" : "发布"}
+        </button>
+      </div>
+      {shareOpen ? (
+        <div className="mt-3 rounded-xl border border-[#ececee] p-3 text-xs">
+          <p className="font-medium">分享</p>
+          <p className="text-muted-foreground mt-1">任何有此链接的人都能查看</p>
+          <div className="mt-2 flex justify-end gap-2">
+            <button type="button" onClick={onCloseShare}>取消</button>
+            <button type="button" className="rounded-lg bg-[#1a1a1a] px-2 py-1 text-white" onClick={onCopy}>
+              {copied ? "链接已复制到剪贴板" : "复制链接"}
+            </button>
+          </div>
+        </div>
+      ) : null}
+      {notice && notice !== "审查" ? <p className="text-muted-foreground mt-3 text-xs">{notice}</p> : null}
     </div>
   );
+}
+
+const ADD_ITEMS = ["添加文件", "引用对话中的文件", "应用", "模式", "专家", "技能", "连接器"] as const;
+
+function TaskComposerExtras({ matterId, text, setText }: { matterId: string; text: string; setText: (value: string) => void }) {
+  const catalog = useMind((s) => s.catalog);
+  const matters = useMind((s) => s.matters);
+  const [addOpen, setAddOpen] = useState(false);
+  const [addPanel, setAddPanel] = useState<(typeof ADD_ITEMS)[number] | null>(null);
+  const [cloudOpen, setCloudOpen] = useState(false);
+  const sessionFiles = mockArtifacts(matterId);
+  const cloudFiles = matters.flatMap((matter) => mockArtifacts(matter.id));
+
+  function attach(label: string) {
+    setText(text.includes(label) ? text : `${label}${text ? ` ${text}` : ""}`);
+    setAddOpen(false);
+    setAddPanel(null);
+  }
+
+  return (
+    <div className="relative mb-2">
+      <button
+        type="button"
+        aria-label="更多操作"
+        aria-expanded={addOpen}
+        className="flex h-8 w-8 items-center justify-center rounded-lg text-base hover:bg-[#f3f3f4]"
+        onClick={() => {
+          setAddOpen((open) => !open);
+          setAddPanel(null);
+        }}
+      >
+        +
+      </button>
+      {addOpen ? (
+        <div className="absolute bottom-10 left-0 z-20 w-52 rounded-xl border border-[#ececee] bg-white p-1 shadow-lg">
+          {ADD_ITEMS.map((item) => (
+            <button
+              key={item}
+              type="button"
+              className="block w-full rounded-lg px-3 py-2 text-left text-sm hover:bg-[#f6f6f7]"
+              onClick={() => {
+                if (item === "添加文件") {
+                  setCloudOpen(true);
+                  setAddOpen(false);
+                  setAddPanel(null);
+                  return;
+                }
+                setAddPanel(item);
+              }}
+            >
+              {item}
+            </button>
+          ))}
+          {addPanel === "专家" ? <MiniList items={catalog.agents.map((item) => item.name)} empty="暂无可用专家" onPick={(name) => attach(`@${name}`)} /> : null}
+          {addPanel === "技能" ? <MiniList items={catalog.skills.map((item) => item.name)} empty="暂无可用技能" onPick={(name) => attach(`/${name}`)} /> : null}
+          {addPanel === "连接器" ? <MiniList items={catalog.mcps.map((item) => item.name)} empty="暂无可用连接器" onPick={(name) => attach(name)} /> : null}
+          {addPanel === "模式" ? <MiniList items={["计划", "仅问答"]} empty="" onPick={(name) => attach(name)} /> : null}
+          {addPanel === "应用" ? (
+            <AppMenu
+              matterId={matterId}
+              onPick={(app) => attach(app.name)}
+            />
+          ) : null}
+          {addPanel === "引用对话中的文件" ? (
+            <div className="border-t border-[#f0f0f1] px-1 py-1">
+              <p className="px-2 py-1 text-xs text-[#999]">对话中的文件</p>
+              {sessionFiles.length === 0 ? <p className="px-2 py-1 text-xs text-[#888]">当前对话中暂无文件</p> : null}
+              {sessionFiles.map((file) => (
+                <button key={file.id} type="button" className="block w-full rounded-lg px-2 py-1.5 text-left text-sm hover:bg-[#f6f6f7]" onClick={() => attach(file.name)}>
+                  {file.name}
+                </button>
+              ))}
+            </div>
+          ) : null}
+        </div>
+      ) : null}
+      {cloudOpen ? (
+        <CloudFileDialog
+          files={cloudFiles.map((file) => file.name)}
+          onClose={() => setCloudOpen(false)}
+          onAdd={(name) => {
+            attach(name);
+            setCloudOpen(false);
+          }}
+        />
+      ) : null}
+    </div>
+  );
+}
+
+export function CloudFileDialog({ files, onClose, onAdd }: { files: string[]; onClose: () => void; onAdd: (name: string) => void }) {
+  const [query, setQuery] = useState("");
+  const [picked, setPicked] = useState<string | null>(null);
+  const needle = query.trim();
+  const visible = files.filter((name) => !needle || name.includes(needle));
+  return (
+    <div className="fixed inset-0 z-30 flex items-center justify-center bg-black/30 p-4">
+      <div className="w-full max-w-md rounded-2xl bg-white p-5 text-sm" role="dialog" aria-label="从我的云端网盘中选择">
+        <p className="font-medium">从我的云端网盘中选择</p>
+        <input
+          aria-label="搜索文件名"
+          placeholder="搜索文件名"
+          className="mt-3 h-9 w-full rounded-lg border border-[#e6e6e8] px-3"
+          value={query}
+          onChange={(event) => setQuery(event.target.value)}
+        />
+        {visible.length === 0 ? <p className="mt-3 text-[#888]">{needle ? "没有找到匹配的文件" : "文件夹为空"}</p> : null}
+        <ul className="mt-3 max-h-48 space-y-1 overflow-auto">
+          {visible.map((name) => (
+            <li key={name}>
+              <button
+                type="button"
+                className={cn("block w-full rounded-lg px-2 py-1.5 text-left", picked === name ? "bg-[#ececee]" : "hover:bg-[#f6f6f7]")}
+                onClick={() => setPicked(name)}
+              >
+                {name}
+              </button>
+            </li>
+          ))}
+        </ul>
+        <div className="mt-4 flex justify-end gap-2">
+          <button type="button" onClick={onClose}>
+            取消
+          </button>
+          <button type="button" className="rounded-lg bg-[#1a1a1a] px-3 py-1.5 text-white disabled:opacity-40" disabled={!picked} onClick={() => picked && onAdd(picked)}>
+            添加到任务
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function readToken(text: string) {
+  const mention = text.match(/(?:^|\s)@([^\s@]*)$/);
+  if (mention) return { kind: "mention" as const, query: mention[1] };
+  const slash = text.match(/(?:^|\s)\/([^\s/]*)$/);
+  if (slash) return { kind: "slash" as const, query: slash[1] };
+  return null;
+}
+
+function applyToken(text: string, kind: "mention" | "slash", insertion: string) {
+  const pattern = kind === "mention" ? /(?:^|\s)@[^\s@]*$/ : /(?:^|\s)\/[^\s/]*$/;
+  return text.replace(pattern, (chunk) => `${/^\s/.test(chunk) ? chunk[0] : ""}${insertion}`);
+}
+
+export function ComposerSuggest({ matterId, text, setText }: { matterId: string | null; text: string; setText: (value: string) => void }) {
+  const catalog = useMind((s) => s.catalog);
+  const apps = useSyncExternalStore(subscribePublishedApps, getPublishedApps, getPublishedApps);
+  const token = readToken(text);
+  useEffect(() => {
+    function openMention() {
+      if (readToken(text)?.kind === "mention") return;
+      setText(`${text}@`);
+    }
+    function openSlash() {
+      if (readToken(text)?.kind === "slash") return;
+      setText(`${text}/`);
+    }
+    window.addEventListener("mind-open-mention", openMention);
+    window.addEventListener("mind-open-slash", openSlash);
+    return () => {
+      window.removeEventListener("mind-open-mention", openMention);
+      window.removeEventListener("mind-open-slash", openSlash);
+    };
+  }, [text, setText]);
+  if (!token) return null;
+  const query = token.query.trim();
+  const files = mockArtifacts(matterId ?? "").filter((file) => !query || file.name.includes(query));
+  const visibleApps = apps.filter((app) => !query || app.name.includes(query));
+  const agents = catalog.agents.filter((agent) => !query || agent.name.includes(query));
+  const skills = catalog.skills.filter((skill) => !query || skill.name.includes(query));
+  function pick(insertion: string) {
+    if (!token) return;
+    setText(`${applyToken(text, token.kind, insertion)} `);
+  }
+  return (
+    <div className="relative z-20 h-0">
+    <div className="absolute bottom-full left-0 z-20 mb-8 w-72 rounded-xl border border-[#ececee] bg-white p-2 text-sm shadow-lg" role="listbox" aria-label={token.kind === "mention" ? "唤起选择器" : "唤起斜杠命令"}>
+      {token.kind === "mention" ? (
+        <>
+          <p className="px-2 py-1 text-xs text-[#888]">选择文件和文件夹</p>
+          <p className="px-2 py-1 text-xs text-[#999]">对话中的文件</p>
+          <p className="px-2 pb-1 text-xs text-[#999]">添加文件作为回答背景</p>
+          {mockArtifacts(matterId ?? "").length === 0 ? <p className="px-2 py-1 text-xs text-[#888]">当前对话中暂无文件</p> : null}
+          {mockArtifacts(matterId ?? "").length > 0 && files.length === 0 ? <p className="px-2 py-1 text-xs text-[#888]">无搜索结果</p> : null}
+          {files.map((file) => (
+            <button key={file.id} type="button" className="block w-full rounded-lg px-2 py-1.5 text-left hover:bg-[#f6f6f7]" onClick={() => pick(file.name)}>
+              {file.name}
+            </button>
+          ))}
+          <p className="mt-1 px-2 py-1 text-xs text-[#888]">应用</p>
+          {apps.length === 0 ? <p className="px-2 py-1 text-xs text-[#888]">当前暂无可选应用</p> : null}
+          {apps.length > 0 && visibleApps.length === 0 ? <p className="px-2 py-1 text-xs text-[#888]">无搜索结果</p> : null}
+          {visibleApps.map((app) => (
+            <button key={app.id} type="button" className="block w-full rounded-lg px-2 py-1.5 text-left hover:bg-[#f6f6f7]" onClick={() => pick(app.name)}>
+              {app.name}
+            </button>
+          ))}
+          <p className="mt-1 px-2 py-1 text-xs text-[#888]">助理</p>
+          <p className="px-2 pb-1 text-xs text-[#999]">选择助理协同推进任务</p>
+          {agents.length === 0 ? <p className="px-2 py-1 text-xs text-[#888]">未找到助理</p> : null}
+          {agents.map((agent) => (
+            <button key={agent.id} type="button" className="flex w-full items-center rounded-lg px-2 py-1.5 text-left hover:bg-[#f6f6f7]" onClick={() => pick(`@${agent.name}`)}>
+              <span>{agent.name}</span>
+              <span className="ml-auto text-xs text-[#888]">空闲</span>
+            </button>
+          ))}
+        </>
+      ) : (
+        <>
+          <p className="px-2 py-1 text-xs text-[#888]">技能</p>
+          {catalog.skills.length === 0 ? <p className="px-2 py-1 text-xs text-[#888]">暂无可用技能</p> : null}
+          {catalog.skills.length > 0 && skills.length === 0 ? <p className="px-2 py-1 text-xs text-[#888]">未找到技能</p> : null}
+          {skills.map((skill) => (
+            <button key={skill.id} type="button" className="block w-full rounded-lg px-2 py-1.5 text-left hover:bg-[#f6f6f7]" onClick={() => pick(`/${skill.name}`)}>
+              {skill.name}
+            </button>
+          ))}
+        </>
+      )}
+    </div>
+    </div>
+  );
+}
+
+function MiniList({ items, empty, onPick }: { items: string[]; empty: string; onPick: (name: string) => void }) {
+  if (items.length === 0) return <p className="px-3 py-2 text-xs text-[#888]">{empty}</p>;
+  return (
+    <ul className="max-h-36 overflow-auto border-t border-[#f0f0f1] px-1 py-1">
+      {items.map((item) => (
+        <li key={item}>
+          <button type="button" className="block w-full rounded-lg px-2 py-1.5 text-left text-sm hover:bg-[#f6f6f7]" onClick={() => onPick(item)}>
+            {item}
+          </button>
+        </li>
+      ))}
+    </ul>
+  );
+}
+
+function TaskMenu({ matterId, running, title }: { matterId: string; running: boolean; title: string }) {
+  const navigate = useNavigate();
+  const renameMatter = useMind((s) => s.renameMatter);
+  const archiveMatter = useMind((s) => s.archiveMatter);
+  const removeMatter = useMind((s) => s.removeMatter);
+  const [open, setOpen] = useState(false);
+  const [dialog, setDialog] = useState<"rename" | "share" | "archive" | "delete" | null>(null);
+  const [renameValue, setRenameValue] = useState(title);
+
+  return (
+    <>
+      <button type="button" aria-label="任务操作" aria-expanded={open} className="text-xs text-[#666]" onClick={() => setOpen((value) => !value)}>
+        更多
+      </button>
+      {open ? (
+        <div className="absolute right-16 top-12 z-20 w-36 rounded-xl border border-[#ececee] bg-white p-1 shadow-lg">
+          <MenuButton label="重命名" onClick={() => { setRenameValue(title); setDialog("rename"); setOpen(false); }} />
+          <MenuButton label="分享任务" onClick={() => { setDialog("share"); setOpen(false); }} />
+          <MenuButton label="归档任务" disabled={running} title={running ? "任务进行中，无法归档" : undefined} onClick={() => { setDialog("archive"); setOpen(false); }} />
+          <MenuButton label="删除任务" onClick={() => { setDialog("delete"); setOpen(false); }} />
+        </div>
+      ) : null}
+      {dialog === "rename" ? (
+        <Overlay>
+          <form
+            className="w-full max-w-sm rounded-2xl bg-white p-5"
+            onSubmit={(event) => {
+              event.preventDefault();
+              renameMatter(matterId, renameValue);
+              setDialog(null);
+            }}
+          >
+            <p className="font-medium">重命名任务</p>
+            <p className="mt-2 text-xs text-[#888]">原名称：{title}</p>
+            <input aria-label="任务名称" value={renameValue} className="mt-3 h-9 w-full rounded-lg border border-[#e6e6e8] px-3 text-sm" onChange={(event) => setRenameValue(event.target.value)} />
+            <div className="mt-4 flex justify-end gap-2 text-sm">
+              <button type="button" onClick={() => setDialog(null)}>取消</button>
+              <button type="submit" className="rounded-lg bg-[#1a1a1a] px-3 py-1.5 text-white">保存</button>
+            </div>
+          </form>
+        </Overlay>
+      ) : null}
+      {dialog === "share" ? (
+        <Overlay>
+          <ShareTaskDialog matterId={matterId} title={title} onClose={() => setDialog(null)} />
+        </Overlay>
+      ) : null}
+      {dialog === "archive" ? (
+        <Overlay>
+          <div className="w-full max-w-sm rounded-2xl bg-white p-5 text-sm">
+            <p className="font-medium">归档任务</p>
+            <p className="mt-2 text-[#666]">确认将该任务归档吗？</p>
+            <div className="mt-4 flex justify-end gap-2">
+              <button type="button" onClick={() => setDialog(null)}>取消</button>
+              <button type="button" className="rounded-lg bg-[#1a1a1a] px-3 py-1.5 text-white" onClick={() => { archiveMatter(matterId); navigate("/"); }}>确认归档</button>
+            </div>
+          </div>
+        </Overlay>
+      ) : null}
+      {dialog === "delete" ? (
+        <Overlay>
+          <div className="w-full max-w-sm rounded-2xl bg-white p-5 text-sm">
+            <p className="font-medium">删除任务</p>
+            <p className="mt-2 text-[#666]">确认后将从列表中删除任务，请确认是否删除？</p>
+            <div className="mt-4 flex justify-end gap-2">
+              <button type="button" onClick={() => setDialog(null)}>取消</button>
+              <button type="button" className="rounded-lg bg-[#1a1a1a] px-3 py-1.5 text-white" onClick={() => { removeMatter(matterId); navigate("/"); }}>确认删除</button>
+            </div>
+          </div>
+        </Overlay>
+      ) : null}
+    </>
+  );
+}
+
+function MenuButton({ label, onClick, disabled, title }: { label: string; onClick: () => void; disabled?: boolean; title?: string }) {
+  return (
+    <button type="button" disabled={disabled} title={title} className="block w-full rounded-lg px-3 py-2 text-left text-sm hover:bg-[#f6f6f7] disabled:opacity-40" onClick={onClick}>
+      {label}
+    </button>
+  );
+}
+
+function Overlay({ children }: { children: ReactNode }) {
+  return <div className="fixed inset-0 z-40 flex items-center justify-center bg-black/30 p-4">{children}</div>;
 }
