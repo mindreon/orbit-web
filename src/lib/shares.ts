@@ -1,7 +1,5 @@
 /** 分享记录只留在这次打开的页面里。链接指向云端任务，不写本机文件。 */
 
-import { mockArtifacts } from "./mockRooms";
-
 export type SharedTask = {
   matterId: string;
   title: string;
@@ -55,9 +53,6 @@ export function publishTaskShare(matterId: string, title: string) {
   const sharedAt = today();
   const link = taskShareLink(matterId);
   tasks = [{ matterId, title, sharedAt, link }, ...tasks.filter((item) => item.matterId !== matterId)];
-  for (const artifact of mockArtifacts(matterId)) {
-    publishFileShare({ matterId, taskTitle: title, fileId: artifact.id, name: artifact.name, sharedAt });
-  }
   emit();
   return link;
 }

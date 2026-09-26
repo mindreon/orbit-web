@@ -1,9 +1,8 @@
 import { useState } from "react";
-import { mockArtifacts } from "../lib/mockRooms";
 import { publishTaskShare, taskShareLink } from "../lib/shares";
 
 export function ShareTaskDialog({ matterId, title, onClose }: { matterId: string; title: string; onClose: () => void }) {
-  const files = mockArtifacts(matterId);
+  const files: { id: string; name: string }[] = [];
   const [status, setStatus] = useState<"idle" | "generating" | "copied" | "failed">("idle");
 
   return (

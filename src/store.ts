@@ -7,6 +7,10 @@ import {
   listActivity,
   listApprovals,
   listMessages,
+  describeRoomFailure,
+  isCallerAbort,
+  roomCreateAlert,
+  type RoomCreateAlert,
   listRooms,
   postMessage,
   steerRoom,
@@ -15,7 +19,6 @@ import {
   type ChatMessage,
   type Room,
 } from "./lib/rooms";
-import { isMockRoom, MOCK_MATTERS, mockActivity, mockApproval, mockMessages } from "./lib/mockRooms";
 import {
   defaultEquipment,
   seedCatalog,
@@ -60,7 +63,7 @@ interface MindState {
   loadActivity: (id: string) => Promise<void>;
   loadApproval: (id: string) => Promise<void>;
   loadRoomDetail: (id: string) => Promise<void>;
-  createMatter: (text: string, permission: PermissionPreset) => Promise<void>;
+  createMatter: (text: string, permission: PermissionPreset) => Promise<{ createdId: string | null; alert: RoomCreateAlert | null }>;
   startBlank: () => void;
   renameMatter: (id: string, title: string) => void;
   archiveMatter: (id: string) => void;
@@ -158,7 +161,7 @@ export const useMind = create<MindState>((set, get) => ({
   setThread: (agentId) => set({ threadAgentId: agentId, reading: null }),
   setReading: (reading) => set({ reading }),
   loadRooms: async () => {
-    set({ loading: true, error: null });
+    set({ loading: true });
     try {
       const body = await listRooms();
       const previous = new Map(get().matters.map((matter) => [matter.id, matter]));
@@ -168,27 +171,29 @@ export const useMind = create<MindState>((set, get) => ({
       const { activeId, composing } = get();
       const stillThere = activeId !== null && matters.some((matter) => matter.id === activeId);
       const nextId = composing ? null : stillThere ? activeId : (matters[0]?.id ?? null);
-      set({ matters, activeId: nextId, loading: false });
+      set({ matters, activeId: nextId, loading: false, error: null });
       if (nextId) await get().loadRoomDetail(nextId);
-    } catch {
-      const previous = new Map(get().matters.map((matter) => [matter.id, matter]));
-      const hidden = new Set(get().hiddenIds);
-      const seeded = MOCK_MATTERS.filter((matter) => !hidden.has(matter.id)).map((matter) => previous.get(matter.id) ?? matter);
-      const extras = get().matters.filter((matter) => isMockRoom(matter.id) && !seeded.some((item) => item.id === matter.id));
-      set({ matters: [...extras, ...seeded], loading: false, error: null });
+    } catch (error) {
+      if (isCallerAbort(error)) {
+        set({ loading: false });
+        return;
+      }
+      const current = get().error;
+      const keepCreate = current?.startsWith("创建任务失败") ?? false;
+      set({
+        loading: false,
+        error: keepCreate ? current : describeRoomFailure("任务列表加载失败", error),
+      });
     }
   },
   loadMessages: async (id) => {
-    if (isMockRoom(id)) {
-      set({ messages: { ...get().messages, [id]: get().messages[id] ?? mockMessages(id) } });
-      return;
-    }
     try {
       const body = await listMessages(id);
       if (get().activeId !== id && !get().matters.some((matter) => matter.id === id)) return;
       const items = [...(body.items ?? [])].sort((a, b) => a.createdAt.localeCompare(b.createdAt));
       set({ messages: { ...get().messages, [id]: items } });
     } catch (error) {
+      if (isCallerAbort(error)) return;
       if (get().activeId === id) {
         set({ error: error instanceof Error ? error.message : "消息读取失败" });
       }
@@ -198,26 +203,18 @@ export const useMind = create<MindState>((set, get) => ({
     await Promise.all([get().loadMessages(id), get().loadActivity(id), get().loadApproval(id)]);
   },
   loadActivity: async (id) => {
-    if (isMockRoom(id)) {
-      set({ activity: { ...get().activity, [id]: get().activity[id] ?? mockActivity(id) } });
-      return;
-    }
     try {
       const body = await listActivity(id);
       const items = [...(body.items ?? [])].sort((a, b) => a.sequence - b.sequence);
       set({ activity: { ...get().activity, [id]: items } });
     } catch (error) {
+      if (isCallerAbort(error)) return;
       if (get().activeId === id) {
         set({ error: error instanceof Error ? error.message : "活动读取失败" });
       }
     }
   },
   loadApproval: async (id) => {
-    if (isMockRoom(id)) {
-      const current = get().approvals[id];
-      set({ approvals: { ...get().approvals, [id]: current === undefined ? mockApproval(id) : current } });
-      return;
-    }
     try {
       const body = await listApprovals();
       const pending = (body.items ?? [])
@@ -225,6 +222,7 @@ export const useMind = create<MindState>((set, get) => ({
         .sort((a, b) => b.createdAt.localeCompare(a.createdAt))[0];
       set({ approvals: { ...get().approvals, [id]: pending ?? null } });
     } catch (error) {
+      if (isCallerAbort(error)) return;
       if (get().activeId === id) {
         set({ error: error instanceof Error ? error.message : "批准读取失败" });
       }
@@ -232,7 +230,7 @@ export const useMind = create<MindState>((set, get) => ({
   },
   createMatter: async (text, permission) => {
     const title = text.trim();
-    if (!title || get().pending) return;
+    if (!title || get().pending) return { createdId: null, alert: null };
     set({ pending: "create", error: null });
     await new Promise((resolve) => window.setTimeout(resolve, 400));
     try {
@@ -247,29 +245,19 @@ export const useMind = create<MindState>((set, get) => ({
         composing: false,
         filter: "进行中",
         pending: null,
+        error: null,
         threadAgentId: null,
         reading: null,
       });
-    } catch {
-      const id = `mock-${Date.now()}`;
-      const matter: Matter = {
-        ...defaultEquipment(),
-        id,
-        title,
-        permission,
-        state: "idle",
-        createdAt: new Date().toISOString(),
-      };
-      set({
-        matters: [matter, ...get().matters],
-        messages: { ...get().messages, [id]: [] },
-        activity: { ...get().activity, [id]: [] },
-        approvals: { ...get().approvals, [id]: null },
-        activeId: id,
-        composing: false,
-        pending: null,
-        error: null,
-      });
+      return { createdId: matter.id, alert: null };
+    } catch (error) {
+      if (isCallerAbort(error)) {
+        set({ pending: null });
+        return { createdId: null, alert: null };
+      }
+      const alert = roomCreateAlert(error);
+      set({ pending: null, error: alert.message });
+      return { createdId: null, alert };
     }
   },
   send: async (text) => {
@@ -285,65 +273,16 @@ export const useMind = create<MindState>((set, get) => ({
         pending: null,
       });
       await get().loadRoomDetail(id);
-    } catch {
-      if (!isMockRoom(id)) {
-        set({ pending: null, error: "发送失败" });
+    } catch (error) {
+      if (isCallerAbort(error)) {
+        set({ pending: null });
         return;
       }
-      await new Promise((resolve) => window.setTimeout(resolve, 800));
-      const now = new Date().toISOString();
-      const prior = get().messages[id] ?? [];
-      set({
-        messages: {
-          ...get().messages,
-          [id]: [
-            ...prior,
-            { id: `${id}-u-${prior.length}`, roomId: id, role: "user", text: trimmed, createdAt: now },
-            {
-              id: `${id}-a-${prior.length}`,
-              roomId: id,
-              role: "assistant",
-              text: "已记下。这一句只留在这件云端任务里。",
-              createdAt: now,
-            },
-          ],
-        },
-        pending: null,
-        error: null,
-      });
+      set({ pending: null, error: "发送失败" });
     }
   },
-  rewindTo: (messageId) => {
-    const id = get().activeId;
-    if (!id || !isMockRoom(id)) return;
-    const list = get().messages[id] ?? [];
-    const index = list.findIndex((item) => item.id === messageId);
-    if (index < 0) return;
-    set({ messages: { ...get().messages, [id]: list.slice(0, index + 1) } });
-  },
-  replayFrom: (messageId) => {
-    const id = get().activeId;
-    if (!id || !isMockRoom(id)) return;
-    const list = get().messages[id] ?? [];
-    const index = list.findIndex((item) => item.id === messageId);
-    if (index < 0) return;
-    const now = new Date().toISOString();
-    set({
-      messages: {
-        ...get().messages,
-        [id]: [
-          ...list.slice(0, index + 1),
-          {
-            id: `${id}-replay-${Date.now()}`,
-            roomId: id,
-            role: "assistant",
-            text: "已记下。这一句只留在这件云端任务里。",
-            createdAt: now,
-          },
-        ],
-      },
-    });
-  },
+  rewindTo: () => undefined,
+  replayFrom: () => undefined,
   stop: async () => {
     const id = get().activeId;
     if (!id || get().pending === "abort") return;
@@ -358,6 +297,10 @@ export const useMind = create<MindState>((set, get) => ({
       });
       await get().loadRoomDetail(id);
     } catch (error) {
+      if (isCallerAbort(error)) {
+        set({ pending: null });
+        return;
+      }
       set({ pending: null, error: error instanceof Error ? error.message : "停止失败" });
     }
   },
@@ -371,6 +314,10 @@ export const useMind = create<MindState>((set, get) => ({
       set({ pending: null });
       await get().loadRoomDetail(id);
     } catch (error) {
+      if (isCallerAbort(error)) {
+        set({ pending: null });
+        return;
+      }
       set({ pending: null, error: error instanceof Error ? error.message : "接着说失败" });
       await get().loadRoomDetail(id);
     }
@@ -378,46 +325,6 @@ export const useMind = create<MindState>((set, get) => ({
   decide: async (approvalId, decision) => {
     const id = get().activeId;
     if (!id || get().pending) return;
-    if (isMockRoom(id)) {
-      const now = new Date().toISOString();
-      const prior = get().messages[id] ?? [];
-      const allowed = decision === "allow";
-      set({
-        matters: get().matters.map((matter) => (matter.id === id ? { ...matter, state: allowed ? "idle" : "idle" } : matter)),
-        approvals: { ...get().approvals, [id]: null },
-        messages: {
-          ...get().messages,
-          [id]: [
-            ...prior,
-            {
-              id: `${id}-d-${prior.length}`,
-              roomId: id,
-              role: "assistant",
-              text: allowed ? "已允许这一次。提交审批记在这件云端任务里。" : "已拒绝。这一次不会提交。",
-              createdAt: now,
-            },
-          ],
-        },
-        activity: {
-          ...get().activity,
-          [id]: [
-            ...(get().activity[id] ?? []),
-            {
-              id: `${id}-act-${prior.length}`,
-              sequence: (get().activity[id]?.length ?? 0) + 1,
-              type: allowed ? "tool.result" : "approval.asked",
-              roomId: id,
-              toolName: "提交审批",
-              text: allowed ? "已允许" : "已拒绝",
-              occurredAt: now,
-            },
-          ],
-        },
-        pending: null,
-        error: null,
-      });
-      return;
-    }
     set({ pending: "decide", error: null });
     try {
       await decideApproval(approvalId, decision);
@@ -428,6 +335,10 @@ export const useMind = create<MindState>((set, get) => ({
       });
       await get().loadRoomDetail(id);
     } catch (error) {
+      if (isCallerAbort(error)) {
+        set({ pending: null });
+        return;
+      }
       set({ pending: null, error: error instanceof Error ? error.message : "批准失败" });
       if (id) await get().loadRoomDetail(id);
     }

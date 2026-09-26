@@ -5,7 +5,6 @@ import { useMind } from "../store";
 import { disconnectBuddyApp, getBuddyApps, subscribeBuddyApps } from "../lib/buddyApps";
 import { assignShortcut, chordFromEvent, getShortcuts, resetAllShortcuts, resetShortcut, setShortcutCapture, shortcutProblem, subscribeShortcuts } from "../lib/shortcuts";
 import { getUiPrefs, setUiPrefs, subscribeUiPrefs, type FontSize, type LinkOpen, type TipSound } from "../lib/uiPrefs";
-import { mockArtifacts } from "../lib/mockRooms";
 import { getCustomModels, subscribeCustomModels } from "../lib/customModels";
 import { cancelSharedFile, cancelSharedTask, getSharedFiles, getSharedTasks, refreshSharedFile, subscribeShares } from "../lib/shares";
 import { getPublishedApps, subscribePublishedApps, unpublishApp } from "../lib/publishedApps";
@@ -470,7 +469,7 @@ function ProjectTasks({
   onOpen: (id: string) => void;
   onNew: () => void;
 }) {
-  const [shared, setShared] = useState([{ id: "mock-approval", title: "起草供应商准入说明", state: "idle" }]);
+  const [shared, setShared] = useState<{ id: string; title: string; state: string }[]>([]);
   const [menuId, setMenuId] = useState<string | null>(null);
   const [leaveFor, setLeaveFor] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
@@ -3564,21 +3563,6 @@ export function FilesPage() {
   const docs = bases.flatMap((base) => base.docs.map((doc) => ({ ...doc, base: base.name }))).filter((doc) => !needle || doc.title.includes(needle));
   const deleting = entries.find((item) => item.id === deleteId);
 
-  useEffect(() => {
-    if (entries.length > 0 || matters.length === 0) return;
-    const seeded = matters.flatMap((matter) =>
-      mockArtifacts(matter.id).map((artifact) => ({
-        id: artifact.id,
-        name: artifact.name,
-        kind: "文件" as const,
-        favorite: false,
-        folderId: null,
-        matterId: matter.id,
-      })),
-    );
-    if (seeded.length > 0) setEntries(seeded);
-  }, [entries.length, matters]);
-
   return (
     <Page title="我的文件" subtitle="快捷查看任务成果，上传到云端网盘开启跨端同步。">
       <div className="mb-4 flex flex-wrap items-center gap-2 text-sm">
@@ -3598,13 +3582,13 @@ export function FilesPage() {
                 上传文件
               </button>
               {uploadMenu ? (
-                <div className="absolute right-0 z-10 mt-1 w-40 rounded-xl bg-white p-1 text-sm shadow">
+                <div className="absolute right-0 z-10 mt-1 w-52 rounded-xl bg-white p-1 text-sm shadow">
                   <p className="px-2 py-1 text-xs text-[#999]">上传到云端</p>
                   <button type="button" className="block w-full rounded-lg px-2 py-1.5 text-left hover:bg-[#f6f6f7]" onClick={() => { setUploadMenu(false); setUploadName(""); setUploadOpen(true); }}>
                     我的云端网盘
                   </button>
-                  <button type="button" className="block w-full rounded-lg px-2 py-1.5 text-left hover:bg-[#f6f6f7]" onClick={() => { setUploadMenu(false); setToast("该功能暂未开启"); }}>
-                    我的资料库
+                  <button type="button" disabled aria-disabled="true" className="block w-full cursor-not-allowed rounded-lg px-2 py-1.5 text-left text-[#b0b0b0] disabled:cursor-not-allowed">
+                    我的资料库 · 未接入
                   </button>
                 </div>
               ) : null}

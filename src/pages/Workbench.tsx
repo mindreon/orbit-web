@@ -4,7 +4,6 @@ import { matterTitle, permissionLabel, stateLabel, type PermissionPreset } from 
 import { useMind } from "../store";
 import { Area, Button } from "../ui";
 import { cn } from "../lib/cn";
-import { mockArtifacts } from "../lib/mockRooms";
 import type { ActivityEvent, ChatMessage } from "../lib/rooms";
 import { publishFileShare } from "../lib/shares";
 import { getPublishedApps, publishApp, subscribePublishedApps } from "../lib/publishedApps";
@@ -14,6 +13,8 @@ import { ModelPicker } from "./ModelPicker";
 import { ShareTaskDialog } from "./ShareTaskDialog";
 import { AppMenu } from "./AppMenu";
 import { addHandoff } from "../lib/handoffs";
+import { CreateFailureNotice } from "./CreateFailureNotice";
+import type { RoomCreateAlert } from "../lib/rooms";
 
 const emptyMessages: ChatMessage[] = [];
 const emptyActivity: ActivityEvent[] = [];
@@ -46,9 +47,21 @@ export function WorkbenchPage() {
 function BlankMatter() {
   const createMatter = useMind((s) => s.createMatter);
   const pending = useMind((s) => s.pending);
-  const error = useMind((s) => s.error);
   const [draft, setDraft] = useState("");
+  const [createAlert, setCreateAlert] = useState<RoomCreateAlert | null>(null);
   const [permission, setPermission] = useState<PermissionPreset>("workspace-write");
+
+  function submit() {
+    if (!draft.trim() || pending === "create") return;
+    setCreateAlert(null);
+    void createMatter(draft, permission).then((result) => {
+      if (result.alert) {
+        setCreateAlert(result.alert);
+        return;
+      }
+      if (result.createdId) setDraft("");
+    });
+  }
 
   return (
     <section className="bg-background flex min-h-0 flex-col">
@@ -62,8 +75,7 @@ function BlankMatter() {
         className="mx-auto flex w-full max-w-2xl flex-1 flex-col justify-end p-4"
         onSubmit={(event) => {
           event.preventDefault();
-          if (!draft.trim() || pending) return;
-          void createMatter(draft, permission);
+          submit();
         }}
       >
         <div className="bg-card rounded-xl border p-3 shadow-sm">
@@ -95,7 +107,9 @@ function BlankMatter() {
             </p>
           ) : null}
           {pending === "create" ? <p className="text-muted-foreground mt-2 text-xs">Agent 正在接手并进入工作状态。</p> : null}
-          {error ? <p className="text-destructive mt-2 text-xs">{error}</p> : null}
+          {createAlert ? (
+            <CreateFailureNotice alert={createAlert} retryDisabled={pending === "create" || !draft.trim()} onRetry={submit} />
+          ) : null}
         </div>
       </form>
     </section>
@@ -646,7 +660,7 @@ function Timeline({ railOpen, onToggleRail }: { railOpen: boolean; onToggleRail:
         >
           <div className="bg-card rounded-xl border p-3">
             <TaskComposerExtras matterId={matter.id} text={text} setText={setText} />
-            <ComposerSuggest matterId={matter.id} text={text} setText={setText} />
+            <ComposerSuggest text={text} setText={setText} />
             {attachedFile ? <p className="mb-2 text-xs text-[#666]">已添加到任务 · {attachedFile}</p> : null}
             <Area
               rows={2}
@@ -694,9 +708,6 @@ function Timeline({ railOpen, onToggleRail }: { railOpen: boolean; onToggleRail:
           <button type="button" className="text-[#888]" onClick={() => setUiPrefs({ welcome: false })}>不再显示</button>
         </p>
       ) : null}
-      {pending === "send" && uiPrefs.fileChanges && matter && mockArtifacts(matter.id).some((file) => text.includes(file.name)) ? (
-        <p className="border-t px-3 py-2 text-xs text-[#666]">正在写入文件</p>
-      ) : null}
       {inviteOpen ? (
         <div className="fixed inset-0 z-30 flex items-center justify-center bg-black/30 p-4">
           <div className="w-full max-w-sm rounded-2xl bg-white p-5 text-sm" role="dialog" aria-label="邀请团队成员协作">
@@ -721,7 +732,7 @@ function Timeline({ railOpen, onToggleRail }: { railOpen: boolean; onToggleRail:
       {handoffOpen ? (
         <HandoffDialog
           taskTitle={matterTitle(matter)}
-          artifacts={mockArtifacts(matter.id)}
+          artifacts={[]}
           rounds={messages.filter((item) => item.role === "user").length}
           onClose={() => setHandoffOpen(false)}
           onDone={(notice) => {
@@ -812,7 +823,7 @@ function Inspector() {
   const [copied, setCopied] = useState(false);
   const [notice, setNotice] = useState<string | null>(null);
   const published = useSyncExternalStore(subscribePublishedApps, getPublishedApps, getPublishedApps);
-  const items = matter ? mockArtifacts(matter.id) : [];
+  const items: { id: string; name: string; kind: string; body: string }[] = [];
   const selected = items.find((item) => item.id === selectedId) ?? null;
   if (!matter) {
     return (
@@ -1013,12 +1024,11 @@ const ADD_ITEMS = ["添加文件", "引用对话中的文件", "应用", "模式
 
 function TaskComposerExtras({ matterId, text, setText }: { matterId: string; text: string; setText: (value: string) => void }) {
   const catalog = useMind((s) => s.catalog);
-  const matters = useMind((s) => s.matters);
   const [addOpen, setAddOpen] = useState(false);
   const [addPanel, setAddPanel] = useState<(typeof ADD_ITEMS)[number] | null>(null);
   const [cloudOpen, setCloudOpen] = useState(false);
-  const sessionFiles = mockArtifacts(matterId);
-  const cloudFiles = matters.flatMap((matter) => mockArtifacts(matter.id));
+  const sessionFiles: { id: string; name: string }[] = [];
+  const cloudFiles: { name: string }[] = [];
 
   function attach(label: string) {
     setText(text.includes(label) ? text : `${label}${text ? ` ${text}` : ""}`);
@@ -1153,7 +1163,7 @@ function applyToken(text: string, kind: "mention" | "slash", insertion: string) 
   return text.replace(pattern, (chunk) => `${/^\s/.test(chunk) ? chunk[0] : ""}${insertion}`);
 }
 
-export function ComposerSuggest({ matterId, text, setText }: { matterId: string | null; text: string; setText: (value: string) => void }) {
+export function ComposerSuggest({ text, setText }: { text: string; setText: (value: string) => void }) {
   const catalog = useMind((s) => s.catalog);
   const apps = useSyncExternalStore(subscribePublishedApps, getPublishedApps, getPublishedApps);
   const token = readToken(text);
@@ -1175,7 +1185,6 @@ export function ComposerSuggest({ matterId, text, setText }: { matterId: string 
   }, [text, setText]);
   if (!token) return null;
   const query = token.query.trim();
-  const files = mockArtifacts(matterId ?? "").filter((file) => !query || file.name.includes(query));
   const visibleApps = apps.filter((app) => !query || app.name.includes(query));
   const agents = catalog.agents.filter((agent) => !query || agent.name.includes(query));
   const skills = catalog.skills.filter((skill) => !query || skill.name.includes(query));
@@ -1191,13 +1200,7 @@ export function ComposerSuggest({ matterId, text, setText }: { matterId: string 
           <p className="px-2 py-1 text-xs text-[#888]">选择文件和文件夹</p>
           <p className="px-2 py-1 text-xs text-[#999]">对话中的文件</p>
           <p className="px-2 pb-1 text-xs text-[#999]">添加文件作为回答背景</p>
-          {mockArtifacts(matterId ?? "").length === 0 ? <p className="px-2 py-1 text-xs text-[#888]">当前对话中暂无文件</p> : null}
-          {mockArtifacts(matterId ?? "").length > 0 && files.length === 0 ? <p className="px-2 py-1 text-xs text-[#888]">无搜索结果</p> : null}
-          {files.map((file) => (
-            <button key={file.id} type="button" className="block w-full rounded-lg px-2 py-1.5 text-left hover:bg-[#f6f6f7]" onClick={() => pick(file.name)}>
-              {file.name}
-            </button>
-          ))}
+          <p className="px-2 py-1 text-xs text-[#888]">当前对话中暂无文件</p>
           <p className="mt-1 px-2 py-1 text-xs text-[#888]">应用</p>
           {apps.length === 0 ? <p className="px-2 py-1 text-xs text-[#888]">当前暂无可选应用</p> : null}
           {apps.length > 0 && visibleApps.length === 0 ? <p className="px-2 py-1 text-xs text-[#888]">无搜索结果</p> : null}

@@ -7,7 +7,8 @@ import { cn } from "../lib/cn";
 import { ModelPicker } from "./ModelPicker";
 import { AppMenu } from "./AppMenu";
 import { CloudFileDialog, ComposerSuggest } from "./Workbench";
-import { mockArtifacts } from "../lib/mockRooms";
+import { CreateFailureNotice } from "./CreateFailureNotice";
+import type { RoomCreateAlert } from "../lib/rooms";
 import { getUiPrefs, subscribeUiPrefs } from "../lib/uiPrefs";
 
 const ADD_ITEMS = ["添加文件", "引用对话中的文件", "应用", "模式", "权限", "专家", "技能", "连接器"] as const;
@@ -17,9 +18,8 @@ export function HomePage() {
   const role = useMind((s) => s.role);
   const createMatter = useMind((s) => s.createMatter);
   const pending = useMind((s) => s.pending);
-  const error = useMind((s) => s.error);
   const catalog = useMind((s) => s.catalog);
-  const matters = useMind((s) => s.matters);
+  const [createAlert, setCreateAlert] = useState<RoomCreateAlert | null>(null);
   const uiPrefs = useSyncExternalStore(subscribeUiPrefs, getUiPrefs);
   const [sceneId, setSceneId] = useState<(typeof SCENES)[number]["id"]>("work");
   const [recommendQuick, setRecommendQuick] = useState(true);
@@ -39,7 +39,6 @@ export function HomePage() {
   const [permOpen, setPermOpen] = useState(false);
   const [fullConfirm, setFullConfirm] = useState(false);
   const [riskChecked, setRiskChecked] = useState(false);
-  const [sent, setSent] = useState(false);
   const [expert, setExpert] = useState<string | null>(null);
   const [skill, setSkill] = useState<string | null>(null);
   const [connector, setConnector] = useState<string | null>(null);
@@ -100,11 +99,16 @@ export function HomePage() {
   }, []);
 
   async function submit() {
-    if (role !== "经办人" || !draft.trim() || pending) return;
-    setSent(true);
-    await createMatter(draft, permission);
-    const id = useMind.getState().activeId;
-    if (id && !useMind.getState().error) navigate(`/task/${id}`);
+    if (role !== "经办人" || !draft.trim() || pending === "create") return;
+    setCreateAlert(null);
+    const result = await createMatter(draft, permission);
+    if (result.alert) {
+      setCreateAlert(result.alert);
+      return;
+    }
+    if (!result.createdId) return;
+    setDraft("");
+    navigate(`/task/${result.createdId}`);
   }
 
   return (
@@ -177,7 +181,7 @@ export function HomePage() {
           {connector ? <Chip label={`连接器 ${connector}`} onClear={() => setConnector(null)} /> : null}
           {mode ? <Chip label={mode} onClear={() => setMode(null)} /> : null}
         </div>
-        <ComposerSuggest matterId={null} text={draft} setText={setDraft} />
+        <ComposerSuggest text={draft} setText={setDraft} />
         <textarea
           value={draft}
           rows={3}
@@ -259,7 +263,7 @@ export function HomePage() {
             ) : null}
             {cloudOpen ? (
               <CloudFileDialog
-                files={matters.flatMap((matter) => mockArtifacts(matter.id).map((file) => file.name))}
+                files={[]}
                 onClose={() => setCloudOpen(false)}
                 onAdd={(name) => {
                   setDraft((current) => (current.includes(name) ? current : `${name}${current ? ` ${current}` : ""}`));
@@ -336,7 +340,13 @@ export function HomePage() {
         ) : null}
         {voiceNotice ? <p className="mt-2 text-xs text-[#666]">{voiceNotice}</p> : null}
         {quickNotice ? <p className="mt-2 text-xs text-[#666]">{quickNotice}</p> : null}
-        {sent && error ? <p className="text-destructive mt-2 text-xs">{error}</p> : null}
+        {createAlert ? (
+          <CreateFailureNotice
+            alert={createAlert}
+            retryDisabled={role !== "经办人" || pending === "create" || !draft.trim()}
+            onRetry={() => void submit()}
+          />
+        ) : null}
         {role !== "经办人" ? <p className="mt-2 text-xs text-[#888]">当前角色不能新建任务。</p> : null}
       </form>
       <p className="mt-3 text-xs text-[#999]" data-decorative>内容由 AI 生成，请核实重要信息</p>
