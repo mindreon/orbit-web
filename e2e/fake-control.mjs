@@ -19,8 +19,9 @@ const ROOM = {
 
 const state = {
   activity: [],
+  approvals: [],
   streams: new Set(),
-  log: { events: [], activity: 0, posts: [] },
+  log: { events: [], activity: 0, posts: [], decisions: [] },
 };
 
 function json(res, status, body) {
@@ -52,12 +53,24 @@ const server = createServer(async (req, res) => {
   if (path === "/health") return json(res, 200, { status: "ok" });
   if (path === "/v1/rooms" && req.method === "GET") return json(res, 200, { items: [ROOM] });
   if (path === `/v1/rooms/${ROOM.id}` && req.method === "GET") return json(res, 200, ROOM);
-  if (path === "/v1/approvals") return json(res, 200, { items: [] });
+  if (path === "/v1/approvals") return json(res, 200, { items: state.approvals });
+  const decide = path.match(/^\/v1\/approvals\/([^/]+)\/decide$/);
+  if (decide && req.method === "POST") {
+    const { decision } = await readBody(req);
+    const approval = state.approvals.find((item) => item.id === decide[1]);
+    if (!approval) return json(res, 404, { code: "NOT_FOUND", message: "approval not found" });
+    approval.status = "decided";
+    approval.decision = decision;
+    state.log.decisions.push({ id: approval.id, decision });
+    return json(res, 200, approval);
+  }
 
   if (path === `/v1/rooms/${ROOM.id}/activity`) {
     state.log.activity += 1;
     return json(res, 200, { items: state.activity });
   }
+
+  if (path === `/v1/rooms/${ROOM.id}/abort` && req.method === "POST") return json(res, 200, { aborted: true });
 
   if (path === `/v1/rooms/${ROOM.id}/messages` && req.method === "POST") {
     state.log.posts.push(await readBody(req));
@@ -84,6 +97,10 @@ const server = createServer(async (req, res) => {
     state.activity = (await readBody(req)).items ?? [];
     return json(res, 200, { ok: true });
   }
+  if (path === "/__test/approvals" && req.method === "POST") {
+    state.approvals = (await readBody(req)).items ?? [];
+    return json(res, 200, { ok: true });
+  }
   if (path === "/__test/emit" && req.method === "POST") {
     const body = await readBody(req);
     const frames = Array.isArray(body) ? body : [body];
@@ -100,7 +117,8 @@ const server = createServer(async (req, res) => {
     for (const stream of state.streams) stream.destroy();
     state.streams.clear();
     state.activity = [];
-    state.log = { events: [], activity: 0, posts: [] };
+    state.approvals = [];
+    state.log = { events: [], activity: 0, posts: [], decisions: [] };
     return json(res, 200, { ok: true });
   }
 
