@@ -1,0 +1,178 @@
+name: e2e
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+# Every job writes acceptance-report/runs/<run>.json plus screenshots; the last job merges them into one
+# acceptance report (a JSON file per acceptance item, screenshots, perf numbers) uploaded as `acceptance-report`.
+jobs:
+  # The acceptance suite against the running stack in mock model mode:
+  # Temporal dev server + orbit-control + orbit-orch + orbit-worker (ORBIT_MODEL_MODE=mock) + orbit-web production build.
+  stack:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      # The PR head, not the merge commit, so the report names the commit under review.
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10.33.4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version: "1.23"
+
+      - uses: astral-sh/setup-uv@v5
+        with:
+          version: "0.12.17"
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - run: pnpm install --frozen-lockfile
+
+      - run: pnpm exec playwright install --with-deps chromium webkit
+
+      # Starts the stack (e2e/stack/up.mjs, pinned orbit-control and orbit-runtime refs) and runs e2e/stack.
+      - run: pnpm test:stack
+
+      - if: always()
+        run: cp .stack/stack.json acceptance-report/stack.json || true
+
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: acceptance-run-stack
+          path: acceptance-report
+          retention-days: 14
+
+      - uses: actions/upload-artifact@v4
+        if: failure()
+        with:
+          name: stack-logs
+          path: |
+            .stack/logs
+            test-results-stack
+          retention-days: 7
+
+  # What the mock model cannot produce on demand, against a scripted control; plus the licence check.
+  scripted:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+          fetch-depth: 0
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10.33.4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+
+      - run: pnpm install --frozen-lockfile
+
+      - run: pnpm exec playwright install --with-deps chromium webkit
+
+      - run: pnpm test:e2e
+
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: acceptance-run-scripted
+          path: acceptance-report
+          retention-days: 14
+
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: playwright-report
+          path: |
+            playwright-report
+            test-results
+          retention-days: 14
+
+  # 1000 messages + one 50,000-character reply on the production build; initial bundle size.
+  perf:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10.33.4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+
+      - run: pnpm install --frozen-lockfile
+
+      - run: pnpm exec playwright install --with-deps chromium
+
+      - run: pnpm perf:chat
+
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: acceptance-run-fixture-perf
+          path: acceptance-report
+          retention-days: 14
+
+      # The Chrome trace (open in DevTools > Performance) is large, so it travels separately.
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: chat-perf-trace
+          path: perf-results
+          retention-days: 14
+
+  acceptance-report:
+    needs: [stack, scripted, perf]
+    if: always()
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: acceptance-run-*
+          path: acceptance-report
+          merge-multiple: true
+
+      - name: Build the acceptance report
+        run: node e2e/report/build.mjs
+
+      - if: always()
+        run: cat acceptance-report/index.md >> "$GITHUB_STEP_SUMMARY" || true
+
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: acceptance-report
+          path: acceptance-report
+          if-no-files-found: error
+          retention-days: 30

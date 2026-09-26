@@ -4,21 +4,19 @@ import {
   createRoom,
   decideApproval,
   getRoom,
-  listActivity,
   listApprovals,
-  listMessages,
   describeRoomFailure,
   isCallerAbort,
   roomCreateAlert,
   type RoomCreateAlert,
   listRooms,
+  newTurnId,
   postMessage,
   steerRoom,
-  type ActivityEvent,
   type Approval,
-  type ChatMessage,
   type Room,
 } from "./lib/rooms";
+import { markStopped, resyncActivity } from "./lib/events/roomStreams";
 import {
   defaultEquipment,
   seedCatalog,
@@ -38,9 +36,9 @@ interface MindState {
   filter: FilterId;
   catalog: Catalog;
   matters: Matter[];
-  messages: Record<string, ChatMessage[]>;
-  activity: Record<string, ActivityEvent[]>;
   approvals: Record<string, Approval | null>;
+  /** Every approval of the room, pending or decided, so each approval card in the conversation can find its own. */
+  roomApprovals: Record<string, Approval[]>;
   /** 这间房间刚点过停止，下一句走转向。 */
   steered: Record<string, boolean>;
   activeId: string | null;
@@ -63,8 +61,6 @@ interface MindState {
   setThread: (agentId: string | null) => void;
   setReading: (reading: MindState["reading"]) => void;
   loadRooms: () => Promise<void>;
-  loadMessages: (id: string) => Promise<void>;
-  loadActivity: (id: string) => Promise<void>;
   loadApproval: (id: string) => Promise<void>;
   loadRoomDetail: (id: string) => Promise<void>;
   createMatter: (text: string, permission: PermissionPreset) => Promise<{ createdId: string | null; alert: RoomCreateAlert | null }>;
@@ -74,7 +70,8 @@ interface MindState {
   unarchiveMatter: (id: string) => void;
   removeMatter: (id: string) => void;
   pinMatter: (id: string, pinned: boolean) => void;
-  send: (text: string) => Promise<void>;
+  /** turnId 不传时新生成一个。失败卡的重试也会传一个新的。 */
+  send: (text: string, turnId?: string) => Promise<void>;
   stop: () => Promise<void>;
   steer: (text: string) => Promise<void>;
   decide: (approvalId: string, decision: "allow" | "reject") => Promise<void>;
@@ -110,9 +107,8 @@ export const useMind = create<MindState>((set, get) => ({
   catalog: seedCatalog(),
   matters: [],
   hiddenIds: [],
-  messages: {},
-  activity: {},
   approvals: {},
+  roomApprovals: {},
   steered: {},
   activeId: null,
   composing: false,
@@ -189,41 +185,20 @@ export const useMind = create<MindState>((set, get) => ({
       });
     }
   },
-  loadMessages: async (id) => {
-    try {
-      const body = await listMessages(id);
-      if (get().activeId !== id && !get().matters.some((matter) => matter.id === id)) return;
-      const items = [...(body.items ?? [])].sort((a, b) => a.createdAt.localeCompare(b.createdAt));
-      set({ messages: { ...get().messages, [id]: items } });
-    } catch (error) {
-      if (isCallerAbort(error)) return;
-      if (get().activeId === id) {
-        set({ error: error instanceof Error ? error.message : "消息读取失败" });
-      }
-    }
-  },
   loadRoomDetail: async (id) => {
-    await Promise.all([get().loadMessages(id), get().loadActivity(id), get().loadApproval(id)]);
-  },
-  loadActivity: async (id) => {
-    try {
-      const body = await listActivity(id);
-      const items = [...(body.items ?? [])].sort((a, b) => a.sequence - b.sequence);
-      set({ activity: { ...get().activity, [id]: items } });
-    } catch (error) {
-      if (isCallerAbort(error)) return;
-      if (get().activeId === id) {
-        set({ error: error instanceof Error ? error.message : "活动读取失败" });
-      }
-    }
+    // A failed /activity read is shown inside the conversation (see lib/events/roomStreams.ts loadError).
+    const activity = resyncActivity(id).catch(() => undefined);
+    await Promise.all([activity, get().loadApproval(id)]);
   },
   loadApproval: async (id) => {
     try {
       const body = await listApprovals();
-      const pending = (body.items ?? [])
-        .filter((item) => item.roomId === id && item.status === "pending")
-        .sort((a, b) => b.createdAt.localeCompare(a.createdAt))[0];
-      set({ approvals: { ...get().approvals, [id]: pending ?? null } });
+      const mine = (body.items ?? []).filter((item) => item.roomId === id);
+      const pending = mine.filter((item) => item.status === "pending").sort((a, b) => b.createdAt.localeCompare(a.createdAt))[0];
+      set({
+        approvals: { ...get().approvals, [id]: pending ?? null },
+        roomApprovals: { ...get().roomApprovals, [id]: mine },
+      });
     } catch (error) {
       if (isCallerAbort(error)) return;
       if (get().activeId === id) {
@@ -240,8 +215,6 @@ export const useMind = create<MindState>((set, get) => ({
       const matter = roomToMatter(room);
       set({
         matters: [matter, ...get().matters.filter((item) => item.id !== matter.id)],
-        messages: { ...get().messages, [matter.id]: [] },
-        activity: { ...get().activity, [matter.id]: [] },
         approvals: { ...get().approvals, [matter.id]: null },
         activeId: matter.id,
         composing: false,
@@ -263,13 +236,13 @@ export const useMind = create<MindState>((set, get) => ({
       return { createdId: null, alert };
     }
   },
-  send: async (text) => {
+  send: async (text, turnId) => {
     const trimmed = text.trim();
     const id = get().activeId;
     if (!trimmed || !id || get().pending) return;
     set({ pending: "send", error: null });
     try {
-      const posted = await postMessage(id, trimmed);
+      const posted = await postMessage(id, trimmed, turnId ?? newTurnId());
       set({
         matters: get().matters.map((matter) => (matter.id === posted.room.id ? roomToMatter(posted.room, matter) : matter)),
         approvals: { ...get().approvals, [id]: posted.approval?.status === "pending" ? posted.approval : null },
@@ -290,6 +263,7 @@ export const useMind = create<MindState>((set, get) => ({
     set({ pending: "abort", error: null });
     try {
       await abortRoom(id);
+      markStopped(id);
       const room = await getRoom(id);
       set({
         matters: get().matters.map((matter) => (matter.id === room.id ? roomToMatter(room, matter) : matter)),

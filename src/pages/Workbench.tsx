@@ -1,25 +1,38 @@
-import { useEffect, useRef, useState, useSyncExternalStore, type ReactNode } from "react";
+import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore, type KeyboardEvent as ReactKeyboardEvent, type ReactNode } from "react";
 import { useNavigate, useSearchParams } from "react-router";
+import { LoaderCircle, Square } from "lucide-react";
 import { modelModeLabel } from "../lib/modelMode";
 import { matterTitle, permissionLabel, stateLabel, type PermissionPreset } from "../model";
 import { useMind } from "../store";
 import { Area, Button } from "../ui";
 import { cn } from "../lib/cn";
-import type { ActivityEvent, ChatMessage } from "../lib/rooms";
+import { newTurnId, type ActivityEvent } from "../lib/rooms";
+import { resyncActivity, useRoomEventStream, useRoomStream, useStreams } from "../lib/events/roomStreams";
+import { orderedDrafts } from "../lib/events/stream";
+import { buildProcess, buildTimeline, draftItems, hasOpenWork, latestModel } from "../lib/events/timeline";
 import { getUiPrefs, setUiPrefs, subscribeUiPrefs } from "../lib/uiPrefs";
 import { chordFromEvent, getShortcuts, isShortcutCapture } from "../lib/shortcuts";
+import { ToolRow } from "../chat/ToolRow";
+import { Toaster } from "../chat/Toaster";
+import { ApprovalCard, approvalFromControl, findControlApproval } from "../chat/ApprovalCard";
+import { describeTool, toolTitle } from "../lib/events/toolLabels";
+import type { Approval } from "../lib/rooms";
 import { ModelPicker } from "./ModelPicker";
 import { CreateFailureNotice } from "./CreateFailureNotice";
 
-const emptyMessages: ChatMessage[] = [];
-const emptyActivity: ActivityEvent[] = [];
+/** Markdown, KaTeX and syntax highlighting only load once a task conversation is opened. */
+const ChatList = lazy(() => import("../chat/ChatList").then((module) => ({ default: module.ChatList })));
 
 const RAIL_TABS = ["产物", "概览", "任务进程", "文件"] as const;
+const noApprovals: Approval[] = [];
 type RailTab = (typeof RAIL_TABS)[number];
 
 export function WorkbenchPage() {
   const loadRooms = useMind((s) => s.loadRooms);
-  const [railOpen, setRailOpen] = useState(true);
+  const activeId = useMind((s) => s.activeId);
+  // Narrow screens start with the rail closed; opened, it overlays the conversation (see Inspector).
+  const [railOpen, setRailOpen] = useState(() => window.matchMedia("(min-width: 1024px)").matches);
+  useRoomEventStream(activeId);
   useEffect(() => {
     void loadRooms();
   }, [loadRooms]);
@@ -32,8 +45,9 @@ export function WorkbenchPage() {
   }, []);
 
   return (
-    <div className={cn("grid min-h-0 flex-1", railOpen ? "grid-cols-[minmax(0,1fr)_360px]" : "grid-cols-[minmax(0,1fr)]")}>
+    <div className={cn("grid min-h-0 flex-1", railOpen ? "grid-cols-[minmax(0,1fr)] lg:grid-cols-[minmax(0,1fr)_360px]" : "grid-cols-[minmax(0,1fr)]")}>
       <Timeline railOpen={railOpen} onToggleRail={() => setRailOpen((open) => !open)} />
+      <Toaster />
       {railOpen ? <Inspector /> : null}
     </div>
   );
@@ -117,36 +131,14 @@ function BlankMatter() {
   );
 }
 
-function speaker(role: string) {
-  if (role === "user") return "我";
-  if (role === "assistant") return "助手";
-  return role || "系统";
-}
-
-function escapeRegExp(value: string) {
-  return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-}
-
-/** 把命中的原文包进高亮。当前这一条用更深的底色，方便和其余命中区分。 */
-function markedText(text: string, query: string, active: boolean) {
-  const needle = query.trim();
-  if (!needle || !text.includes(needle)) return text;
-  const parts = text.split(new RegExp(`(${escapeRegExp(needle)})`, "g"));
-  return parts.map((part, index) =>
-    part === needle ? (
-      <mark key={index} className={active ? "bg-[#ffe08a]" : "bg-[#fff3c4]"}>
-        {part}
-      </mark>
-    ) : (
-      <span key={index}>{part}</span>
-    ),
-  );
-}
+const STREAM_NOTICE: Record<string, string> = {
+  reconnecting: "实时连接中断，正在重连…",
+  failed: "实时更新不可用，发送后会刷新一次对话。",
+};
 
 function Timeline({ railOpen, onToggleRail }: { railOpen: boolean; onToggleRail: () => void }) {
   const role = useMind((s) => s.role);
   const matter = useMind((s) => s.matters.find((item) => item.id === s.activeId));
-  const messages = useMind((s) => (s.activeId && s.messages[s.activeId]) || emptyMessages);
   const approval = useMind((s) => (s.activeId ? (s.approvals[s.activeId] ?? null) : null));
   const steered = useMind((s) => (s.activeId ? s.steered[s.activeId] === true : false));
   const pending = useMind((s) => s.pending);
@@ -156,10 +148,15 @@ function Timeline({ railOpen, onToggleRail }: { railOpen: boolean; onToggleRail:
   const uiPrefs = useSyncExternalStore(subscribeUiPrefs, getUiPrefs);
   const steer = useMind((s) => s.steer);
   const decide = useMind((s) => s.decide);
+  const stream = useRoomStream(matter?.id);
+  const streamStatus = useStreams((s) => (matter?.id ? s.status[matter.id] : undefined));
+  const streamLoaded = useStreams((s) => (matter?.id ? s.loaded[matter.id] === true : false));
+  const loadError = useStreams((s) => (matter?.id ? (s.loadError[matter.id] ?? null) : null));
+  const roomApprovals = useMind((s) => (s.activeId ? (s.roomApprovals[s.activeId] ?? noApprovals) : noApprovals));
+  const roomsLoading = useMind((s) => s.loading);
   const [params] = useSearchParams();
   const attachedFile = params.get("file");
   const [text, setText] = useState(attachedFile ?? "");
-  const [copiedId, setCopiedId] = useState<string | null>(null);
   const [findOpen, setFindOpen] = useState(false);
   const [findText, setFindText] = useState("");
   const [findIndex, setFindIndex] = useState(0);
@@ -170,10 +167,35 @@ function Timeline({ railOpen, onToggleRail }: { railOpen: boolean; onToggleRail:
   const [voiceNotice, setVoiceNotice] = useState<string | null>(null);
   const findRef = useRef<HTMLInputElement>(null);
   const composerRef = useRef<HTMLFormElement>(null);
+  const imeRef = useRef(false);
   const taskIdRef = useRef(matter?.id);
+
+  const persisted = useMemo(() => buildTimeline(stream.events, stream.stoppedSequence), [stream.events, stream.stoppedSequence]);
+  const drafts = useMemo(() => orderedDrafts(stream), [stream]);
+  const items = useMemo(() => [...persisted, ...draftItems(drafts)], [persisted, drafts]);
+  const turnRunning = pending === "send" || pending === "steer" || pending === "decide" || hasOpenWork(stream.events, drafts, stream.stoppedSequence);
+
   const findNeedle = findText.trim();
-  const findHits = messages.filter((item) => findNeedle && item.text.includes(findNeedle));
-  const currentHitId = findHits.length === 0 ? null : findHits[findIndex % findHits.length]?.id ?? null;
+  const findHits = useMemo(
+    () => (findNeedle ? items.filter((item) => (item.kind === "user" || item.kind === "assistant") && item.text.includes(findNeedle)) : []),
+    [items, findNeedle],
+  );
+  const currentHitId = findHits.length === 0 ? null : (findHits[findIndex % findHits.length]?.id ?? null);
+
+  const onDecide = useCallback((approvalId: string, decision: "allow" | "reject") => {
+    void decide(approvalId, decision);
+  }, [decide]);
+  /** A pending approval with no approval.asked card in the conversation (e.g. trimmed from history) still gets one card. */
+  const orphanApproval = useMemo(() => {
+    if (!approval || approval.status !== "pending") return null;
+    const shown = persisted.some((item) => item.kind === "approval" && findControlApproval(item, [approval]));
+    return shown ? null : approvalFromControl(approval);
+  }, [approval, persisted]);
+  const model = useMemo(() => latestModel(stream.events), [stream.events]);
+  const retry = useCallback((retryText: string) => {
+    void send(retryText, newTurnId());
+  }, [send]);
+
   useEffect(() => {
     setText(attachedFile ?? "");
   }, [matter?.id, attachedFile]);
@@ -214,21 +236,17 @@ function Timeline({ railOpen, onToggleRail }: { railOpen: boolean; onToggleRail:
   }, [matter?.id]);
   const draining = useRef(false);
   useEffect(() => {
-    if (pending || editingId || matter?.state === "running" || queue.length === 0 || draining.current) return;
+    if (pending || editingId || turnRunning || queue.length === 0 || draining.current) return;
     const next = queue[0];
     draining.current = true;
     setQueue((items) => items.filter((item) => item.id !== next.id));
     void send(next.text).finally(() => {
       draining.current = false;
     });
-  }, [pending, editingId, matter?.state, queue, send]);
+  }, [pending, editingId, turnRunning, queue, send]);
   useEffect(() => {
     if (findOpen) findRef.current?.focus();
   }, [findOpen]);
-  useEffect(() => {
-    if (!currentHitId) return;
-    document.querySelector(`[data-message-id="${currentHitId}"]`)?.scrollIntoView({ block: "nearest" });
-  }, [currentHitId, findNeedle]);
   useEffect(() => {
     function onKey(event: KeyboardEvent) {
       if (isShortcutCapture()) return;
@@ -250,26 +268,38 @@ function Timeline({ railOpen, onToggleRail }: { railOpen: boolean; onToggleRail:
   function sendQueued(id: string) {
     const picked = queue.find((item) => item.id === id);
     if (!picked) return;
-    if (pending || matter?.state === "running") {
+    if (pending || turnRunning) {
       setQueue((items) => [picked, ...items.filter((item) => item.id !== id)]);
       return;
     }
     setQueue((items) => items.filter((item) => item.id !== id));
     void send(picked.text);
   }
-  if (!matter) return <BlankMatter />;
+  /** Enter sends, Shift+Enter is a newline, and Enter that confirms an IME candidate is left to the IME. */
+  function onComposerKeyDown(event: ReactKeyboardEvent<HTMLTextAreaElement>) {
+    if (event.key !== "Enter" || event.shiftKey || event.altKey) return;
+    if (imeRef.current || event.nativeEvent.isComposing || event.keyCode === 229) return;
+    event.preventDefault();
+    composerRef.current?.requestSubmit();
+  }
+  if (!matter) {
+    if (roomsLoading) return <p className="text-muted-foreground bg-background flex items-center justify-center text-sm">正在加载任务…</p>;
+    return <BlankMatter />;
+  }
   const continuing = steered || matter.state === "closed";
-  const modelModeText = modelModeLabel(matter.modelMode);
+  const modelModeText = modelModeLabel(matter.modelMode ?? model?.mode);
 
   return (
     <section className="bg-background flex min-h-0 flex-col">
-      <div className="relative flex items-center gap-3 border-b px-4 py-3">
-        <h1 className="min-w-0 flex-1 truncate text-base font-semibold">{matterTitle(matter)}</h1>
-        {modelModeText ? (
-          <span className="rounded bg-[#f3f3f4] px-2 py-0.5 text-xs text-[#666]" title="当前任务使用的模型模式">
-            {modelModeText}
-          </span>
-        ) : null}
+      <div className="relative flex flex-wrap items-center gap-x-3 gap-y-1 border-b px-4 py-3 max-md:pl-14">
+        <h1 className="min-w-0 flex-1 basis-40 truncate text-base font-semibold">{matterTitle(matter)}</h1>
+        <span
+          data-testid="model-mode"
+          className={cn("rounded px-2 py-0.5 text-xs", modelModeText === "假模型" ? "bg-amber-50 text-amber-700" : modelModeText === "真模型" ? "bg-emerald-50 text-emerald-700" : "bg-[#f3f3f4] text-[#999]")}
+          title={model?.name ? `当前任务使用的模型：${model.name}` : "当前任务使用的模型模式"}
+        >
+          {modelModeText ?? "模型模式未上报"}
+        </span>
         <span className="bg-accent text-accent-foreground rounded px-2 py-0.5 text-xs" title="权限在创建这件任务时已经确定">
           {permissionLabel(matter.permission)}
         </span>
@@ -333,55 +363,53 @@ function Timeline({ railOpen, onToggleRail }: { railOpen: boolean; onToggleRail:
           {findNeedle && findHits.length === 0 ? <span className="text-[#888]">未找到匹配内容</span> : null}
         </div>
       ) : null}
-      <div className="min-h-0 flex-1 space-y-3 overflow-auto p-4">
-        {messages.length === 0 ? (
-          <p className="text-muted-foreground py-8 text-center text-sm">还没有消息。发送后，这里显示这件云端任务的真实回复。</p>
+      <div className="relative flex min-h-0 flex-1 flex-col">
+        {streamStatus && STREAM_NOTICE[streamStatus] ? (
+          <p role="status" className="absolute left-1/2 top-2 z-10 flex -translate-x-1/2 items-center gap-2 rounded-full border border-amber-200 bg-amber-50 px-3 py-1 text-xs text-amber-800 shadow-sm">
+            {streamStatus === "reconnecting" ? <LoaderCircle className="h-3 w-3 animate-spin" aria-hidden /> : null}
+            {STREAM_NOTICE[streamStatus]}
+          </p>
         ) : null}
-        {messages.map((item) => (
-          <article key={item.id} data-message-id={item.id} className="max-w-2xl">
-            <p className="text-muted-foreground text-xs">{speaker(item.role)}</p>
-            <p className="mt-1 text-sm leading-6">{markedText(item.text, findOpen ? findText : "", item.id === currentHitId)}</p>
-            <div className="mt-1 flex flex-wrap gap-2 text-xs text-[#666]">
-              <button
-                type="button"
-                onClick={() => {
-                  void navigator.clipboard?.writeText(item.text);
-                  setCopiedId(item.id);
-                }}
-              >
-                {copiedId === item.id ? "已复制" : "复制 message"}
-              </button>
-              {item.role === "assistant" ? (
-                <button
-                  type="button"
-                  disabled
-                  aria-disabled="true"
-                  className="cursor-not-allowed text-[#b0b0b0] disabled:cursor-not-allowed"
-                >
-                  提交反馈 · 未接入
-                </button>
-              ) : null}
-            </div>
-          </article>
-        ))}
-        {approval && approval.status === "pending" ? (
-          <div className="bg-card max-w-xl rounded-lg border p-3">
-            <p className="text-xs font-semibold">这一次要先确认</p>
-            <p className="mt-2 text-sm leading-6">
-              {approval.toolName ? `要调用「${approval.toolName}」。` : "助手要做一次需要确认的操作。"}
-              {approval.reason ? approval.reason : ""}
-            </p>
-            <div className="mt-3 flex gap-2">
-              <Button disabled={pending === "decide"} onClick={() => void decide(approval.id, "allow")}>
-                允许这一次
-              </Button>
-              <Button variant="outline" disabled={pending === "decide"} onClick={() => void decide(approval.id, "reject")}>
-                拒绝
-              </Button>
-            </div>
-          </div>
-        ) : null}
-        {error ? <p className="text-destructive text-xs">{error}</p> : null}
+        <Suspense fallback={<p className="text-muted-foreground min-h-0 flex-1 py-8 text-center text-sm">正在加载对话…</p>}>
+          <ChatList
+            key={matter.id}
+            items={items}
+            highlight={findOpen ? findText : ""}
+            focusId={findOpen ? currentHitId : null}
+            retryDisabled={turnRunning || pending !== null || role !== "经办人"}
+            onRetry={retry}
+            approvals={roomApprovals}
+            decideDisabled={pending !== null}
+            onDecide={onDecide}
+            empty={
+              loadError ? (
+                <div role="alert" className="py-8 text-center text-sm">
+                  <p className="text-destructive">{loadError}</p>
+                  <button type="button" className="mt-2 rounded-lg border bg-white px-3 py-1 text-xs hover:bg-[#f6f6f7]" onClick={() => void resyncActivity(matter.id).catch(() => undefined)}>
+                    重新加载
+                  </button>
+                </div>
+              ) : (
+                <p className="text-muted-foreground py-8 text-center text-sm">
+                  {streamLoaded ? "还没有消息。发送后，这里显示这件云端任务的真实回复。" : "正在加载对话…"}
+                </p>
+              )
+            }
+            footer={
+              <>
+                {orphanApproval ? <ApprovalCard card={orphanApproval} approvals={roomApprovals} disabled={pending !== null} onDecide={onDecide} /> : null}
+                {loadError && items.length > 0 ? <p className="text-destructive text-xs">{loadError}</p> : null}
+                {turnRunning && drafts.length === 0 ? (
+                  <p className="flex items-center gap-2 text-xs text-[#888]" data-testid="turn-running">
+                    <LoaderCircle className="h-3.5 w-3.5 animate-spin" aria-hidden />
+                    助手正在处理…
+                  </p>
+                ) : null}
+                {error ? <p className="text-destructive text-xs">{error}</p> : null}
+              </>
+            }
+          />
+        </Suspense>
       </div>
       {queue.length > 0 ? (
         <div className="border-t px-3 py-2 text-sm">
@@ -415,15 +443,16 @@ function Timeline({ railOpen, onToggleRail }: { railOpen: boolean; onToggleRail:
             event.preventDefault();
             const trimmed = text.trim();
             if (!trimmed) return;
-            if (pending || matter.state === "running") {
+            if (pending || turnRunning) {
               setQueue((items) => [...items, { id: `q-${Date.now()}`, text: trimmed }]);
               setQueueOpen(true);
               setText("");
               return;
             }
+            setText("");
             const submit = continuing ? steer(trimmed) : send(trimmed);
             void submit.then(() => {
-              if (!useMind.getState().error) setText("");
+              if (useMind.getState().error) setText((current) => current || trimmed);
             });
           }}
         >
@@ -434,10 +463,22 @@ function Timeline({ railOpen, onToggleRail }: { railOpen: boolean; onToggleRail:
             <Area
               rows={2}
               value={text}
-              placeholder="今天帮你做些什么？ @ 添加上下文，/调用技能与指令"
+              aria-label="输入消息"
+              placeholder="今天帮你做些什么？ @ 添加上下文，/调用技能与指令（Enter 发送，Shift+Enter 换行）"
+              className="max-h-60 resize-none"
               onChange={(event) => setText(event.target.value)}
+              onKeyDown={onComposerKeyDown}
+              onCompositionStart={() => {
+                imeRef.current = true;
+              }}
+              onCompositionEnd={() => {
+                // Safari fires compositionend before the keydown of the Enter that confirmed the candidate.
+                setTimeout(() => {
+                  imeRef.current = false;
+                }, 0);
+              }}
             />
-            <div className="mt-2 flex items-center gap-2 text-xs text-[#666]">
+            <div className="mt-2 flex flex-wrap items-center gap-2 text-xs text-[#666]">
               <button type="button" className="rounded-md px-1 py-1 hover:bg-[#f3f3f4]" onClick={() => setVoiceNotice("当前环境不支持语音输入。")}>
                 语音输入
               </button>
@@ -447,14 +488,23 @@ function Timeline({ railOpen, onToggleRail }: { railOpen: boolean; onToggleRail:
                 {matter.permission === "danger-full-access" ? "允许完全访问" : matter.permission === "read-only" ? "云端只读" : "默认权限"}
               </span>
               <div className="ml-auto flex items-center gap-2">
-              {matter.state === "running" || pending === "send" ? (
-                <Button type="button" variant="outline" disabled={pending === "abort"} onClick={() => void stop()}>
-                  {pending === "abort" ? "正在停止…" : "停止"}
-                </Button>
-              ) : null}
-              <Button type="submit" disabled={matter.state === "awaiting_approval" || !text.trim()}>
-                {pending === "send" || pending === "steer" ? "发送中…" : continuing ? "接着说" : "发送"}
-              </Button>
+                {turnRunning ? (
+                  <>
+                    {text.trim() ? (
+                      <Button type="submit" variant="outline" title="这一轮结束后自动发送">
+                        加入队列
+                      </Button>
+                    ) : null}
+                    <Button type="button" data-testid="stop-turn" disabled={pending === "abort"} onClick={() => void stop()}>
+                      <Square className="mr-1 h-3 w-3 fill-current" aria-hidden />
+                      {pending === "abort" ? "正在停止…" : "停止"}
+                    </Button>
+                  </>
+                ) : (
+                  <Button type="submit" data-testid="send-message" disabled={matter.state === "awaiting_approval" || pending !== null || !text.trim()}>
+                    {continuing ? "接着说" : "发送"}
+                  </Button>
+                )}
               </div>
             </div>
           </div>
@@ -495,31 +545,41 @@ function Timeline({ railOpen, onToggleRail }: { railOpen: boolean; onToggleRail:
 }
 
 function activityTitle(event: ActivityEvent) {
-  if (event.type === "tool.call") return "工具调用";
-  if (event.type === "tool.result") return "工具结果";
   if (event.type === "approval.asked") return "等待批准";
+  if (event.type === "approval.resolved") return "批准已处理";
   if (event.type === "agent.started") return "开始";
   if (event.type === "agent.finished") return "结束";
+  if (event.type === "agent.spawn_rejected") return "子助手未启动";
   if (event.type === "room.steered") return "接着说";
+  if (event.type === "turn.failed") return "这一轮没有完成";
   return event.type;
 }
 
+function agentName(event: ActivityEvent) {
+  const path = event.agentPath || event.agentId || "main";
+  return path === "main" ? "主助手" : `子助手 · ${path}`;
+}
+
 function activityBody(event: ActivityEvent) {
-  if (event.type === "tool.call" || event.type === "tool.result") {
-    return [event.toolName, event.text].filter(Boolean).join(" · ");
-  }
+  if (event.type === "turn.failed") return event.failure?.errorCode ?? "";
   if (event.type === "approval.asked") {
-    return [event.toolName, event.reason || event.text].filter(Boolean).join(" · ");
+    return [toolTitle(describeTool(event.toolName ?? "", event.argsPreview ?? "")), event.reason].filter(Boolean).join(" · ");
   }
-  if (event.type === "agent.started" || event.type === "agent.finished") {
-    return [event.role, event.text].filter(Boolean).join(" · ") || "子助手";
+  if (event.type === "approval.resolved") {
+    const outcome = (event.outcome || event.status || "").toLowerCase();
+    return outcome.startsWith("allow") ? "已允许这一次" : outcome.startsWith("reject") ? "已拒绝" : "已处理";
   }
-  return event.text || event.reason || "";
+  if (event.type === "agent.started" || event.type === "agent.finished" || event.type === "agent.spawn_rejected") {
+    return agentName(event);
+  }
+  if (event.type === "room.steered") return event.text ?? "";
+  return event.reason ?? "";
 }
 
 function Inspector() {
   const matter = useMind((s) => s.matters.find((item) => item.id === s.activeId));
-  const activity = useMind((s) => (s.activeId && s.activity[s.activeId]) || emptyActivity);
+  const stream = useRoomStream(matter?.id);
+  const process = useMemo(() => buildProcess(stream.events, stream.stoppedSequence), [stream.events, stream.stoppedSequence]);
   const approval = useMind((s) => (s.activeId ? (s.approvals[s.activeId] ?? null) : null));
   const [tab, setTab] = useState<RailTab>("产物");
   const [selectedId, setSelectedId] = useState<string | null>(null);
@@ -529,16 +589,15 @@ function Inspector() {
   const selected = items.find((item) => item.id === selectedId) ?? null;
   if (!matter) {
     return (
-      <aside className="text-muted-foreground bg-card border-l p-4 text-sm">
+      <aside className="text-muted-foreground bg-card border-l p-4 text-sm max-lg:fixed max-lg:inset-y-0 max-lg:right-0 max-lg:z-30 max-lg:w-[min(360px,100vw)] max-lg:shadow-xl">
         创建之后，右边是这件云端任务的产物和文件。文件不在你的电脑上。
       </aside>
     );
   }
-  const shown = activity.filter((event) => event.type !== "usage" && event.type !== "assistant.message" && event.type !== "session.status");
   const waiting = approval && approval.status === "pending" ? approval : null;
 
   return (
-    <aside className="bg-card flex min-h-0 flex-col border-l text-sm">
+    <aside className="bg-card flex min-h-0 flex-col border-l text-sm max-lg:fixed max-lg:inset-y-0 max-lg:right-0 max-lg:z-30 max-lg:w-[min(360px,100vw)] max-lg:shadow-xl">
       <div className="flex gap-1 overflow-auto border-b px-2 py-2 text-xs">
         {RAIL_TABS.map((item) => (
           <button
@@ -549,24 +608,33 @@ function Inspector() {
             {item}
           </button>
         ))}
+        <button type="button" className="text-muted-foreground ml-auto rounded-md px-2 py-1 lg:hidden" onClick={() => window.dispatchEvent(new Event("mind-toggle-rail"))}>
+          关闭
+        </button>
       </div>
       <div className="min-h-0 flex-1 overflow-auto p-3">
         {tab === "任务进程" ? (
           <>
             {waiting ? (
               <p className="bg-primary/10 text-primary mb-3 rounded px-2 py-1.5 text-xs">
-                等待批准{waiting.toolName ? ` · ${waiting.toolName}` : ""}
+                等待批准{waiting.toolName ? ` · ${toolTitle(describeTool(waiting.toolName, ""))}` : ""}
                 {waiting.reason ? ` · ${waiting.reason}` : ""}
               </p>
             ) : null}
-            {shown.length === 0 ? <p className="text-muted-foreground text-xs">这次还没有工具调用或子助手。</p> : null}
-            <ol className="space-y-3">
-              {shown.map((event) => (
-                <li key={event.id}>
-                  <p className="text-xs font-semibold">{activityTitle(event)}</p>
-                  {activityBody(event) ? <p className="text-muted-foreground mt-1 text-xs leading-5">{activityBody(event)}</p> : null}
-                </li>
-              ))}
+            {process.length === 0 ? <p className="text-muted-foreground text-xs">这次还没有工具调用或子助手。</p> : null}
+            <ol className="space-y-1.5">
+              {process.map((item) =>
+                item.kind === "tool" ? (
+                  <li key={item.id}>
+                    <ToolRow call={item.call} />
+                  </li>
+                ) : (
+                  <li key={item.id} className="px-1 py-1">
+                    <p className="text-xs font-semibold">{activityTitle(item.event)}</p>
+                    {activityBody(item.event) ? <p className="text-muted-foreground mt-0.5 text-xs leading-5">{activityBody(item.event)}</p> : null}
+                  </li>
+                ),
+              )}
             </ol>
           </>
         ) : tab === "概览" ? (
