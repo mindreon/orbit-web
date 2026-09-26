@@ -11,8 +11,8 @@
 import { execFileSync } from "node:child_process";
 import { existsSync, readFileSync, readdirSync, statSync } from "node:fs";
 import { join } from "node:path";
-import { expect, test } from "@playwright/test";
-import { metrics } from "./helpers";
+import { metrics, verify } from "./helpers";
+import { expect, test } from "./test";
 
 const PERMISSIVE = new Set(["MIT", "ISC", "Apache-2.0", "BSD-2-Clause", "BSD-3-Clause", "0BSD", "Unlicense", "CC0-1.0", "BlueOak-1.0.0", "Python-2.0", "CC-BY-4.0", "(MPL-2.0 OR Apache-2.0)", "(MIT OR CC0-1.0)"]);
 /** Packages whose package.json has no licence field but ship a permissive LICENSE file (checked by hand). */
@@ -71,20 +71,29 @@ test("every dependency is permissively licensed; no ported or commercial code wi
       else preexisting.push(label);
     }
   }
-  expect(offenders).toEqual([]); // L1
+  await verify([10], "`pnpm licenses list` 列出全部依赖；和基线分支的 pnpm-lock.yaml 比出本分支新增的包（含传递依赖）", "生产依赖和本分支新增的包全部是宽松许可证（MIT / ISC / Apache-2.0 / BSD 等）", async () => {
+    expect(offenders).toEqual([]); // L1
+    return `非宽松许可的生产依赖或新增包：${offenders.length} 个；main 上已有的仅开发用非宽松包：${JSON.stringify(preexisting)}`;
+  });
 
   const manifest = JSON.parse(readFileSync("package.json", "utf8")) as { dependencies: Record<string, string>; devDependencies: Record<string, string> };
   const direct = [...Object.keys(manifest.dependencies), ...Object.keys(manifest.devDependencies)];
   const licenceOf = new Map<string, string>();
   for (const [licence, packages] of Object.entries(all)) for (const pkg of packages) licenceOf.set(pkg.name, licence);
   const directLicences = Object.fromEntries(direct.map((name) => [name, licenceOf.get(name) ?? "missing"]));
-  expect(Object.entries(directLicences).filter(([, licence]) => licence === "missing" || licence === "Unknown")).toEqual([]); // L2
+  await verify([10], "逐个查 package.json 里直接依赖的许可证", "每个直接依赖都有可确认的许可证", async () => {
+    expect(Object.entries(directLicences).filter(([, licence]) => licence === "missing" || licence === "Unknown")).toEqual([]); // L2
+    return Object.entries(directLicences).map(([name, licence]) => `${name}: ${licence}`).join("；");
+  });
 
   const files = [...sourceFiles("src"), ...sourceFiles("e2e"), "vite.config.ts"].filter((file) => !file.endsWith("licenses.spec.ts"));
   const ported = files.filter((file) => /ported from|original path:|SPDX-License-Identifier:\s*Apache-2\.0/i.test(readFileSync(file, "utf8")));
-  if (ported.length > 0) expect(existsSync("NOTICE")).toBe(true); // L3
   const commercial = files.filter((file) => /sourceweft[^\n]*enterprise\/|from ["'][^"']*enterprise\//i.test(readFileSync(file, "utf8")));
-  expect(commercial).toEqual([]); // L4
+  await verify([10], "扫描 src/、e2e/ 和 vite.config.ts 的源码头注释和引用路径", "搬来的代码（ported from / 原路径 / Apache 许可头）都有 NOTICE；没有引用任何商业许可目录（SourceWeft enterprise/）", async () => {
+    if (ported.length > 0) expect(existsSync("NOTICE")).toBe(true); // L3
+    expect(commercial).toEqual([]); // L4
+    return `带搬运许可头的文件 ${JSON.stringify(ported)}，NOTICE ${existsSync("NOTICE") ? "存在" : "不存在"}；引用商业目录的文件 ${commercial.length} 个`;
+  });
 
   await metrics({
     licences: counts,

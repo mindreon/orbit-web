@@ -10,8 +10,9 @@
  *   W3 a wide table widens the page instead of scrolling inside its wrapper.
  *   W4 the conversation column itself scrolls horizontally.
  */
-import { expect, test, type Page } from "@playwright/test";
-import { activity, control, metrics, openRoom, shot } from "./helpers";
+import type { Page } from "@playwright/test";
+import { activity, control, metrics, openRoom, shot, verify } from "./helpers";
+import { expect, test } from "./test";
 
 const RAW_CODE = [
   'const html = "<div class=\\"x\\">a & b</div>"; // raw markup and entities must survive copying untouched',
@@ -60,10 +61,13 @@ function overflow(page: Page) {
 test("copy button copies the raw code and shows a toast", { tag: ["@acc-15"] }, async ({ page, context }) => {
   await context.grantPermissions(["clipboard-read", "clipboard-write"]);
   await seed(page);
-  await page.locator(".md-code").getByRole("button", { name: "复制代码" }).click();
-  await expect(page.getByRole("status").filter({ hasText: "已复制" })).toBeVisible(); // Y1
-  const copied = await page.evaluate(() => navigator.clipboard.readText());
-  expect(copied).toBe(RAW_CODE); // Y2 + Y3
+  await verify([15], "点 4 行代码块（含 HTML 标签、& 和中文）的「复制代码」", "出现「已复制」提示；剪贴板与原始代码逐字相同：没有行号、没有高亮标记、没有转义", async () => {
+    await page.locator(".md-code").getByRole("button", { name: "复制代码" }).click();
+    await expect(page.getByRole("status").filter({ hasText: "已复制" })).toBeVisible(); // Y1
+    const copied = await page.evaluate(() => navigator.clipboard.readText());
+    expect(copied).toBe(RAW_CODE); // Y2 + Y3
+    return `提示「${(await page.getByRole("status").filter({ hasText: "已复制" }).textContent())?.trim()}」；剪贴板 ${copied.split("\n").length} 行、${copied.length} 字符，与原始代码逐字相同`;
+  });
   await shot(page, "copy-toast");
 });
 
@@ -71,17 +75,20 @@ for (const width of [375, 1440]) {
   test(`no page-level horizontal scroll at ${width}px; code and tables scroll inside their blocks`, { tag: ["@acc-15"] }, async ({ page }) => {
     await page.setViewportSize({ width, height: width === 375 ? 812 : 900 });
     await seed(page);
-    await expect(page.getByText("表格如下")).toBeVisible();
-    const result = await overflow(page);
-    await metrics({ [`overflowAt${width}px`]: result });
-    expect(result.page).toBeLessThanOrEqual(0); // W1
-    expect(result.body).toBeLessThanOrEqual(0);
-    expect(result.chat).toBeLessThanOrEqual(0); // W4
-    expect(result.pre).toBeGreaterThan(0); // W2: the long line scrolls inside the block
-    expect(result.preOverflow).toBe("auto");
-    if (width === 375) expect(result.table).toBeGreaterThan(0); // W3
-    expect(result.tableOverflow).toBe("auto");
-    await expect(page.getByLabel("输入消息")).toBeInViewport();
+    await verify([15], `视口宽 ${width}px，打开含长代码行、8 列宽表和超长链接的回复`, "页面、body、对话区都没有横向滚动；代码块内横向滚动（overflow-x: auto）" + (width === 375 ? "；表格在自己的容器里横向滚动" : "") + "；输入框在视口内", async () => {
+      await expect(page.getByText("表格如下")).toBeVisible();
+      const result = await overflow(page);
+      await metrics({ [`overflowAt${width}px`]: result });
+      expect(result.page).toBeLessThanOrEqual(0); // W1
+      expect(result.body).toBeLessThanOrEqual(0);
+      expect(result.chat).toBeLessThanOrEqual(0); // W4
+      expect(result.pre).toBeGreaterThan(0); // W2: the long line scrolls inside the block
+      expect(result.preOverflow).toBe("auto");
+      if (width === 375) expect(result.table).toBeGreaterThan(0); // W3
+      expect(result.tableOverflow).toBe("auto");
+      await expect(page.getByLabel("输入消息")).toBeInViewport();
+      return `页面横向溢出 ${Math.max(0, result.page)} px、body ${Math.max(0, result.body)} px、对话区 ${Math.max(0, result.chat)} px；代码块 overflow-x ${result.preOverflow}，块内可滚：${result.pre > 0}；表格容器 overflow-x ${result.tableOverflow}，块内可滚：${result.table > 0}；输入框在视口内`;
+    });
     await shot(page, `layout-${width}`);
   });
 }

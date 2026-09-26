@@ -8,8 +8,8 @@
  */
 import { readFileSync, readdirSync } from "node:fs";
 import { gzipSync } from "node:zlib";
-import { expect, test } from "@playwright/test";
-import { metrics } from "../helpers";
+import { metrics, verify } from "../helpers";
+import { expect, test } from "../test";
 
 // main @ e86cd19, `vite build`, same zlib gzip as below.
 const BASE = { ref: "e86cd19", entryJs: 426135, entryJsGzip: 128080, entryCss: 19061, entryCssGzip: 4734 };
@@ -30,15 +30,17 @@ test("Mermaid, KaTeX and the highlighter load on demand; entry bundle growth is 
 
   const markers = { katex: /KaTeX parse error/, highlighter: /hljs-|registerLanguage/, mermaid: /securityLevel|flowchart-v2/ };
   const inEntry = Object.fromEntries(Object.entries(markers).map(([name, marker]) => [name, marker.test(js.text)]));
-  expect(inEntry).toEqual({ katex: false, highlighter: false, mermaid: false }); // B1
-
   const lazy = {
     katex: files.filter((file) => /^katex(Plugin)?-.*\.js$/.test(file)),
     highlighter: files.filter((file) => /^highlighter-.*\.js$/.test(file)),
     mermaid: files.filter((file) => /^mermaid\.core-.*\.js$/.test(file)),
     chat: files.filter((file) => /^ChatList-.*\.js$/.test(file)),
   };
-  for (const chunks of Object.values(lazy)) expect(chunks.length).toBeGreaterThan(0); // B2
+  await verify([9], "`vite build` 后检查 dist/assets 的入口 chunk（index-*.js）和懒加载 chunk", "入口 chunk 里没有 KaTeX、代码高亮、Mermaid；三者和对话列表各有独立的懒加载 chunk；入口体积相对 main@e86cd19 的增量写入 measurements", async () => {
+    expect(inEntry).toEqual({ katex: false, highlighter: false, mermaid: false }); // B1
+    for (const chunks of Object.values(lazy)) expect(chunks.length).toBeGreaterThan(0); // B2
+    return `入口 chunk 含 KaTeX ${inEntry.katex}、高亮 ${inEntry.highlighter}、Mermaid ${inEntry.mermaid}；懒加载 chunk 存在：${Object.entries(lazy).map(([name, chunks]) => `${name} ${chunks.length > 0}`).join("，")}`;
+  });
 
   const lazyGzip = Object.fromEntries(Object.entries(lazy).map(([name, chunks]) => [name, chunks.reduce((sum, file) => sum + size(file).gzip, 0)]));
   await metrics({

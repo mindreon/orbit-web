@@ -12,14 +12,17 @@
  */
 import { mkdirSync, writeFileSync } from "node:fs";
 import { cpus } from "node:os";
-import { expect, test, type Page } from "@playwright/test";
+import type { Page } from "@playwright/test";
 import { longReply, replyDeltas } from "../fixtures/datasets.mjs";
-import { metrics, shot } from "../helpers";
+import { metrics, shot, verify } from "../helpers";
+import { expect, test } from "../test";
 import { installProbes, readCls, readLatency, resetLatency, startFrames, stopFrames, wheelScroll } from "./probes";
 
 const CONTROL = "http://127.0.0.1:18081";
 const OUT = "perf-results";
 const REPLY_CHARS = 50000;
+const TYPED = "please cap clause seven at twenty percent and move the payment date";
+const STREAM_TYPED = "typing while the reply streams should stay instant";
 
 async function post(page: Page, path: string, body: unknown) {
   const response = await page.request.post(`${CONTROL}${path}`, { data: body });
@@ -62,7 +65,7 @@ test("1000 messages + a 50,000-character reply: scroll >= 50 fps, keystroke <= 5
   await page.getByTestId("jump-latest").click({ timeout: 2000 }).catch(() => undefined);
   await page.getByLabel("输入消息").click();
   await resetLatency(page);
-  await page.getByLabel("输入消息").pressSequentially("please cap clause seven at twenty percent and move the payment date", { delay: 60 });
+  await page.getByLabel("输入消息").pressSequentially(TYPED, { delay: 60 });
   await page.waitForTimeout(300);
   const typing = await readLatency(page);
   await browser.stopTracing();
@@ -78,10 +81,19 @@ test("1000 messages + a 50,000-character reply: scroll >= 50 fps, keystroke <= 5
   await shot(page, "fixture-1000-messages-50k-reply");
   await metrics({ fixture1000Messages50kReply: results.static });
 
-  expect(up.fps).toBeGreaterThanOrEqual(50); // Q1
-  expect(down.fps).toBeGreaterThanOrEqual(50);
-  expect(typing.nextFrameMax).toBeLessThanOrEqual(50); // Q2
-  if (typing.eventTimingMax !== null) expect(typing.eventTimingMax).toBeLessThanOrEqual(50);
+  const setup = `生产构建打开 1000 条消息 + 一条 ${REPLY_CHARS} 字符回复（含代码块和表格）的任务`;
+  await verify([9, 16], `${setup}；鼠标滚轮向上、向下各滚 150 次`, "两个方向都 ≥ 50 fps；虚拟列表只挂载可见附近的行", async () => {
+    expect(up.fps).toBeGreaterThanOrEqual(50); // Q1
+    expect(down.fps).toBeGreaterThanOrEqual(50);
+    expect(mountedWhileUp).toBeLessThan(100);
+    return "向上、向下都 ≥ 50 fps；1000 条中挂载 < 100 行（实测见 measurements）";
+  });
+  await verify([16], `${setup}；在输入框逐字输入 ${TYPED.length} 个字符`, "每次按键从 input 事件到下一帧 ≤ 50 ms；Event Timing 条目（≥ 16 ms 才记录）≤ 50 ms", async () => {
+    expect(typing.keys).toBe(TYPED.length);
+    expect(typing.nextFrameMax).toBeLessThanOrEqual(50); // Q2
+    if (typing.eventTimingMax !== null) expect(typing.eventTimingMax).toBeLessThanOrEqual(50);
+    return `采到 ${typing.keys} 次按键；按键到下一帧最大值 ≤ 50 ms；Event Timing 最大值 ≤ 50 ms（实测见 measurements）`;
+  });
 });
 
 test("streaming the 50,000-character reply over 1000 messages: CLS <= 0.1, keystroke <= 50 ms", { tag: ["@acc-13", "@acc-16"] }, async ({ page }) => {
@@ -101,7 +113,7 @@ test("streaming the 50,000-character reply over 1000 messages: CLS <= 0.1, keyst
   await startFrames(page);
   await page.getByLabel("输入消息").click();
   await resetLatency(page);
-  const typing = page.getByLabel("输入消息").pressSequentially("typing while the reply streams should stay instant", { delay: 60 });
+  const typing = page.getByLabel("输入消息").pressSequentially(STREAM_TYPED, { delay: 60 });
   const started = Date.now();
   for (let at = 0; at < frames.length; at += 40) {
     await post(page, "/__test/emit", frames.slice(at, at + 40));
@@ -135,9 +147,18 @@ test("streaming the 50,000-character reply over 1000 messages: CLS <= 0.1, keyst
 
   results.streaming = { deltas: frames.length, streamingMs, frames: streamFrames, typing: latency, ...cls, renderedChars };
   await page.screenshot({ path: `${OUT}/streaming-final.png` });
+  await shot(page, "fixture-streaming-50k-final");
   await metrics({ fixtureStreaming50kReply: results.streaming });
 
-  expect(cls.cls).toBeLessThanOrEqual(0.1); // Q3
-  expect(latency.nextFrameMax).toBeLessThanOrEqual(50); // Q4
-  expect(renderedChars).toBeGreaterThan(REPLY_CHARS * 0.8); // Q5
+  const setup = `1000 条历史之上把 ${REPLY_CHARS} 字符回复拆成 ${frames.length} 个 assistant.delta 流式推送，同时在输入框逐字输入「${STREAM_TYPED}」，最后推送最终消息`;
+  await verify([13, 16], `${setup}；计算 CLS`, "流式期间 CLS ≤ 0.1；最终消息完整渲染（≥ 80% 字符上屏）", async () => {
+    expect(cls.cls).toBeLessThanOrEqual(0.1); // Q3
+    expect(renderedChars).toBeGreaterThan(REPLY_CHARS * 0.8); // Q5
+    return "CLS ≤ 0.1；最终消息完整渲染（实测见 measurements）";
+  });
+  await verify([16], `${setup}；看流式期间每次按键的响应`, "流式期间每次按键从 input 事件到下一帧 ≤ 50 ms", async () => {
+    expect(latency.keys).toBe(STREAM_TYPED.length);
+    expect(latency.nextFrameMax).toBeLessThanOrEqual(50); // Q4
+    return `采到 ${latency.keys} 次按键；按键到下一帧最大值 ≤ 50 ms（实测见 measurements）`;
+  });
 });

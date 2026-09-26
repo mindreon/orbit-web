@@ -184,6 +184,7 @@ const components = {
   orbitRuntime: { repo: "mindreon/orbit-runtime", ref: RUNTIME_REF },
   orbitWeb: { ref: out("git", ["rev-parse", "HEAD"], process.cwd()) },
   temporalCli: TEMPORAL_CLI,
+  temporal: out(join(BIN, "temporal"), ["--version"]),
   go: out("go", ["env", "GOVERSION"]),
   python: out(python, ["-c", "import platform; print(platform.python_version())"]),
   agentscope: out(python, ["-c", "import importlib.metadata as m; print(m.version('agentscope'))"]),

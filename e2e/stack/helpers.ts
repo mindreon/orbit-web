@@ -1,7 +1,7 @@
 /** Helpers for the acceptance E2E against the running stack (mock model mode). */
 import { expect, type APIRequestContext, type Page } from "@playwright/test";
 
-export { metrics, shot } from "../helpers";
+export { metrics, shot, verify } from "../helpers";
 
 /** orbit-worker's mock model streams a `stream:` prompt back as assistant.delta chunks split at U+001F. */
 export const CHUNK = "\u001f";

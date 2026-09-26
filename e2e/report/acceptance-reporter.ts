@@ -1,7 +1,9 @@
 /**
  * Playwright reporter that records, per test: the acceptance items it covers (tags `@acc-N`), where it ran, its
- * outcome, and its evidence (screenshots attached as images, numbers attached as `metrics` JSON).
- * Each Playwright run writes acceptance-report/runs/<run>.json; e2e/report/build.mjs merges the runs.
+ * outcome, and its evidence: `check` attachments (one per verified step, see verify() in e2e/helpers.ts),
+ * screenshots, `metrics` (measured numbers) and `environment` (browser versions, see e2e/test.ts).
+ * Each Playwright run writes <out>/runs/<run>.json, where <out> is $ACCEPTANCE_OUT (default acceptance-report);
+ * e2e/report/build.mjs merges the runs. Test durations are left out: they differ on every run.
  */
 import { copyFileSync, mkdirSync, writeFileSync } from "node:fs";
 import { basename, join } from "node:path";
@@ -9,22 +11,25 @@ import type { FullResult, Reporter, TestCase, TestResult } from "@playwright/tes
 
 type Options = { run: string; environment: string };
 
+type Check = { items: number[]; step: string; expected: string; actual: string; pass: boolean };
+
 type Entry = {
   title: string;
   file: string;
   project: string;
   items: number[];
   status: TestResult["status"];
-  durationMs: number;
   error?: string;
+  checks: Check[];
   screenshots: string[];
   metrics: Record<string, unknown>;
 };
 
-const OUT = "acceptance-report";
+const OUT = process.env.ACCEPTANCE_OUT || "acceptance-report";
 
 export default class AcceptanceReporter implements Reporter {
   private entries: Entry[] = [];
+  private browsers: Record<string, string> = {};
 
   constructor(private readonly options: Options) {}
 
@@ -35,14 +40,19 @@ export default class AcceptanceReporter implements Reporter {
     const shotDir = join(OUT, "screenshots", this.options.run);
     mkdirSync(shotDir, { recursive: true });
     const screenshots: string[] = [];
+    const checks: Check[] = [];
     const metrics: Record<string, unknown> = {};
     for (const attachment of result.attachments) {
+      const body = attachment.body?.toString("utf8");
       if (attachment.contentType === "image/png" && attachment.path && attachment.name !== "screenshot") {
         const name = `${slug(test.title)}-${project}-${basename(attachment.name).replace(/[^\w.-]+/g, "_")}.png`;
         copyFileSync(attachment.path, join(shotDir, name));
         screenshots.push(`screenshots/${this.options.run}/${name}`);
       }
-      if (attachment.name === "metrics" && attachment.body) Object.assign(metrics, JSON.parse(attachment.body.toString("utf8")));
+      if (!body) continue;
+      if (attachment.name === "metrics") Object.assign(metrics, JSON.parse(body));
+      if (attachment.name === "check") checks.push(JSON.parse(body));
+      if (attachment.name === "environment") Object.assign(this.browsers, JSON.parse(body));
     }
     // Retries: keep only the last attempt.
     this.entries = this.entries.filter((entry) => !(entry.title === test.title && entry.project === project));
@@ -52,8 +62,8 @@ export default class AcceptanceReporter implements Reporter {
       project,
       items,
       status: result.status,
-      durationMs: Math.round(result.duration),
-      error: result.error?.message?.split("\n")[0],
+      error: result.error?.message?.split("\n")[0]?.replace(/\u001b\[[0-9;]*m/g, ""),
+      checks,
       screenshots,
       metrics,
     });
@@ -61,7 +71,7 @@ export default class AcceptanceReporter implements Reporter {
 
   onEnd(result: FullResult) {
     mkdirSync(join(OUT, "runs"), { recursive: true });
-    const run = { run: this.options.run, environment: this.options.environment, status: result.status, tests: this.entries };
+    const run = { run: this.options.run, environment: this.options.environment, status: result.status, browsers: this.browsers, tests: this.entries };
     writeFileSync(join(OUT, "runs", `${this.options.run}.json`), `${JSON.stringify(run, null, 2)}\n`);
   }
 
