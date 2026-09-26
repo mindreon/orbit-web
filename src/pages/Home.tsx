@@ -8,7 +8,6 @@ import { ModelPicker } from "./ModelPicker";
 import { AppMenu } from "./AppMenu";
 import { CloudFileDialog, ComposerSuggest } from "./Workbench";
 import { CreateFailureNotice } from "./CreateFailureNotice";
-import type { RoomCreateAlert } from "../lib/rooms";
 import { getUiPrefs, subscribeUiPrefs } from "../lib/uiPrefs";
 
 const ADD_ITEMS = ["添加文件", "引用对话中的文件", "应用", "模式", "权限", "专家", "技能", "连接器"] as const;
@@ -18,8 +17,8 @@ export function HomePage() {
   const role = useMind((s) => s.role);
   const createMatter = useMind((s) => s.createMatter);
   const pending = useMind((s) => s.pending);
+  const createError = useMind((s) => s.createError);
   const catalog = useMind((s) => s.catalog);
-  const [createAlert, setCreateAlert] = useState<RoomCreateAlert | null>(null);
   const uiPrefs = useSyncExternalStore(subscribeUiPrefs, getUiPrefs);
   const [sceneId, setSceneId] = useState<(typeof SCENES)[number]["id"]>("work");
   const [recommendQuick, setRecommendQuick] = useState(true);
@@ -100,13 +99,8 @@ export function HomePage() {
 
   async function submit() {
     if (role !== "经办人" || !draft.trim() || pending === "create") return;
-    setCreateAlert(null);
     const result = await createMatter(draft, permission);
-    if (result.alert) {
-      setCreateAlert(result.alert);
-      return;
-    }
-    if (!result.createdId) return;
+    if (result.alert || !result.createdId) return;
     setDraft("");
     navigate(`/task/${result.createdId}`);
   }
@@ -340,9 +334,9 @@ export function HomePage() {
         ) : null}
         {voiceNotice ? <p className="mt-2 text-xs text-[#666]">{voiceNotice}</p> : null}
         {quickNotice ? <p className="mt-2 text-xs text-[#666]">{quickNotice}</p> : null}
-        {createAlert ? (
+        {createError ? (
           <CreateFailureNotice
-            alert={createAlert}
+            alert={createError}
             retryDisabled={role !== "经办人" || pending === "create" || !draft.trim()}
             onRetry={() => void submit()}
           />

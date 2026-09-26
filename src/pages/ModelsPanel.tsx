@@ -37,7 +37,6 @@ export function ModelsPanel() {
   const [open, setOpen] = useState(false);
   const [form, setForm] = useState(EMPTY);
   const [notice, setNotice] = useState("");
-  const [testing, setTesting] = useState(false);
   const [overwrite, setOverwrite] = useState(false);
   const [deleteId, setDeleteId] = useState<string | null>(null);
   const [advanced, setAdvanced] = useState(false);
@@ -50,7 +49,6 @@ export function ModelsPanel() {
     setOpen(false);
     setForm(EMPTY);
     setOverwrite(false);
-    setTesting(false);
     setAdvanced(false);
   }
 
@@ -58,20 +56,6 @@ export function ModelsPanel() {
     patch({
       supportedEfforts: form.supportedEfforts.includes(id) ? form.supportedEfforts.filter((item) => item !== id) : [...form.supportedEfforts, id],
     });
-  }
-
-  function test() {
-    const problem = modelProblem(form);
-    if (problem) {
-      setNotice(problem);
-      return;
-    }
-    setTesting(true);
-    setNotice("检测中");
-    window.setTimeout(() => {
-      setTesting(false);
-      setNotice("连接成功");
-    }, 400);
   }
 
   function save() {
@@ -249,8 +233,13 @@ export function ModelsPanel() {
             ) : null}
             {notice && open ? <p className="mt-3 text-[#444]">{notice}</p> : null}
             <div className="mt-4 flex justify-end gap-2">
-              <button type="button" disabled={testing} onClick={test}>
-                {testing ? "检测中" : "测试连接"}
+              <button
+                type="button"
+                disabled
+                aria-disabled="true"
+                className="cursor-not-allowed text-[#b0b0b0] disabled:cursor-not-allowed"
+              >
+                测试连接 · 未接入
               </button>
               <button type="button" onClick={closeForm}>
                 取消

@@ -15,6 +15,9 @@ export const MORE_NAV = [
   { to: "/inspiration", label: "灵感" },
 ] as const;
 
+/** 更多里这三项打开的是本地假流程，菜单上不可点。页面路由仍在，方便以后接上后端。 */
+export const UNWIRED_NAV_LABELS = new Set<string>(["我的文件", "我的邮箱", "灵感"]);
+
 export const EXPERT_TABS = [
   { to: "/experts", label: "专家", end: true },
   { to: "/experts/skills", label: "技能", end: false },
