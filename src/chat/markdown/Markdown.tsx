@@ -1,4 +1,4 @@
-import { memo, useMemo } from "react";
+import { createContext, memo, useContext, useMemo } from "react";
 import ReactMarkdown, { type Components, type Options } from "react-markdown";
 import remarkGfm from "remark-gfm";
 import remarkMath from "remark-math";
@@ -85,67 +85,139 @@ function languageOf(node: Element) {
   return hit ? hit.slice("language-".length).toLowerCase() : "";
 }
 
-function buildComponents(streaming: boolean): Components {
-  return {
-    pre({ node, children }) {
-      const code = node?.children.find((child): child is Element => child.type === "element" && child.tagName === "code");
-      if (!code) return <pre>{children}</pre>;
-      const language = languageOf(code);
-      const text = textOf(code).replace(/\n$/, "");
-      if (language === "mermaid") return <MermaidBlock code={text} streaming={streaming} />;
-      return <CodeBlock code={text} language={language} />;
-    },
-    code({ node: _node, className, children, ...rest }) {
-      return (
-        <code className={className ? `${className} md-inline-code` : "md-inline-code"} {...rest}>
-          {children}
-        </code>
-      );
-    },
-    a({ node: _node, href, children, ...rest }) {
-      return (
-        <a {...rest} href={href} target="_blank" rel="noopener noreferrer nofollow ugc">
-          {children}
-        </a>
-      );
-    },
-    img({ src, alt }) {
-      return <BlockedImage src={typeof src === "string" ? src : undefined} alt={alt} />;
-    },
-    table({ node: _node, children, ...rest }) {
-      return (
-        <div className="md-table-wrap">
-          <table {...rest}>{children}</table>
-        </div>
-      );
-    },
-  };
+/** Whether the block is still being streamed. Read through context so finishing a block re-renders only Mermaid. */
+const StreamingContext = createContext(false);
+
+function StreamedMermaid({ code }: { code: string }) {
+  return <MermaidBlock code={code} streaming={useContext(StreamingContext)} />;
 }
 
-const remarkPlugins: Options["remarkPlugins"] = [remarkGfm, remarkMath, remarkHtmlAsText];
-const staticComponents = buildComponents(false);
-const streamingComponents = buildComponents(true);
+// One stable components map: swapping maps would give every custom element a new type and re-mount code blocks.
+const components: Components = {
+  pre({ node, children }) {
+    const code = node?.children.find((child): child is Element => child.type === "element" && child.tagName === "code");
+    if (!code) return <pre>{children}</pre>;
+    const language = languageOf(code);
+    const text = textOf(code).replace(/\n$/, "");
+    if (language === "mermaid") return <StreamedMermaid code={text} />;
+    return <CodeBlock code={text} language={language} />;
+  },
+  code({ node: _node, className, children, ...rest }) {
+    return (
+      <code className={className ? `${className} md-inline-code` : "md-inline-code"} {...rest}>
+        {children}
+      </code>
+    );
+  },
+  a({ node: _node, href, children, ...rest }) {
+    return (
+      <a {...rest} href={href} target="_blank" rel="noopener noreferrer nofollow ugc">
+        {children}
+      </a>
+    );
+  },
+  img({ src, alt }) {
+    return <BlockedImage src={typeof src === "string" ? src : undefined} alt={alt} />;
+  },
+  table({ node: _node, children, ...rest }) {
+    return (
+      <div className="md-table-wrap">
+        <table {...rest}>{children}</table>
+      </div>
+    );
+  },
+};
 
-export const Markdown = memo(function Markdown({ text, highlight = "", streaming = false }: { text: string; highlight?: string; streaming?: boolean }) {
-  const katex = useLazyModule(katexModule, text.includes("$"));
+const remarkPlugins: Options["remarkPlugins"] = [remarkGfm, remarkMath, remarkHtmlAsText];
+
+const FENCE = /^ {0,3}(`{3,}|~{3,})/;
+
+/**
+ * Splits Markdown into top-level blocks at blank lines that are outside code fences and $$ math, keeping indented
+ * continuation lines with their block. Earlier blocks of a streaming reply never change, so they render once.
+ * Trade-off: reference-style link definitions only apply within their own block.
+ */
+export function splitBlocks(text: string): string[] {
+  const blocks: string[] = [];
+  let current: string[] = [];
+  let fence: string | null = null;
+  let math = false;
+  let pendingBreak = false;
+  for (const line of text.split("\n")) {
+    if (fence) {
+      current.push(line);
+      const close = line.match(FENCE);
+      if (close && close[1][0] === fence[0] && close[1].length >= fence.length && line.trim() === close[1]) fence = null;
+      continue;
+    }
+    if (math) {
+      current.push(line);
+      if (line.trim() === "$$") math = false;
+      continue;
+    }
+    if (!line.trim()) {
+      if (current.length) pendingBreak = true;
+      continue;
+    }
+    if (pendingBreak) {
+      if (/^[ \t]/.test(line)) current.push("");
+      else {
+        blocks.push(current.join("\n"));
+        current = [];
+      }
+      pendingBreak = false;
+    }
+    current.push(line);
+    const open = line.match(FENCE);
+    if (open) fence = open[1];
+    else if (line.trim() === "$$") math = true;
+  }
+  if (current.length) blocks.push(current.join("\n"));
+  return blocks;
+}
+
+type KatexPlugin = NonNullable<typeof katexModule.current>;
+
+const MarkdownBlock = memo(function MarkdownBlock({ text, highlight, streaming, katex }: { text: string; highlight: string; streaming: boolean; katex: KatexPlugin | null }) {
   const rehypePlugins = useMemo<Options["rehypePlugins"]>(
     () => [
       rehypeDompurify,
       [rehypeSanitize, sanitizeSchema],
-      ...(katex ? [[katex, { throwOnError: false, strict: "ignore", trust: false }] as [typeof katex, object]] : []),
-      [rehypeMark, { query: highlight.trim() }],
+      ...(katex ? [[katex, { throwOnError: false, strict: "ignore", trust: false }] as [KatexPlugin, object]] : []),
+      [rehypeMark, { query: highlight }],
     ],
     [highlight, katex],
   );
   return (
+    <div className="md-block">
+      <StreamingContext.Provider value={streaming}>
+        <ReactMarkdown remarkPlugins={remarkPlugins} rehypePlugins={rehypePlugins} components={components}>
+          {text}
+        </ReactMarkdown>
+      </StreamingContext.Provider>
+    </div>
+  );
+});
+
+/**
+ * Renders each top-level block on its own. While streaming only the last block is still growing, so it is the only
+ * one that re-parses; finished blocks (including their diagrams) are never re-rendered or re-mounted.
+ */
+export const Markdown = memo(function Markdown({ text, highlight = "", streaming = false }: { text: string; highlight?: string; streaming?: boolean }) {
+  const blocks = useMemo(() => splitBlocks(text), [text]);
+  const katex = useLazyModule(katexModule, text.includes("$"));
+  const needle = highlight.trim();
+  return (
     <div className="md">
-      <ReactMarkdown
-        remarkPlugins={remarkPlugins}
-        rehypePlugins={rehypePlugins}
-        components={streaming ? streamingComponents : staticComponents}
-      >
-        {text}
-      </ReactMarkdown>
+      {blocks.map((block, index) => (
+        <MarkdownBlock
+          key={index}
+          text={block}
+          highlight={needle && block.includes(needle) ? needle : ""}
+          streaming={streaming && index === blocks.length - 1}
+          katex={block.includes("$") ? katex : null}
+        />
+      ))}
     </div>
   );
 });

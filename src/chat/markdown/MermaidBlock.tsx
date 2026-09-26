@@ -59,8 +59,7 @@ export const MermaidBlock = memo(function MermaidBlock({ code, streaming }: { co
 
   if (streaming) return <CodeBlock code={code} language="mermaid" note="生成中" />;
   if (view.kind === "error") return <CodeBlock code={code} language="mermaid" note="图无法渲染，显示源码" />;
-  if (view.kind === "pending") {
-    return <div className="md-mermaid text-muted-foreground text-xs">正在绘制图表…</div>;
-  }
+  // Keep the source on screen until the diagram is ready, so the block changes once instead of flashing a placeholder.
+  if (view.kind === "pending") return <CodeBlock code={code} language="mermaid" note="正在绘制图表" />;
   return <div className="md-mermaid" role="img" aria-label="Mermaid 图" dangerouslySetInnerHTML={{ __html: view.svg }} />;
 });

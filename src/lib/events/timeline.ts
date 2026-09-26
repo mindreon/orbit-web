@@ -59,6 +59,14 @@ export type TimelineItem =
   | { kind: "failure"; id: string; turnId: string; errorCode: TurnErrorCode; retryable: boolean; retryText: string | null }
   | { kind: "draft"; id: string; text: string; turnId: string; agentId: string; agentPath: string };
 
+/**
+ * A draft and the final message of the same block share one id, so the list keeps the same row (and its measured
+ * height and rendered blocks) when the final text replaces the draft.
+ */
+export function blockItemId(turnId: string, blockId: string) {
+  return `block:${turnId}:${blockId}`;
+}
+
 export type ProcessItem = { kind: "tool"; id: string; call: ToolCallView } | { kind: "event"; id: string; event: ActivityEvent };
 
 const TOOL_ERROR_NOTES: Record<string, string> = {
@@ -205,7 +213,8 @@ export function buildTimeline(events: readonly ActivityEvent[], stoppedSequence 
           lastUserText = text;
           if (turnId) userTextByTurn.set(turnId, text);
         } else {
-          items.push({ kind: "assistant", id: event.id, text, turnId, agentId: event.agentId ?? "main", agentPath: agentPathOf(event) });
+          const id = event.blockId ? blockItemId(turnId, event.blockId) : event.id;
+          items.push({ kind: "assistant", id, text, turnId, agentId: event.agentId ?? "main", agentPath: agentPathOf(event) });
         }
         break;
       }
@@ -305,7 +314,7 @@ export function buildTimeline(events: readonly ActivityEvent[], stoppedSequence 
 export function draftItems(drafts: readonly Draft[]): TimelineItem[] {
   return drafts
     .filter((draft) => draft.text)
-    .map((draft) => ({ kind: "draft", id: `draft-${draft.key}`, text: draft.text, turnId: draft.turnId, agentId: draft.agentId, agentPath: draft.agentPath }));
+    .map((draft) => ({ kind: "draft", id: blockItemId(draft.turnId, draft.blockId), text: draft.text, turnId: draft.turnId, agentId: draft.agentId, agentPath: draft.agentPath }));
 }
 
 const PROCESS_TYPES = new Set(["approval.asked", "approval.resolved", "agent.started", "agent.finished", "agent.spawn_rejected", "room.steered", "turn.failed"]);

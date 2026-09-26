@@ -73,9 +73,12 @@ class Draftable {
   stoppedSequence: number;
   nextDraftOrder: number;
 
+  /** events and seen are copied only when a persisted event is inserted, so delta-only frames keep their identity. */
+  private ownsEvents = false;
+
   constructor(state: RoomStream) {
-    this.events = [...state.events];
-    this.seen = new Set(state.seen);
+    this.events = state.events as ActivityEvent[];
+    this.seen = state.seen as Set<string>;
     this.drafts = { ...state.drafts };
     this.attempts = { ...state.attempts };
     this.finalBlocks = new Set(state.finalBlocks);
@@ -116,12 +119,18 @@ class Draftable {
     }
   }
 
+  private ownEvents() {
+    if (this.ownsEvents) return;
+    this.events = [...this.events];
+    this.seen = new Set(this.seen);
+    this.ownsEvents = true;
+  }
+
   /** Returns true when the event was new. */
   insert(event: ActivityEvent): boolean {
-    if (event.id) {
-      if (this.seen.has(event.id)) return false;
-      this.seen.add(event.id);
-    }
+    if (event.id && this.seen.has(event.id)) return false;
+    this.ownEvents();
+    if (event.id) this.seen.add(event.id);
     const list = this.events;
     let at = list.length;
     if (event.sequence > 0) {

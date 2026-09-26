@@ -6,7 +6,11 @@ import { ChatItem } from "./ChatItem";
 import { useFrameVirtualizer } from "./useFrameVirtualizer";
 
 /** Within this many pixels of the bottom the list counts as "at the latest" and keeps following new content. */
-const PIN_THRESHOLD = 64;
+const PIN_THRESHOLD = 80;
+/** After the reader's own wheel input, auto-follow waits this long so it does not fight the gesture. */
+const GESTURE_MS = 300;
+
+const easeOutCubic = (t: number) => 1 - (1 - t) ** 3;
 
 export function ChatList({
   items,
@@ -60,18 +64,71 @@ export function ChatList({
   if (pinned) seenCount.current = items.length;
   const unseen = pinned ? 0 : Math.max(0, items.length - seenCount.current);
 
+  /** Non-null while 「回到最新」 animates; the animation owns scrollTop until it lands. */
+  const smoothRef = useRef<number | null>(null);
+  const gestureUntil = useRef(0);
+  const followLater = useRef<ReturnType<typeof setTimeout> | null>(null);
+
   const toBottom = useCallback(() => {
     const el = scrollRef.current;
     if (el) el.scrollTop = el.scrollHeight;
   }, []);
+
+  const cancelSmooth = useCallback(() => {
+    if (smoothRef.current !== null) cancelAnimationFrame(smoothRef.current);
+    smoothRef.current = null;
+  }, []);
+
+  /** Eases to the bottom, re-aiming every frame because rows measured on the way change the total height. */
+  const smoothToBottom = useCallback(() => {
+    const el = scrollRef.current;
+    if (!el) return;
+    cancelSmooth();
+    // From far up, skip most of the distance so the visible part of the animation stays short.
+    const far = el.scrollHeight - el.clientHeight - el.scrollTop;
+    if (far > el.clientHeight * 3) el.scrollTop = el.scrollHeight - el.clientHeight * 3;
+    const from = el.scrollTop;
+    const started = performance.now();
+    const duration = 360;
+    const step = (now: number) => {
+      const t = Math.min(1, (now - started) / duration);
+      const target = el.scrollHeight - el.clientHeight;
+      el.scrollTop = from + (target - from) * easeOutCubic(t);
+      if (t < 1) smoothRef.current = requestAnimationFrame(step);
+      else {
+        smoothRef.current = null;
+        toBottom();
+      }
+    };
+    smoothRef.current = requestAnimationFrame(step);
+  }, [cancelSmooth, toBottom]);
 
   const totalSize = virtualizer.getTotalSize();
 
   // `footer` is a new node on every render, so this runs after each render; scrolling to the bottom is idempotent.
   // No state is set here: a setState in a layout effect would cost a second commit in the same frame.
   useLayoutEffect(() => {
-    if (pinnedRef.current) toBottom();
+    if (!pinnedRef.current || smoothRef.current !== null) return;
+    const wait = gestureUntil.current - performance.now();
+    if (wait <= 0) {
+      toBottom();
+      return;
+    }
+    if (followLater.current === null) {
+      followLater.current = setTimeout(() => {
+        followLater.current = null;
+        if (pinnedRef.current && smoothRef.current === null) toBottom();
+      }, wait);
+    }
   }, [totalSize, items.length, footer, toBottom]);
+
+  useEffect(
+    () => () => {
+      cancelSmooth();
+      if (followLater.current !== null) clearTimeout(followLater.current);
+    },
+    [cancelSmooth],
+  );
 
   useEffect(() => {
     if (!focusId) return;
@@ -84,15 +141,14 @@ export function ChatList({
 
   const onScroll = () => {
     const el = scrollRef.current;
-    if (!el) return;
-    setPin(el.scrollHeight - el.scrollTop - el.clientHeight < PIN_THRESHOLD);
+    if (!el || smoothRef.current !== null) return;
+    setPin(el.scrollHeight - el.scrollTop - el.clientHeight <= PIN_THRESHOLD);
   };
 
   const jump = () => {
     setPin(true);
     seenCount.current = items.length;
-    if (items.length > 0) virtualizer.scrollToIndex(items.length - 1, { align: "end" });
-    requestAnimationFrame(toBottom);
+    smoothToBottom();
   };
 
   const needle = highlight.trim();
@@ -105,7 +161,13 @@ export function ChatList({
         className="h-full overflow-y-auto px-4"
         onScroll={onScroll}
         onWheel={(event) => {
-          if (event.deltaY < 0) setPin(false);
+          if (event.deltaY >= 0) return;
+          cancelSmooth();
+          gestureUntil.current = performance.now() + GESTURE_MS;
+        }}
+        onTouchMove={() => {
+          cancelSmooth();
+          gestureUntil.current = performance.now() + GESTURE_MS;
         }}
       >
         {items.length === 0 ? empty : null}

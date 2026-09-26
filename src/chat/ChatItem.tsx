@@ -42,26 +42,31 @@ function ChatItemView({ item, highlight, focused, retryDisabled, onRetry, approv
       </div>
     );
   }
-  if (item.kind === "assistant") {
+  if (item.kind === "assistant" || item.kind === "draft") {
+    // Draft and final message share this exact structure (and one list row), so finishing a reply swaps no DOM:
+    // finished blocks stay mounted and the reserved action row keeps the height unchanged.
+    const draft = item.kind === "draft";
     return (
-      <article data-testid="chat-item" data-kind="assistant" data-item-id={item.id} className={`group ${focused ? "rounded-lg ring-2 ring-[#ffe08a] ring-offset-4" : ""}`}>
-        <p className="mb-1 text-xs text-[#999]">{agentLabel(item.agentPath)}</p>
-        <Markdown text={item.text} highlight={highlight} />
-        <div className="mt-1 flex gap-2 text-xs text-[#666] opacity-0 transition-opacity group-hover:opacity-100 focus-within:opacity-100">
+      <article
+        data-testid={draft ? undefined : "chat-item"}
+        data-kind={item.kind}
+        data-item-id={item.id}
+        aria-live={draft ? "polite" : undefined}
+        aria-busy={draft ? true : undefined}
+        className={`group ${focused ? "rounded-lg ring-2 ring-[#ffe08a] ring-offset-4" : ""}`}
+      >
+        <p className="mb-1 text-xs text-[#999]">
+          {agentLabel(item.agentPath)}
+          {draft ? " · 正在输入" : ""}
+        </p>
+        <div data-testid={draft ? "assistant-draft" : undefined} className={draft ? "md-streaming" : undefined}>
+          <Markdown text={item.text} highlight={draft ? "" : highlight} streaming={draft} />
+        </div>
+        <div className={`mt-1 flex h-5 gap-2 text-xs text-[#666] opacity-0 transition-opacity ${draft ? "invisible" : "group-hover:opacity-100 focus-within:opacity-100"}`}>
           <CopyButton text={item.text} />
           <button type="button" disabled aria-disabled="true" className="cursor-not-allowed text-[11px] text-[#b0b0b0]">
             提交反馈 · 未接入
           </button>
-        </div>
-      </article>
-    );
-  }
-  if (item.kind === "draft") {
-    return (
-      <article data-kind="draft" data-item-id={item.id} aria-live="polite" aria-busy="true">
-        <p className="mb-1 text-xs text-[#999]">{agentLabel(item.agentPath)} · 正在输入</p>
-        <div data-testid="assistant-draft" className="md-streaming">
-          <Markdown text={item.text} streaming />
         </div>
       </article>
     );
