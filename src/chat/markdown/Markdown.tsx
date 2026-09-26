@@ -2,12 +2,14 @@ import { memo, useMemo } from "react";
 import ReactMarkdown, { type Components, type Options } from "react-markdown";
 import remarkGfm from "remark-gfm";
 import remarkMath from "remark-math";
-import rehypeKatex from "rehype-katex";
 import rehypeSanitize, { defaultSchema } from "rehype-sanitize";
+import DOMPurify from "dompurify";
+import { fromDom } from "hast-util-from-dom";
+import { toHtml } from "hast-util-to-html";
 import type { Element, ElementContent, Root as HastRoot, RootContent } from "hast";
-import "katex/dist/katex.min.css";
 import { BlockedImage } from "./BlockedImage";
 import { CodeBlock } from "./CodeBlock";
+import { katexModule, useLazyModule } from "./lazy";
 import { MermaidBlock } from "./MermaidBlock";
 
 type MdNode = { type: string; value?: string; children?: MdNode[] };
@@ -19,6 +21,17 @@ function remarkHtmlAsText() {
     node.children?.forEach(walk);
   };
   return (tree: MdNode) => walk(tree);
+}
+
+/**
+ * The rendered Markdown goes through DOMPurify before any other rehype step: the tree is serialized,
+ * purified in a detached DOM, and read back. rehype-sanitize then applies GitHub's allowlist as a second layer.
+ */
+function rehypeDompurify() {
+  return (tree: HastRoot) => {
+    const fragment = DOMPurify.sanitize(toHtml(tree), { RETURN_DOM_FRAGMENT: true, FORBID_TAGS: ["style"], FORBID_ATTR: ["style"] });
+    tree.children = (fromDom(fragment) as HastRoot).children;
+  };
 }
 
 const sanitizeSchema = {
@@ -114,13 +127,15 @@ const staticComponents = buildComponents(false);
 const streamingComponents = buildComponents(true);
 
 export const Markdown = memo(function Markdown({ text, highlight = "", streaming = false }: { text: string; highlight?: string; streaming?: boolean }) {
+  const katex = useLazyModule(katexModule, text.includes("$"));
   const rehypePlugins = useMemo<Options["rehypePlugins"]>(
     () => [
+      rehypeDompurify,
       [rehypeSanitize, sanitizeSchema],
-      [rehypeKatex, { throwOnError: false, strict: "ignore", trust: false }],
+      ...(katex ? [[katex, { throwOnError: false, strict: "ignore", trust: false }] as [typeof katex, object]] : []),
       [rehypeMark, { query: highlight.trim() }],
     ],
-    [highlight],
+    [highlight, katex],
   );
   return (
     <div className="md">

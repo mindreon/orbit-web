@@ -1,8 +1,9 @@
 import { useCallback, useEffect, useLayoutEffect, useRef, useState, type ReactNode } from "react";
-import { useVirtualizer } from "@tanstack/react-virtual";
 import { ArrowDown } from "lucide-react";
+import type { Approval } from "../lib/rooms";
 import type { TimelineItem } from "../lib/events/timeline";
 import { ChatItem } from "./ChatItem";
+import { useFrameVirtualizer } from "./useFrameVirtualizer";
 
 /** Within this many pixels of the bottom the list counts as "at the latest" and keeps following new content. */
 const PIN_THRESHOLD = 64;
@@ -15,6 +16,9 @@ export function ChatList({
   focusId,
   retryDisabled,
   onRetry,
+  approvals,
+  decideDisabled,
+  onDecide,
 }: {
   items: TimelineItem[];
   footer: ReactNode;
@@ -23,14 +27,17 @@ export function ChatList({
   focusId: string | null;
   retryDisabled: boolean;
   onRetry: (text: string) => void;
+  approvals: readonly Approval[];
+  decideDisabled: boolean;
+  onDecide: (approvalId: string, decision: "allow" | "reject") => void;
 }) {
   const scrollRef = useRef<HTMLDivElement>(null);
   const pinnedRef = useRef(true);
   const [pinned, setPinned] = useState(true);
-  const [unseen, setUnseen] = useState(0);
+  /** items.length when the reader last saw the bottom; anything past it counts as new. */
   const seenCount = useRef(items.length);
 
-  const virtualizer = useVirtualizer({
+  const virtualizer = useFrameVirtualizer({
     count: items.length,
     getScrollElement: () => scrollRef.current,
     estimateSize: () => 88,
@@ -50,6 +57,9 @@ export function ChatList({
     setPinned(next);
   }, []);
 
+  if (pinned) seenCount.current = items.length;
+  const unseen = pinned ? 0 : Math.max(0, items.length - seenCount.current);
+
   const toBottom = useCallback(() => {
     const el = scrollRef.current;
     if (el) el.scrollTop = el.scrollHeight;
@@ -58,14 +68,9 @@ export function ChatList({
   const totalSize = virtualizer.getTotalSize();
 
   // `footer` is a new node on every render, so this runs after each render; scrolling to the bottom is idempotent.
+  // No state is set here: a setState in a layout effect would cost a second commit in the same frame.
   useLayoutEffect(() => {
-    if (pinnedRef.current) {
-      toBottom();
-      seenCount.current = items.length;
-      setUnseen(0);
-    } else if (items.length > seenCount.current) {
-      setUnseen(items.length - seenCount.current);
-    }
+    if (pinnedRef.current) toBottom();
   }, [totalSize, items.length, footer, toBottom]);
 
   useEffect(() => {
@@ -86,7 +91,6 @@ export function ChatList({
   const jump = () => {
     setPin(true);
     seenCount.current = items.length;
-    setUnseen(0);
     if (items.length > 0) virtualizer.scrollToIndex(items.length - 1, { align: "end" });
     requestAnimationFrame(toBottom);
   };
@@ -124,6 +128,9 @@ export function ChatList({
                     focused={item.id === focusId}
                     retryDisabled={retryDisabled}
                     onRetry={onRetry}
+                    approvals={approvals}
+                    decideDisabled={decideDisabled}
+                    onDecide={onDecide}
                   />
                 </div>
               </div>

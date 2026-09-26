@@ -16,6 +16,8 @@
     "@tanstack/react-virtual": "^3.14.13",
     "clsx": "^2.1.1",
     "dompurify": "^3.4.16",
+    "hast-util-from-dom": "^5.0.1",
+    "hast-util-to-html": "^9.0.5",
     "hast-util-to-jsx-runtime": "^2.3.6",
     "katex": "^0.18.9",
     "lowlight": "^3.3.0",

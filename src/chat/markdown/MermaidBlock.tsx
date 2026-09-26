@@ -1,6 +1,7 @@
 import { memo, useEffect, useId, useState } from "react";
 import DOMPurify from "dompurify";
 import type { Mermaid } from "mermaid";
+import { scheduleFrame } from "../../lib/frame";
 import { CodeBlock } from "./CodeBlock";
 
 let loader: Promise<Mermaid> | null = null;
@@ -41,11 +42,15 @@ export const MermaidBlock = memo(function MermaidBlock({ code, streaming }: { co
           USE_PROFILES: { svg: true, svgFilters: true, html: true },
           ADD_TAGS: ["foreignObject"],
         });
-        if (!cancelled) setView({ kind: "svg", svg: clean });
+        scheduleFrame(() => {
+          if (!cancelled) setView({ kind: "svg", svg: clean });
+        });
       })
       .catch(() => {
         document.getElementById(`d${id}`)?.remove();
-        if (!cancelled) setView({ kind: "error" });
+        scheduleFrame(() => {
+          if (!cancelled) setView({ kind: "error" });
+        });
       });
     return () => {
       cancelled = true;
