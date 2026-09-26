@@ -3536,8 +3536,6 @@ export function SettingsPage() {
 
 function SettingsBody({ section }: { section: string }) {
   const role = useMind((s) => s.role);
-  const [nickname, setNickname] = useState("经办人");
-  const [editingName, setEditingName] = useState(false);
   const uiPrefs = useSyncExternalStore(subscribeUiPrefs, getUiPrefs);
 
   if (section === "个人主页") {
@@ -3546,27 +3544,17 @@ function SettingsBody({ section }: { section: string }) {
         <p className="text-[#666]">当前身份：{role}</p>
         <div className="rounded-xl bg-white p-4">
           <p className="text-xs text-[#999]">昵称</p>
-          {editingName ? (
-            <form
-              className="mt-2 flex gap-2"
-              onSubmit={(event) => {
-                event.preventDefault();
-                if (nickname.trim()) setEditingName(false);
-              }}
+          <div className="mt-2 flex items-center">
+            <span>经办人</span>
+            <button
+              type="button"
+              disabled
+              aria-disabled="true"
+              className="ml-auto cursor-not-allowed text-[#b0b0b0] disabled:cursor-not-allowed"
             >
-              <input aria-label="昵称" value={nickname} className="h-9 flex-1 rounded-lg border border-[#e6e6e8] px-3" onChange={(event) => setNickname(event.target.value)} />
-              <button className="rounded-lg bg-[#1a1a1a] px-3 text-white" type="submit">
-                修改昵称
-              </button>
-            </form>
-          ) : (
-            <div className="mt-2 flex items-center">
-              <span>{nickname}</span>
-              <button className="ml-auto text-[#666]" type="button" onClick={() => setEditingName(true)}>
-                修改昵称
-              </button>
-            </div>
-          )}
+              修改昵称 · 未接入
+            </button>
+          </div>
         </div>
       </div>
     );
