@@ -5,8 +5,14 @@
  * It follows the contract the web codes against: every SSE frame carries `id:`, `event: reset` means refetch.
  */
 import { createServer } from "node:http";
+import { readFile } from "node:fs/promises";
+import { extname, join, normalize } from "node:path";
+import { perfDataset } from "./fixtures/datasets.mjs";
 
 const PORT = Number(process.env.FAKE_CONTROL_PORT ?? 18080);
+/** When set (e.g. "dist"), the built app is served from the same origin, so no proxy is involved. */
+const STATIC_DIR = process.env.STATIC_DIR ?? "";
+const MIME = { ".html": "text/html", ".js": "text/javascript", ".css": "text/css", ".svg": "image/svg+xml", ".woff2": "font/woff2", ".woff": "font/woff", ".ttf": "font/ttf", ".png": "image/png" };
 
 const ROOM = {
   id: "room-e2e",
@@ -18,7 +24,9 @@ const ROOM = {
 };
 
 const state = {
-  activity: [],
+  activity: process.env.FIXTURE_MESSAGES
+    ? perfDataset({ messages: Number(process.env.FIXTURE_MESSAGES), replyChars: Number(process.env.FIXTURE_REPLY_CHARS ?? 0) })
+    : [],
   approvals: [],
   streams: new Set(),
   log: { events: [], activity: 0, posts: [], decisions: [] },
@@ -97,6 +105,11 @@ const server = createServer(async (req, res) => {
     state.activity = (await readBody(req)).items ?? [];
     return json(res, 200, { ok: true });
   }
+  if (path === "/__test/dataset" && req.method === "POST") {
+    const { messages, replyChars } = await readBody(req);
+    state.activity = perfDataset({ messages, replyChars });
+    return json(res, 200, { items: state.activity.length });
+  }
   if (path === "/__test/approvals" && req.method === "POST") {
     state.approvals = (await readBody(req)).items ?? [];
     return json(res, 200, { ok: true });
@@ -122,9 +135,21 @@ const server = createServer(async (req, res) => {
     return json(res, 200, { ok: true });
   }
 
+  if (STATIC_DIR && req.method === "GET" && !path.startsWith("/v1/") && !path.startsWith("/__test/")) {
+    const file = normalize(join(STATIC_DIR, path)).startsWith(normalize(STATIC_DIR)) ? join(STATIC_DIR, path) : "";
+    const target = file && extname(file) ? file : join(STATIC_DIR, "index.html");
+    try {
+      const body = await readFile(target);
+      res.writeHead(200, { "content-type": MIME[extname(target)] ?? "application/octet-stream" });
+      return res.end(body);
+    } catch {
+      // fall through to 404
+    }
+  }
+
   json(res, 404, { code: "NOT_FOUND", message: `${req.method} ${path}` });
 });
 
 server.listen(PORT, "127.0.0.1", () => {
-  console.log(`fake orbit-control on http://127.0.0.1:${PORT}`);
+  console.log(`fake orbit-control on http://127.0.0.1:${PORT}${STATIC_DIR ? ` (serving ${STATIC_DIR}; open /task/${ROOM.id})` : ""}`);
 });

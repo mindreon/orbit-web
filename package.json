@@ -10,6 +10,8 @@
     "typecheck": "tsc --noEmit",
     "gen:events": "node scripts/gen-events.mjs",
     "test:e2e": "playwright test",
+    "perf:chat": "playwright test -c playwright.perf.config.ts",
+    "fixture:chat": "vite build && FIXTURE_MESSAGES=1000 FIXTURE_REPLY_CHARS=50000 STATIC_DIR=dist node e2e/fake-control.mjs",
     "test:api-smoke": "node scripts/api-smoke.mjs"
   },
   "dependencies": {

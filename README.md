@@ -30,4 +30,11 @@ pnpm gen:events   # 重新生成 src/lib/events/orbit-event.gen.ts
 pnpm test:e2e     # 断线重连清草稿、reset 重建两条 E2E，报告在 playwright-report/
 ```
 
-首次跑 E2E 前先 `pnpm exec playwright install chromium`。
+首次跑 E2E 前先 `pnpm exec playwright install chromium webkit`（输入法回车的用例在 WebKit 上也跑）。
+
+性能验收用 1000 条消息加一条 5 万字回复的固定数据集（`e2e/fixtures/datasets.mjs`，只给开发和测试用，应用不引用）：
+
+```bash
+pnpm perf:chat      # 生产构建上测滚动帧率、打字延迟、流式 CLS，结果和 Chrome trace 写到 perf-results/
+pnpm fixture:chat   # 构建后起一个带数据集的本地服务，打开 http://127.0.0.1:18080/task/room-e2e 用 DevTools Performance 面板自己测
+```

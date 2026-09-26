@@ -5,6 +5,7 @@ const WEB_PORT = 3310;
 
 export default defineConfig({
   testDir: "./e2e",
+  testIgnore: ["perf/**"],
   fullyParallel: false,
   workers: 1,
   retries: 0,
@@ -18,7 +19,11 @@ export default defineConfig({
     video: "on",
     viewport: { width: 1440, height: 900 },
   },
-  projects: [{ name: "chromium", use: { ...devices["Desktop Chrome"], viewport: { width: 1440, height: 900 } } }],
+  projects: [
+    { name: "chromium", use: { ...devices["Desktop Chrome"], viewport: { width: 1440, height: 900 } } },
+    // Safari's engine: the composer keys (IME Enter, keyCode 229) must hold there too.
+    { name: "webkit", testMatch: /composer\.spec\.ts/, use: { ...devices["Desktop Safari"], viewport: { width: 1440, height: 900 } } },
+  ],
   webServer: [
     {
       command: `node e2e/fake-control.mjs`,
