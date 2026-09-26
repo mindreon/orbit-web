@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore, type KeyboardEvent as ReactKeyboardEvent, type ReactNode } from "react";
+import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore, type KeyboardEvent as ReactKeyboardEvent, type ReactNode } from "react";
 import { useNavigate, useSearchParams } from "react-router";
 import { LoaderCircle, Square } from "lucide-react";
 import { modelModeLabel } from "../lib/modelMode";
@@ -12,10 +12,12 @@ import { orderedDrafts } from "../lib/events/stream";
 import { buildProcess, buildTimeline, draftItems, hasOpenWork } from "../lib/events/timeline";
 import { getUiPrefs, setUiPrefs, subscribeUiPrefs } from "../lib/uiPrefs";
 import { chordFromEvent, getShortcuts, isShortcutCapture } from "../lib/shortcuts";
-import { ChatList } from "../chat/ChatList";
 import { ToolRow } from "../chat/ToolRow";
 import { ModelPicker } from "./ModelPicker";
 import { CreateFailureNotice } from "./CreateFailureNotice";
+
+/** Markdown, KaTeX and syntax highlighting only load once a task conversation is opened. */
+const ChatList = lazy(() => import("../chat/ChatList").then((module) => ({ default: module.ChatList })));
 
 const RAIL_TABS = ["产物", "概览", "任务进程", "文件"] as const;
 type RailTab = (typeof RAIL_TABS)[number];
@@ -335,49 +337,53 @@ function Timeline({ railOpen, onToggleRail }: { railOpen: boolean; onToggleRail:
           {findNeedle && findHits.length === 0 ? <span className="text-[#888]">未找到匹配内容</span> : null}
         </div>
       ) : null}
-      {streamStatus && STREAM_NOTICE[streamStatus] ? (
-        <p role="status" className="flex items-center gap-2 border-b bg-amber-50 px-4 py-1.5 text-xs text-amber-800">
-          {streamStatus === "reconnecting" ? <LoaderCircle className="h-3 w-3 animate-spin" aria-hidden /> : null}
-          {STREAM_NOTICE[streamStatus]}
-        </p>
-      ) : null}
-      <ChatList
-        key={matter.id}
-        items={items}
-        highlight={findOpen ? findText : ""}
-        focusId={findOpen ? currentHitId : null}
-        retryDisabled={turnRunning || pending !== null || role !== "经办人"}
-        onRetry={retry}
-        empty={<p className="text-muted-foreground py-8 text-center text-sm">还没有消息。发送后，这里显示这件云端任务的真实回复。</p>}
-        footer={
-          <>
-            {approval && approval.status === "pending" ? (
-              <div className="bg-card max-w-xl rounded-lg border p-3">
-                <p className="text-xs font-semibold">这一次要先确认</p>
-                <p className="mt-2 text-sm leading-6">
-                  {approval.toolName ? `要调用「${approval.toolName}」。` : "助手要做一次需要确认的操作。"}
-                  {approval.reason ? approval.reason : ""}
-                </p>
-                <div className="mt-3 flex gap-2">
-                  <Button disabled={pending === "decide"} onClick={() => void decide(approval.id, "allow")}>
-                    允许这一次
-                  </Button>
-                  <Button variant="outline" disabled={pending === "decide"} onClick={() => void decide(approval.id, "reject")}>
-                    拒绝
-                  </Button>
-                </div>
-              </div>
-            ) : null}
-            {turnRunning && drafts.length === 0 ? (
-              <p className="flex items-center gap-2 text-xs text-[#888]" data-testid="turn-running">
-                <LoaderCircle className="h-3.5 w-3.5 animate-spin" aria-hidden />
-                助手正在处理…
-              </p>
-            ) : null}
-            {error ? <p className="text-destructive text-xs">{error}</p> : null}
-          </>
-        }
-      />
+      <div className="relative flex min-h-0 flex-1 flex-col">
+        {streamStatus && STREAM_NOTICE[streamStatus] ? (
+          <p role="status" className="absolute left-1/2 top-2 z-10 flex -translate-x-1/2 items-center gap-2 rounded-full border border-amber-200 bg-amber-50 px-3 py-1 text-xs text-amber-800 shadow-sm">
+            {streamStatus === "reconnecting" ? <LoaderCircle className="h-3 w-3 animate-spin" aria-hidden /> : null}
+            {STREAM_NOTICE[streamStatus]}
+          </p>
+        ) : null}
+        <Suspense fallback={<p className="text-muted-foreground min-h-0 flex-1 py-8 text-center text-sm">正在加载对话…</p>}>
+          <ChatList
+            key={matter.id}
+            items={items}
+            highlight={findOpen ? findText : ""}
+            focusId={findOpen ? currentHitId : null}
+            retryDisabled={turnRunning || pending !== null || role !== "经办人"}
+            onRetry={retry}
+            empty={<p className="text-muted-foreground py-8 text-center text-sm">还没有消息。发送后，这里显示这件云端任务的真实回复。</p>}
+            footer={
+              <>
+                {approval && approval.status === "pending" ? (
+                  <div className="bg-card max-w-xl rounded-lg border p-3">
+                    <p className="text-xs font-semibold">这一次要先确认</p>
+                    <p className="mt-2 text-sm leading-6">
+                      {approval.toolName ? `要调用「${approval.toolName}」。` : "助手要做一次需要确认的操作。"}
+                      {approval.reason ? approval.reason : ""}
+                    </p>
+                    <div className="mt-3 flex gap-2">
+                      <Button disabled={pending === "decide"} onClick={() => void decide(approval.id, "allow")}>
+                        允许这一次
+                      </Button>
+                      <Button variant="outline" disabled={pending === "decide"} onClick={() => void decide(approval.id, "reject")}>
+                        拒绝
+                      </Button>
+                    </div>
+                  </div>
+                ) : null}
+                {turnRunning && drafts.length === 0 ? (
+                  <p className="flex items-center gap-2 text-xs text-[#888]" data-testid="turn-running">
+                    <LoaderCircle className="h-3.5 w-3.5 animate-spin" aria-hidden />
+                    助手正在处理…
+                  </p>
+                ) : null}
+                {error ? <p className="text-destructive text-xs">{error}</p> : null}
+              </>
+            }
+          />
+        </Suspense>
+      </div>
       {queue.length > 0 ? (
         <div className="border-t px-3 py-2 text-sm">
           <div className="flex items-center gap-2">

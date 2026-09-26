@@ -39,6 +39,10 @@ export function ChatList({
     paddingStart: 16,
     getItemKey: (index) => items[index]?.id ?? index,
   });
+  // The virtualizer shifts scrollTop when an item above the fold changes height. While following the latest
+  // content that shift reads as "the reader scrolled up" and unpins the list; the pin already keeps the bottom in view.
+  virtualizer.shouldAdjustScrollPositionOnItemSizeChange = (item, _delta, instance) =>
+    !pinnedRef.current && item.start < (instance.scrollOffset ?? 0);
 
   const setPin = useCallback((next: boolean) => {
     if (pinnedRef.current === next) return;
