@@ -5,13 +5,9 @@ import { useMind } from "../store";
 import { Area, Button } from "../ui";
 import { cn } from "../lib/cn";
 import type { ActivityEvent, ChatMessage } from "../lib/rooms";
-import { publishFileShare } from "../lib/shares";
-import { getPublishedApps, subscribePublishedApps } from "../lib/publishedApps";
 import { getUiPrefs, setUiPrefs, subscribeUiPrefs } from "../lib/uiPrefs";
 import { chordFromEvent, getShortcuts, isShortcutCapture } from "../lib/shortcuts";
 import { ModelPicker } from "./ModelPicker";
-import { ShareTaskDialog } from "./ShareTaskDialog";
-import { AppMenu } from "./AppMenu";
 import { CreateFailureNotice } from "./CreateFailureNotice";
 
 const emptyMessages: ChatMessage[] = [];
@@ -46,7 +42,10 @@ function BlankMatter() {
   const createMatter = useMind((s) => s.createMatter);
   const pending = useMind((s) => s.pending);
   const createError = useMind((s) => s.createError);
+  const clearCreateError = useMind((s) => s.clearCreateError);
   const [draft, setDraft] = useState("");
+
+  useEffect(() => () => clearCreateError(), [clearCreateError]);
   const [permission, setPermission] = useState<PermissionPreset>("workspace-write");
 
   function submit() {
@@ -72,7 +71,15 @@ function BlankMatter() {
         }}
       >
         <div className="bg-card rounded-xl border p-3 shadow-sm">
-          <Area rows={3} value={draft} placeholder="写下这次要办的事" onChange={(event) => setDraft(event.target.value)} />
+          <Area
+            rows={3}
+            value={draft}
+            placeholder="写下这次要办的事"
+            onChange={(event) => {
+              clearCreateError();
+              setDraft(event.target.value);
+            }}
+          />
           <div className="mt-3 flex items-end justify-between gap-3">
             <label className="text-xs">
               这件任务的云端权限
@@ -152,8 +159,6 @@ function Timeline({ railOpen, onToggleRail }: { railOpen: boolean; onToggleRail:
   const attachedFile = params.get("file");
   const [text, setText] = useState(attachedFile ?? "");
   const [copiedId, setCopiedId] = useState<string | null>(null);
-  const [model, setModel] = useState("Auto");
-  const [modelNotice, setModelNotice] = useState("");
   const [findOpen, setFindOpen] = useState(false);
   const [findText, setFindText] = useState("");
   const [findIndex, setFindIndex] = useState(0);
@@ -416,7 +421,7 @@ function Timeline({ railOpen, onToggleRail }: { railOpen: boolean; onToggleRail:
           }}
         >
           <div className="bg-card rounded-xl border p-3">
-            <TaskComposerExtras matterId={matter.id} text={text} setText={setText} />
+            <TaskComposerExtras text={text} setText={setText} />
             <ComposerSuggest text={text} setText={setText} />
             {attachedFile ? <p className="mb-2 text-xs text-[#666]">已添加到任务 · {attachedFile}</p> : null}
             <Area
@@ -430,15 +435,7 @@ function Timeline({ railOpen, onToggleRail }: { railOpen: boolean; onToggleRail:
                 语音输入
               </button>
               <span className="rounded-md px-1 py-1">云端工作空间</span>
-              <ModelPicker
-                value={model}
-                onChange={(next) => {
-                  if (next !== model) setModelNotice(`模型已从 ${model} 更改为 ${next}`);
-                  setModel(next);
-                }}
-              />
-              {model !== "Auto" ? <span>使用外部模型，注意数据安全</span> : null}
-              {modelNotice ? <span title="在对话中途切换模型会使上下文缓存失效，积分消耗增加，背景信息可能会自动压缩，降低性能表现">{modelNotice}</span> : null}
+              <ModelPicker value="Auto" />
               <span className="rounded-md px-1 py-1" title="权限在创建这件任务时已经确定">
                 {matter.permission === "danger-full-access" ? "允许完全访问" : matter.permission === "read-only" ? "云端只读" : "默认权限"}
               </span>
@@ -520,8 +517,6 @@ function Inspector() {
   const [tab, setTab] = useState<RailTab>("产物");
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [followed, setFollowed] = useState(false);
-  const [shareOpen, setShareOpen] = useState(false);
-  const [copied, setCopied] = useState(false);
   const [notice, setNotice] = useState<string | null>(null);
   const items: { id: string; name: string; kind: string; body: string }[] = [];
   const selected = items.find((item) => item.id === selectedId) ?? null;
@@ -580,28 +575,13 @@ function Inspector() {
             items={items}
             selected={selected}
             followed={followed}
-            shareOpen={shareOpen}
-            copied={copied}
             notice={notice}
             onSelect={(id) => {
               setSelectedId(id);
               setTab("产物");
-              setShareOpen(false);
-              setCopied(false);
             }}
             onFollow={() => setFollowed((value) => !value)}
             onReview={() => setNotice("审查")}
-            onShare={() => {
-              setShareOpen(true);
-              setCopied(false);
-            }}
-            onCopy={() => {
-              if (!selected) return;
-              publishFileShare({ matterId: matter.id, taskTitle: matter.title, fileId: selected.id, name: selected.name });
-              const link = `${location.origin}/task/${matter.id}?file=${encodeURIComponent(selected.name)}`;
-              void navigator.clipboard.writeText(link).finally(() => setCopied(true));
-            }}
-            onCloseShare={() => setShareOpen(false)}
           />
         )}
       </div>
@@ -614,29 +594,19 @@ function ArtifactPane({
   items,
   selected,
   followed,
-  shareOpen,
-  copied,
   notice,
   onSelect,
   onFollow,
   onReview,
-  onShare,
-  onCopy,
-  onCloseShare,
 }: {
   tab: "产物" | "文件";
   items: { id: string; name: string; kind: string; body: string }[];
   selected: { id: string; name: string; kind: string; body: string } | null;
   followed: boolean;
-  shareOpen: boolean;
-  copied: boolean;
   notice: string | null;
   onSelect: (id: string) => void;
   onFollow: () => void;
   onReview: () => void;
-  onShare: () => void;
-  onCopy: () => void;
-  onCloseShare: () => void;
 }) {
   if (items.length === 0) {
     return <p className="text-muted-foreground text-xs leading-5">{tab === "产物" ? "请选择一个产物查看详情" : "暂无内容"}</p>;
@@ -674,9 +644,6 @@ function ArtifactPane({
         <button type="button" className="rounded-lg bg-[#f3f3f4] px-2 py-1" onClick={onReview}>
           审查
         </button>
-        <button type="button" className="rounded-lg bg-[#f3f3f4] px-2 py-1" onClick={onShare}>
-          分享
-        </button>
         <button
           type="button"
           disabled
@@ -685,35 +652,15 @@ function ArtifactPane({
         >
           下载 · 未接入
         </button>
-        <button
-          type="button"
-          disabled
-          aria-disabled="true"
-          className="cursor-not-allowed rounded-lg bg-[#f3f3f4] px-2 py-1 text-[#b0b0b0] disabled:cursor-not-allowed"
-        >
-          发布 · 未接入
-        </button>
       </div>
-      {shareOpen ? (
-        <div className="mt-3 rounded-xl border border-[#ececee] p-3 text-xs">
-          <p className="font-medium">分享</p>
-          <p className="text-muted-foreground mt-1">任何有此链接的人都能查看</p>
-          <div className="mt-2 flex justify-end gap-2">
-            <button type="button" onClick={onCloseShare}>取消</button>
-            <button type="button" className="rounded-lg bg-[#1a1a1a] px-2 py-1 text-white" onClick={onCopy}>
-              {copied ? "链接已复制到剪贴板" : "复制链接"}
-            </button>
-          </div>
-        </div>
-      ) : null}
       {notice && notice !== "审查" ? <p className="text-muted-foreground mt-3 text-xs">{notice}</p> : null}
     </div>
   );
 }
 
-const ADD_ITEMS = ["添加文件", "引用对话中的文件", "应用", "模式", "专家", "技能", "连接器"] as const;
+const ADD_ITEMS = ["添加文件", "引用对话中的文件", "模式", "专家", "技能", "连接器"] as const;
 
-function TaskComposerExtras({ matterId, text, setText }: { matterId: string; text: string; setText: (value: string) => void }) {
+function TaskComposerExtras({ text, setText }: { text: string; setText: (value: string) => void }) {
   const catalog = useMind((s) => s.catalog);
   const [addOpen, setAddOpen] = useState(false);
   const [addPanel, setAddPanel] = useState<(typeof ADD_ITEMS)[number] | null>(null);
@@ -765,12 +712,6 @@ function TaskComposerExtras({ matterId, text, setText }: { matterId: string; tex
           {addPanel === "技能" ? <MiniList items={catalog.skills.map((item) => item.name)} empty="暂无可用技能" onPick={(name) => attach(`/${name}`)} /> : null}
           {addPanel === "连接器" ? <MiniList items={catalog.mcps.map((item) => item.name)} empty="暂无可用连接器" onPick={(name) => attach(name)} /> : null}
           {addPanel === "模式" ? <MiniList items={["计划", "仅问答"]} empty="" onPick={(name) => attach(name)} /> : null}
-          {addPanel === "应用" ? (
-            <AppMenu
-              matterId={matterId}
-              onPick={(app) => attach(app.name)}
-            />
-          ) : null}
           {addPanel === "引用对话中的文件" ? (
             <div className="border-t border-[#f0f0f1] px-1 py-1">
               <p className="px-2 py-1 text-xs text-[#999]">对话中的文件</p>
@@ -856,7 +797,6 @@ function applyToken(text: string, kind: "mention" | "slash", insertion: string) 
 
 export function ComposerSuggest({ text, setText }: { text: string; setText: (value: string) => void }) {
   const catalog = useMind((s) => s.catalog);
-  const apps = useSyncExternalStore(subscribePublishedApps, getPublishedApps, getPublishedApps);
   const token = readToken(text);
   useEffect(() => {
     function openMention() {
@@ -876,7 +816,6 @@ export function ComposerSuggest({ text, setText }: { text: string; setText: (val
   }, [text, setText]);
   if (!token) return null;
   const query = token.query.trim();
-  const visibleApps = apps.filter((app) => !query || app.name.includes(query));
   const agents = catalog.agents.filter((agent) => !query || agent.name.includes(query));
   const skills = catalog.skills.filter((skill) => !query || skill.name.includes(query));
   function pick(insertion: string) {
@@ -892,14 +831,6 @@ export function ComposerSuggest({ text, setText }: { text: string; setText: (val
           <p className="px-2 py-1 text-xs text-[#999]">对话中的文件</p>
           <p className="px-2 pb-1 text-xs text-[#999]">添加文件作为回答背景</p>
           <p className="px-2 py-1 text-xs text-[#888]">当前对话中暂无文件</p>
-          <p className="mt-1 px-2 py-1 text-xs text-[#888]">应用</p>
-          {apps.length === 0 ? <p className="px-2 py-1 text-xs text-[#888]">当前暂无可选应用</p> : null}
-          {apps.length > 0 && visibleApps.length === 0 ? <p className="px-2 py-1 text-xs text-[#888]">无搜索结果</p> : null}
-          {visibleApps.map((app) => (
-            <button key={app.id} type="button" className="block w-full rounded-lg px-2 py-1.5 text-left hover:bg-[#f6f6f7]" onClick={() => pick(app.name)}>
-              {app.name}
-            </button>
-          ))}
           <p className="mt-1 px-2 py-1 text-xs text-[#888]">助理</p>
           <p className="px-2 pb-1 text-xs text-[#999]">选择助理协同推进任务</p>
           {agents.length === 0 ? <p className="px-2 py-1 text-xs text-[#888]">未找到助理</p> : null}
@@ -948,7 +879,7 @@ function TaskMenu({ matterId, running, title }: { matterId: string; running: boo
   const archiveMatter = useMind((s) => s.archiveMatter);
   const removeMatter = useMind((s) => s.removeMatter);
   const [open, setOpen] = useState(false);
-  const [dialog, setDialog] = useState<"rename" | "share" | "archive" | "delete" | null>(null);
+  const [dialog, setDialog] = useState<"rename" | "archive" | "delete" | null>(null);
   const [renameValue, setRenameValue] = useState(title);
 
   return (
@@ -959,7 +890,6 @@ function TaskMenu({ matterId, running, title }: { matterId: string; running: boo
       {open ? (
         <div className="absolute right-16 top-12 z-20 w-36 rounded-xl border border-[#ececee] bg-white p-1 shadow-lg">
           <MenuButton label="重命名" onClick={() => { setRenameValue(title); setDialog("rename"); setOpen(false); }} />
-          <MenuButton label="分享任务" onClick={() => { setDialog("share"); setOpen(false); }} />
           <MenuButton label="归档任务" disabled={running} title={running ? "任务进行中，无法归档" : undefined} onClick={() => { setDialog("archive"); setOpen(false); }} />
           <MenuButton label="删除任务" onClick={() => { setDialog("delete"); setOpen(false); }} />
         </div>
@@ -982,11 +912,6 @@ function TaskMenu({ matterId, running, title }: { matterId: string; running: boo
               <button type="submit" className="rounded-lg bg-[#1a1a1a] px-3 py-1.5 text-white">保存</button>
             </div>
           </form>
-        </Overlay>
-      ) : null}
-      {dialog === "share" ? (
-        <Overlay>
-          <ShareTaskDialog matterId={matterId} title={title} onClose={() => setDialog(null)} />
         </Overlay>
       ) : null}
       {dialog === "archive" ? (

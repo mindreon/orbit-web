@@ -52,6 +52,7 @@ interface MindState {
   error: string | null;
   /** 创建房间失败。带是否显示重试，和列表错误分开。 */
   createError: RoomCreateAlert | null;
+  clearCreateError: () => void;
   threadAgentId: string | null;
   reading: "kb" | "external" | "mcp" | null;
   catalogTab: "agent" | "skill" | "kb" | "external" | "mcp";
@@ -118,6 +119,7 @@ export const useMind = create<MindState>((set, get) => ({
   pending: null,
   error: null,
   createError: null,
+  clearCreateError: () => set({ createError: null }),
   threadAgentId: null,
   reading: null,
   catalogTab: "skill",
@@ -133,7 +135,7 @@ export const useMind = create<MindState>((set, get) => ({
     set({ activeId: id, composing: false, threadAgentId: null, reading: null, error: null });
     void get().loadRoomDetail(id);
   },
-  startBlank: () => set({ activeId: null, composing: true, threadAgentId: null, reading: null, error: null }),
+  startBlank: () => set({ activeId: null, composing: true, threadAgentId: null, reading: null, error: null, createError: null }),
   renameMatter: (id, title) => {
     const next = title.trim();
     if (!next) return;

@@ -2,6 +2,7 @@ import { StrictMode } from "react";
 import { createRoot } from "react-dom/client";
 import { createBrowserRouter, RouterProvider } from "react-router";
 import { App } from "./App";
+import { purgeLegacyModelStorage } from "./lib/legacyStorage";
 import { HomePage } from "./pages/Home";
 import { NotFoundPage, RouteErrorPage } from "./pages/NotFound";
 import {
@@ -9,15 +10,14 @@ import {
   AssistantsPage,
   AutomationPage,
   ExpertsPage,
-  FilesPage,
-  InspirationPage,
   LibraryPage,
-  MailPage,
   ProjectsPage,
   SettingsPage,
 } from "./pages/Sections";
 import { WorkbenchPage } from "./pages/Workbench";
 import "./index.css";
+
+purgeLegacyModelStorage();
 
 const router = createBrowserRouter([
   {
@@ -37,9 +37,6 @@ const router = createBrowserRouter([
           { path: "experts/connectors", element: <ExpertsPage tab="connectors" /> },
           { path: "automation", element: <AutomationPage /> },
           { path: "library", element: <LibraryPage /> },
-          { path: "files", element: <FilesPage /> },
-          { path: "mail", element: <MailPage /> },
-          { path: "inspiration", element: <InspirationPage /> },
           { path: "settings", element: <SettingsPage /> },
           { path: "archived", element: <ArchivedPage /> },
           { path: "*", element: <NotFoundPage /> },
