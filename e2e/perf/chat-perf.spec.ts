@@ -226,10 +226,8 @@ test("streaming the 50,000-character reply over 1000 messages: CLS <= 0.1, keyst
   const latency = await readLatency(page);
 
   await post(page, "/__test/emit", {
-    id: "ds-final",
     data: {
       id: "ds-final",
-      sequence: 5000,
       type: "assistant.message",
       role: "assistant",
       roomId: "room-e2e",

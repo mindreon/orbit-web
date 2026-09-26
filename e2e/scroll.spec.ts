@@ -132,8 +132,7 @@ test("streaming keeps CLS at or below 0.1 and never re-mounts finished blocks", 
     }
   }
   await emit(page.request, {
-    id: "ev-final",
-    data: activity("ev-final", 100, { type: "assistant.message", role: "assistant", turnId: "tn-cls", blockId: "b-cls", text: parts.join("") }),
+    data: activity("ev-final", 0, { type: "assistant.message", role: "assistant", turnId: "tn-cls", blockId: "b-cls", text: parts.join("") }),
   });
   const final = page.locator('[data-testid="chat-item"][data-kind="assistant"]').filter({ hasText: "最后一段" });
   await expect(final).toBeVisible();

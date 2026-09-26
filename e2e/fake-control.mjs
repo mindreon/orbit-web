@@ -2,7 +2,9 @@
 /**
  * Test-only stand-in for orbit-control. It serves the room endpoints orbit-web reads and lets a test
  * script drive the SSE stream through /__test/*: emit frames, drop the connection, swap /activity.
- * It follows the contract the web codes against: every SSE frame carries `id:`, `event: reset` means refetch.
+ * It follows the contract the web codes against (C33): every SSE frame carries `id:` = the per-task event sequence,
+ * which is also `sequence` on /activity items; assistant.delta keeps its own `seq` (chunk index within the block).
+ * `event: reset` means refetch.
  */
 import { createServer } from "node:http";
 import { readFile } from "node:fs/promises";
@@ -24,6 +26,8 @@ const ROOM = {
 };
 
 const state = {
+  /** Last per-task event sequence handed out as an SSE id. */
+  sequence: 0,
   activity: process.env.FIXTURE_MESSAGES
     ? perfDataset({ messages: Number(process.env.FIXTURE_MESSAGES), replyChars: Number(process.env.FIXTURE_REPLY_CHARS ?? 0) })
     : [],
@@ -31,6 +35,22 @@ const state = {
   streams: new Set(),
   log: { events: [], activity: 0, posts: [], decisions: [] },
 };
+
+function maxSequence(items) {
+  return items.reduce((max, item) => Math.max(max, Number(item.sequence) || 0), 0);
+}
+state.sequence = maxSequence(state.activity);
+
+/** Frames without an explicit id get the next per-task sequence; persisted events without one get it as `sequence`. */
+function numbered(item) {
+  const id = item.id ?? (item.noId ? undefined : String(++state.sequence));
+  if (id && /^\d+$/.test(id)) state.sequence = Math.max(state.sequence, Number(id));
+  let data = item.data;
+  if (id && /^\d+$/.test(id) && data && typeof data === "object" && data.type && data.type !== "assistant.delta" && !data.sequence) {
+    data = { ...data, sequence: Number(id) };
+  }
+  return { id, event: item.event, data };
+}
 
 function json(res, status, body) {
   res.writeHead(status, { "content-type": "application/json" });
@@ -103,11 +123,13 @@ const server = createServer(async (req, res) => {
 
   if (path === "/__test/activity" && req.method === "POST") {
     state.activity = (await readBody(req)).items ?? [];
-    return json(res, 200, { ok: true });
+    state.sequence = Math.max(state.sequence, maxSequence(state.activity));
+    return json(res, 200, { ok: true, sequence: state.sequence });
   }
   if (path === "/__test/dataset" && req.method === "POST") {
     const { messages, replyChars } = await readBody(req);
     state.activity = perfDataset({ messages, replyChars });
+    state.sequence = maxSequence(state.activity);
     return json(res, 200, { items: state.activity.length });
   }
   if (path === "/__test/approvals" && req.method === "POST") {
@@ -116,9 +138,9 @@ const server = createServer(async (req, res) => {
   }
   if (path === "/__test/emit" && req.method === "POST") {
     const body = await readBody(req);
-    const frames = Array.isArray(body) ? body : [body];
+    const frames = (Array.isArray(body) ? body : [body]).map(numbered);
     for (const stream of state.streams) for (const item of frames) stream.write(frame(item));
-    return json(res, 200, { delivered: state.streams.size });
+    return json(res, 200, { delivered: state.streams.size, ids: frames.map((item) => item.id) });
   }
   if (path === "/__test/drop" && req.method === "POST") {
     for (const stream of state.streams) stream.destroy();
@@ -131,6 +153,7 @@ const server = createServer(async (req, res) => {
     state.streams.clear();
     state.activity = [];
     state.approvals = [];
+    state.sequence = 0;
     state.log = { events: [], activity: 0, posts: [], decisions: [] };
     return json(res, 200, { ok: true });
   }

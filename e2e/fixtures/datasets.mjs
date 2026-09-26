@@ -15,7 +15,7 @@ function event(sequence, patch) {
     source: "worker",
     agentId: "main",
     agentPath: "main",
-    modelMode: "fake",
+    modelMode: "mock",
     modelName: "fixture",
     occurredAt: new Date(T0 + sequence * 1000).toISOString(),
     ...patch,

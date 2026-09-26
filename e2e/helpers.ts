@@ -4,6 +4,7 @@ import { expect, type APIRequestContext, type Page } from "@playwright/test";
 export const CONTROL = "http://127.0.0.1:18080";
 export const ROOM = "room-e2e";
 
+/** An SSE frame. Without `id` the fake control assigns the next per-task sequence, as orbit-control does (C33). */
 export type Frame = { id?: string; event?: string; data?: unknown };
 
 export function activity(id: string, sequence: number, patch: Record<string, unknown>) {
@@ -41,9 +42,11 @@ export async function control(request: APIRequestContext, path: string, body?: u
   return response.json();
 }
 
-export async function emit(request: APIRequestContext, frames: Frame | Frame[]) {
+/** Sends frames on the open stream and returns the SSE ids they went out with. */
+export async function emit(request: APIRequestContext, frames: Frame | Frame[]): Promise<string[]> {
   const result = await control(request, "/__test/emit", frames);
   expect(result.delivered).toBeGreaterThan(0);
+  return result.ids as string[];
 }
 
 export async function log(request: APIRequestContext) {

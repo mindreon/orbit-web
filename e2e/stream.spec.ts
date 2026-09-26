@@ -17,6 +17,10 @@
  *   F10 an unknown event type breaks rendering instead of being ignored.
  *   F11 the conversation blanks out while the stream is down.
  *   F12 an event the client missed while disconnected never shows up (the server did not replay it).
+ *   F13 (C33) the delta chunk `seq` and the SSE `id:` (per-task event sequence) get mixed: Last-Event-ID carries a
+ *       JSON id or a chunk seq, or a replayed frame with an already-seen SSE id is applied again.
+ *   F14 a tool.result with `truncated: true` gives no hint that the text was cut at 4KB.
+ *   F15 modelMode "mock" / "real" is not shown as 假模型 / 真模型.
  * Reset
  *   R1 `event: reset` is ignored and stale items stay.
  *   R2 reset does not refetch /activity.
@@ -44,21 +48,29 @@ test.beforeEach(async ({ request }) => {
   await control(request, "/__test/clear");
 });
 
+const toolCall = (sequence: number) =>
+  activity("ev-2", sequence, { type: "tool.call", toolName: "execute_shell_command", callId: "c1", turnId: "tn-1", argsPreview: '{"command": "ls -la"}' });
+
 test("reconnect clears unfinished drafts and waits for the final message", async ({ page, request }) => {
+  // JSON ids ("ev-…") and delta chunk seqs (1, 2, 3…) deliberately differ from the SSE ids (per-task sequence).
   await control(request, "/__test/activity", {
-    items: [activity("ev-1", 1, { type: "assistant.message", role: "user", text: "介绍一下你自己", turnId: "tn-1" })],
+    items: [activity("ev-1", 1, { type: "assistant.message", role: "user", text: "介绍一下你自己", turnId: "tn-1", modelMode: "mock" })],
   });
   await openRoom(page, request);
-  expect((await log(request)).events[0].lastEventIdHeader).toBe("ev-1");
+  // F13: resume starts from the snapshot's per-task sequence, never from the JSON id.
+  expect((await log(request)).events[0].lastEventIdHeader).toBe("1");
   await expect(page.getByText("介绍一下你自己")).toBeVisible();
+  await expect(page.getByTestId("model-mode")).toHaveText("假模型"); // F15
 
-  // F1 + F2: seq 2 arrives after seq 3 and is dropped; seq 3 arrives twice.
-  await emit(request, [
+  // F1 + F2: chunk seq 2 arrives after seq 3 and is dropped; seq 3 arrives twice. The frames' SSE ids are 2..5, so
+  // assembling by SSE id instead of chunk seq (F13) would splice the late chunk in.
+  const chunkIds = await emit(request, [
     { data: delta("tn-1", "b1", 1, "你好，") },
     { data: delta("tn-1", "b1", 3, "世界") },
     { data: delta("tn-1", "b1", 2, "（迟到的块）") },
     { data: delta("tn-1", "b1", 3, "世界") },
   ]);
+  expect(chunkIds).toEqual(["2", "3", "4", "5"]);
   await expect(draft(page)).toHaveText("你好，世界");
   await expect(page.getByText("迟到的块")).toHaveCount(0);
 
@@ -73,23 +85,29 @@ test("reconnect clears unfinished drafts and waits for the final message", async
   await expect(page.getByText("迟到的旧尝试")).toHaveCount(0);
 
   // F10: unknown event types are ignored.
-  await emit(request, { id: "ev-x", data: { ...activity("ev-x", 2, { type: "mystery.event", text: "不应出现" }) } });
+  await emit(request, { data: activity("ev-x", 0, { type: "mystery.event", text: "不应出现" }) });
 
-  await emit(request, {
-    id: "ev-2",
-    data: activity("ev-2", 3, { type: "tool.call", toolName: "execute_shell_command", callId: "c1", turnId: "tn-1", argsPreview: '{"command": "ls -la"}' }),
-  });
+  const [callId] = await emit(request, { data: toolCall(0) });
   await expect(toolRows(page)).toHaveCount(1);
   await expect(toolRows(page).first()).toContainText("执行命令");
   await expect(page.getByText("不应出现")).toHaveCount(0);
   await page.screenshot({ path: test.info().outputPath("before-drop.png") });
 
   // F12: while the client is disconnected the tool finishes; the server will not replay that event.
+  const call = Number(callId);
   await control(request, "/__test/activity", {
     items: [
-      activity("ev-1", 1, { type: "assistant.message", role: "user", text: "介绍一下你自己", turnId: "tn-1" }),
-      activity("ev-2", 3, { type: "tool.call", toolName: "execute_shell_command", callId: "c1", turnId: "tn-1", argsPreview: '{"command": "ls -la"}' }),
-      activity("ev-2b", 4, { type: "tool.result", toolName: "execute_shell_command", callId: "c1", turnId: "tn-1", toolState: "success", text: "total 0" }),
+      activity("ev-1", 1, { type: "assistant.message", role: "user", text: "介绍一下你自己", turnId: "tn-1", modelMode: "mock" }),
+      toolCall(call),
+      activity("ev-2b", call + 1, {
+        type: "tool.result",
+        toolName: "execute_shell_command",
+        callId: "c1",
+        turnId: "tn-1",
+        toolState: "success",
+        text: "total 0",
+        truncated: true,
+      }),
     ],
   });
   // F9 + F6: drop, the client reconnects with Last-Event-ID.
@@ -99,18 +117,16 @@ test("reconnect clears unfinished drafts and waits for the final message", async
   await expect(toolRows(page)).toHaveCount(1);
   await waitForStreams(request, 2);
   const second = (await log(request)).events[1];
-  expect(second.lastEventIdHeader).toBe("ev-2");
-  expect(second.lastEventIdQuery).toBe("ev-2");
+  // F13: the last SSE id received, not the JSON id "ev-2" and not a chunk seq.
+  expect(second.lastEventIdHeader).toBe(callId);
+  expect(second.lastEventIdQuery).toBe(callId);
 
   // F4: the unfinished draft is gone.
   await expect(draft(page)).toHaveCount(0);
   await expect(page.getByText("新的尝试")).toHaveCount(0);
 
-  // F7: the server replays ev-2 after reconnect.
-  await emit(request, {
-    id: "ev-2",
-    data: activity("ev-2", 3, { type: "tool.call", toolName: "execute_shell_command", callId: "c1", turnId: "tn-1", argsPreview: '{"command": "ls -la"}' }),
-  });
+  // F7 + F13: the server replays the tool call with its original SSE id; it is recognised by that id.
+  await emit(request, { id: callId, data: toolCall(call) });
   // F5: a late delta of the abandoned block does not come back as a partial draft.
   await emit(request, { data: delta("tn-1", "b3", 2, "后半句", 2) });
   await expect(draft(page)).toHaveCount(0);
@@ -118,10 +134,13 @@ test("reconnect clears unfinished drafts and waits for the final message", async
   await expect(toolRows(page)).toHaveCount(1);
   await expect(toolRows(page).first()).toHaveAttribute("data-state", "success");
 
+  // F14: the expanded detail says the result was cut.
+  await toolRows(page).first().getByRole("button").first().click();
+  await expect(toolRows(page).first()).toContainText("已截断");
+
   // F8: the final message shows exactly once, with no draft next to it.
   await emit(request, {
-    id: "ev-3",
-    data: activity("ev-3", 5, { type: "assistant.message", role: "assistant", turnId: "tn-1", blockId: "b3", text: "新的尝试后半句，这是完整回答。" }),
+    data: activity("ev-3", 0, { type: "assistant.message", role: "assistant", turnId: "tn-1", blockId: "b3", text: "新的尝试后半句，这是完整回答。" }),
   });
   await expect(assistant(page)).toHaveCount(1);
   await expect(assistant(page).first()).toContainText("新的尝试后半句，这是完整回答。");
@@ -140,7 +159,7 @@ test("reset refetches /activity and rebuilds the conversation", async ({ page, r
   await expect(page.getByText("旧回答")).toBeVisible();
 
   await emit(request, [
-    { id: "ev-3", data: activity("ev-3", 3, { type: "assistant.message", role: "assistant", text: "流里的新消息", turnId: "tn-2" }) },
+    { data: activity("ev-3", 0, { type: "assistant.message", role: "assistant", text: "流里的新消息", turnId: "tn-2" }) },
     { data: delta("tn-3", "b9", 1, "半截草稿") },
   ]);
   await expect(page.getByText("流里的新消息")).toBeVisible();
@@ -150,17 +169,18 @@ test("reset refetches /activity and rebuilds the conversation", async ({ page, r
   // R1-R4: server history is rewritten, then `event: reset` (no data).
   await control(request, "/__test/activity", {
     items: [
-      activity("ev-a", 1, { type: "assistant.message", role: "user", text: "重建后的问题", turnId: "tn-a" }),
-      activity("ev-b", 2, { type: "assistant.message", role: "assistant", text: "重建后的回答", turnId: "tn-a" }),
+      activity("ev-a", 1, { type: "assistant.message", role: "user", text: "重建后的问题", turnId: "tn-a", modelMode: "real" }),
+      activity("ev-b", 2, { type: "assistant.message", role: "assistant", text: "重建后的回答", turnId: "tn-a", modelMode: "real" }),
     ],
   });
-  await emit(request, { id: "reset-1", event: "reset" });
+  await emit(request, { event: "reset" });
   await expect(page.getByText("重建后的回答")).toBeVisible();
   await expect.poll(async () => (await log(request)).activity).toBeGreaterThan(fetchesBefore);
   for (const stale of ["第一条问题", "旧回答", "流里的新消息", "半截草稿"]) {
     await expect(page.getByText(stale)).toHaveCount(0);
   }
   await expect(draft(page)).toHaveCount(0);
+  await expect(page.getByTestId("model-mode")).toHaveText("真模型"); // F15
   await page.screenshot({ path: test.info().outputPath("after-event-reset.png") });
 
   // R5: reset as a data frame.
@@ -168,14 +188,16 @@ test("reset refetches /activity and rebuilds the conversation", async ({ page, r
   await control(request, "/__test/activity", {
     items: [activity("ev-z", 1, { type: "assistant.message", role: "assistant", text: "第二次重建", turnId: "tn-z" })],
   });
-  await emit(request, { id: "reset-2", data: { type: "reset" } });
+  await emit(request, { data: { type: "reset" } });
   await expect(page.getByText("第二次重建")).toBeVisible();
   await expect(page.getByText("重建后的回答")).toHaveCount(0);
   expect((await log(request)).activity).toBeGreaterThan(fetchesMid);
 
-  // R6: the stream keeps working after the rebuild, without duplicates.
-  const next = { id: "ev-y", data: activity("ev-y", 2, { type: "assistant.message", role: "assistant", text: "重建之后的新消息", turnId: "tn-y" }) };
-  await emit(request, [next, next]);
+  // R6: the stream keeps working after the rebuild; a frame replayed with the same SSE id is not applied twice.
+  const message = (sequence: number) =>
+    activity("ev-y", sequence, { type: "assistant.message", role: "assistant", text: "重建之后的新消息", turnId: "tn-y" });
+  const [nextId] = await emit(request, { data: message(0) });
+  await emit(request, { id: nextId, data: message(Number(nextId)) });
   await expect(page.getByText("重建之后的新消息")).toHaveCount(1);
   await expect(assistant(page)).toHaveCount(2);
   await page.screenshot({ path: test.info().outputPath("after-data-reset.png") });
