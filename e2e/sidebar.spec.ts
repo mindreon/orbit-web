@@ -86,7 +86,7 @@ test("assistants and connectors are usable; unfinished entries stay grey", async
   await expect(markets).toBeVisible();
   await expect(markets.getByText("只展示，不在这里连接")).toBeVisible(); // S13
   await expect(markets.getByText("modelscope.cn/mcp", { exact: true })).toBeVisible();
-  await expect(markets.locator("a")).toHaveCount(0); // S13
+  await expect(markets.locator('a[href^="http"]')).toHaveCount(0); // S13
   await expect(markets.getByRole("button", { name: "安装" })).toHaveCount(0); // S15
   await expect(markets.locator("input[type=password]")).toHaveCount(0); // S15
   await expect(markets.getByText("腾讯云 MCP 广场")).toHaveCount(0); // S14
@@ -96,6 +96,18 @@ test("assistants and connectors are usable; unfinished entries stay grey", async
   await markets.getByLabel("搜索市场服务").fill("Fetch网页内容抓取");
   await expect(markets.getByText("Fetch网页内容抓取", { exact: true })).toBeVisible();
   await expect(markets.getByText("需要联网").first()).toBeVisible(); // S16
+  await markets.getByRole("link", { name: /Fetch网页内容抓取/ }).click();
+  const detail = page.getByRole("region", { name: "MCP 详情" });
+  await expect(detail.getByRole("heading", { name: "Fetch网页内容抓取" })).toBeVisible();
+  await expect(detail.getByRole("tab", { name: "服务详情" })).toBeVisible();
+  await expect(detail.getByRole("tab", { name: "工具" })).toBeVisible();
+  await expect(detail.getByText("交流反馈")).toHaveCount(0);
+  await expect(detail.getByText("这里不保存，也不在这里连接")).toBeVisible();
+  await expect(detail.locator('a[href^="http"]')).toHaveCount(0);
+  await detail.getByRole("tab", { name: "工具" }).click();
+  await expect(detail.getByRole("heading", { name: "fetch", exact: true })).toBeVisible();
+  await detail.getByRole("link", { name: "MCP 广场" }).click();
+  await expect(page.getByRole("region", { name: "国内 MCP 市场" })).toBeVisible();
 
   await page.getByRole("link", { name: "技能" }).click();
   await expect(page.getByRole("heading", { name: "技能" })).toBeVisible();

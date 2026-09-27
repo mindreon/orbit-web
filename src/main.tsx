@@ -5,6 +5,7 @@ import { App } from "./App";
 import { purgeLegacyModelStorage } from "./lib/legacyStorage";
 import { AssistantsPage } from "./pages/Assistants";
 import { ConnectorsPage } from "./pages/Connectors";
+import { McpMarketDetailPage } from "./pages/McpMarketDetail";
 import { SkillDetailPage } from "./pages/SkillDetail";
 import { SkillsPage } from "./pages/Skills";
 import { HomePage } from "./pages/Home";
@@ -34,6 +35,7 @@ const router = createBrowserRouter([
           { path: "experts/skills/:handle/:slug", element: <SkillDetailPage /> },
           { path: "experts/skills/:slug", element: <SkillDetailPage /> },
           { path: "experts/connectors", element: <ConnectorsPage /> },
+          { path: "experts/connectors/:id", element: <McpMarketDetailPage /> },
           { path: "automation", element: <UnwiredPage title="定时任务" /> },
           { path: "library", element: <UnwiredPage title="资料库" /> },
           { path: "settings", element: <SettingsPage /> },

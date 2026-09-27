@@ -52,6 +52,33 @@ const MCP_MARKET = [
   },
 ];
 
+const MCP_DETAILS = {
+  "modelcontextprotocol-fetch": {
+    license: "MIT License",
+    updatedOn: "2026.09.27",
+    readme: "该服务器使大型语言模型能够检索和处理网页内容，将 HTML 转为 markdown。",
+    tools: [
+      {
+        name: "fetch",
+        description: "抓取网页并转为 markdown",
+        params: [{ name: "url", type: "string", required: true, description: "要抓取的地址" }],
+      },
+    ],
+  },
+  "modelcontextprotocol-filesystem": {
+    license: "MIT License",
+    updatedOn: "2026.09.20",
+    readme: "读写本机目录里的文件。",
+    tools: [
+      {
+        name: "read_file",
+        description: "读取一个文件",
+        params: [{ name: "path", type: "string", required: true, description: "文件路径" }],
+      },
+    ],
+  },
+};
+
 const MCP_CATEGORIES = [
   { key: "browser-automation", name: "浏览器自动化", sortOrder: 1 },
   { key: "file-systems", name: "文件系统", sortOrder: 6 },
@@ -303,6 +330,13 @@ const server = createServer(async (req, res) => {
     if (!skill) return json(res, 404, { code: "NOT_FOUND", message: "skill not found" });
     const meta = state.skillMeta[id];
     return json(res, 200, { items: state.skillFiles[id] ?? [], ...(meta ? { meta } : {}) });
+  }
+  const marketOne = path.match(/^\/v1\/mcp-market\/([^/]+)$/);
+  if (marketOne && req.method === "GET") {
+    const id = decodeURIComponent(marketOne[1]);
+    const item = MCP_MARKET.find((row) => row.id === id);
+    if (!item) return json(res, 404, { code: "NOT_FOUND", message: "market server not found" });
+    return json(res, 200, { ...item, ...(MCP_DETAILS[id] ?? { license: "", updatedOn: "", readme: "", tools: [] }) });
   }
   if (path === "/v1/mcp-market-categories" && req.method === "GET") {
     const needsOnline = url.searchParams.get("needsOnline") || "";
