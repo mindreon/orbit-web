@@ -14,7 +14,7 @@ export const PRIMARY_NAV = [
   { to: "/projects", label: "项目", end: false },
   { to: "/experts", label: "专家", end: true },
   { to: "/experts/skills", label: "技能", end: false },
-  { to: "/experts/connectors", label: "连接器", end: true },
+  { to: "/experts/connectors", label: "连接器", end: false },
   { to: "/automation", label: "定时任务", end: false },
   { to: "/library", label: "资料库", end: false },
 ] as const;
