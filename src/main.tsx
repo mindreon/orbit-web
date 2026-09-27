@@ -5,6 +5,7 @@ import { App } from "./App";
 import { purgeLegacyModelStorage } from "./lib/legacyStorage";
 import { AssistantsPage } from "./pages/Assistants";
 import { ConnectorsPage } from "./pages/Connectors";
+import { SkillsPage } from "./pages/Skills";
 import { HomePage } from "./pages/Home";
 import { NotFoundPage, RouteErrorPage } from "./pages/NotFound";
 import { ArchivedPage, SettingsPage } from "./pages/Sections";
@@ -28,7 +29,7 @@ const router = createBrowserRouter([
           { path: "assistants", element: <AssistantsPage /> },
           { path: "projects", element: <UnwiredPage title="项目" /> },
           { path: "experts", element: <UnwiredPage title="专家" /> },
-          { path: "experts/skills", element: <UnwiredPage title="技能" /> },
+          { path: "experts/skills", element: <SkillsPage /> },
           { path: "experts/connectors", element: <ConnectorsPage /> },
           { path: "automation", element: <UnwiredPage title="定时任务" /> },
           { path: "library", element: <UnwiredPage title="资料库" /> },

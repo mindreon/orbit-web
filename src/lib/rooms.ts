@@ -275,6 +275,57 @@ export function listMcpConnectors() {
   return api<{ items: McpConnector[] | null }>("/v1/mcp-connectors");
 }
 
+export interface Skill {
+  id: string;
+  slug: string;
+  handle: string;
+  name: string;
+  description: string;
+  category: string;
+  categoryName: string;
+  iconUrl: string;
+  downloads: number;
+  stars: number;
+  source: string;
+  version: string;
+  requiresApiKey: boolean;
+  paid: boolean;
+  score: number;
+  updatedAt: string;
+  trendingRank: number;
+}
+
+export interface SkillCategory {
+  key: string;
+  name: string;
+  nameEn: string;
+  sortOrder: number;
+}
+
+export interface SkillQuery {
+  sortBy?: string;
+  category?: string;
+  source?: string;
+  keyword?: string;
+  page?: number;
+}
+
+export function listSkills(query: SkillQuery = {}) {
+  const params = new URLSearchParams();
+  if (query.sortBy) params.set("sortBy", query.sortBy);
+  if (query.category) params.set("category", query.category);
+  if (query.source) params.set("source", query.source);
+  if (query.keyword) params.set("keyword", query.keyword);
+  if (query.page) params.set("page", String(query.page));
+  params.set("pageSize", "24");
+  const qs = params.toString();
+  return api<{ items: Skill[] | null; total: number; page: number; pageSize: number; syncedAt: string }>(`/v1/skills${qs ? `?${qs}` : ""}`);
+}
+
+export function listSkillCategories() {
+  return api<{ items: SkillCategory[] | null }>("/v1/skill-categories");
+}
+
 export function createMcpConnector(body: { name: string; command: string; args?: string[]; envRefs?: string[] }) {
   return api<McpConnector>("/v1/mcp-connectors", {
     method: "POST",

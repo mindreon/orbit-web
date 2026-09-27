@@ -37,6 +37,50 @@ const state = {
   approvals: [],
   personas: [],
   connectors: [],
+  skills: [
+    {
+      id: "demo/weekly",
+      slug: "weekly",
+      handle: "demo",
+      name: "周报汇总",
+      description: "把一周的进展收成一篇周报",
+      category: "office-efficiency",
+      categoryName: "办公效率",
+      iconUrl: "",
+      downloads: 12000,
+      stars: 80,
+      source: "community",
+      version: "1.0.0",
+      requiresApiKey: false,
+      paid: false,
+      score: 90,
+      updatedAt: "2026-09-01T00:00:00Z",
+      trendingRank: 1,
+    },
+    {
+      id: "demo/code",
+      slug: "code",
+      handle: "demo",
+      name: "代码审查",
+      description: "检查改动里的明显问题",
+      category: "dev-programming",
+      categoryName: "开发编程",
+      iconUrl: "",
+      downloads: 3000,
+      stars: 10,
+      source: "clawhub",
+      version: "0.2.0",
+      requiresApiKey: false,
+      paid: false,
+      score: 40,
+      updatedAt: "2026-08-01T00:00:00Z",
+      trendingRank: 0,
+    },
+  ],
+  skillCategories: [
+    { key: "office-efficiency", name: "办公效率", nameEn: "Office", sortOrder: 10 },
+    { key: "dev-programming", name: "开发编程", nameEn: "Development", sortOrder: 30 },
+  ],
   /** Fault knobs for the state tests: an HTTP status for /activity, and a delay before it answers. */
   faults: { activityStatus: 0, activityDelayMs: 0 },
   streams: new Set(),
@@ -114,6 +158,30 @@ const server = createServer(async (req, res) => {
     };
     state.personas.unshift(persona);
     return json(res, 200, persona);
+  }
+  if (path === "/v1/skill-categories" && req.method === "GET") return json(res, 200, { items: state.skillCategories });
+  if (path === "/v1/skills" && req.method === "GET") {
+    const sortBy = url.searchParams.get("sortBy") || "score";
+    const category = url.searchParams.get("category") || "";
+    const source = url.searchParams.get("source") || "";
+    const keyword = (url.searchParams.get("keyword") || "").trim();
+    const page = Math.max(1, Number(url.searchParams.get("page") || 1));
+    const pageSize = Math.min(48, Math.max(1, Number(url.searchParams.get("pageSize") || 24)));
+    const matched = state.skills.filter((skill) => {
+      if (category && skill.category !== category) return false;
+      if (source && skill.source !== source) return false;
+      if (keyword && !skill.name.includes(keyword) && !skill.description.includes(keyword)) return false;
+      if (sortBy === "trending" && !skill.trendingRank) return false;
+      return true;
+    });
+    const start = (page - 1) * pageSize;
+    return json(res, 200, {
+      items: matched.slice(start, start + pageSize),
+      total: matched.length,
+      page,
+      pageSize,
+      syncedAt: "2026-09-27T00:00:00Z",
+    });
   }
   if (path === "/v1/mcp-connectors" && req.method === "GET") return json(res, 200, { items: state.connectors });
   if (path === "/v1/mcp-connectors" && req.method === "POST") {
