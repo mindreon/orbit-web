@@ -1,4 +1,5 @@
 import { useEffect, useState, type ReactNode } from "react";
+import { Link } from "react-router";
 import {
   describeRoomFailure,
   listMcpMarket,
@@ -44,7 +45,10 @@ function PlazaCard({ item }: { item: McpMarketServer }) {
   const categoryLabel = item.categoryName;
   const initial = item.name.trim().slice(0, 1) || "M";
   return (
-    <article className="rounded-xl border-2 border-transparent bg-[#F7F9FD] px-[18px] py-[14px] hover:border-[#624AFF]">
+    <Link
+      to={`/experts/connectors/${encodeURIComponent(item.id)}`}
+      className="block rounded-xl border-2 border-transparent bg-[#F7F9FD] px-[18px] py-[14px] text-inherit no-underline hover:border-[#624AFF]"
+    >
       <div className="flex items-start">
         <div className="min-w-0 flex-1">
           <div className="mb-0.5 flex items-center">
@@ -112,7 +116,7 @@ function PlazaCard({ item }: { item: McpMarketServer }) {
           <span className="text-[12px] leading-4 text-[#8284A4]">{item.needsOnline ? "需要联网" : "可离线使用"}</span>
         </span>
       </div>
-    </article>
+    </Link>
   );
 }
 

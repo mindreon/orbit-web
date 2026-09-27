@@ -430,6 +430,30 @@ export function listMcpMarketCategories(needsOnline?: "true" | "false") {
   return api<{ items: McpMarketCategory[] | null }>(`/v1/mcp-market-categories${qs}`);
 }
 
+export interface McpMarketToolParam {
+  name: string;
+  type: string;
+  required: boolean;
+  description: string;
+}
+
+export interface McpMarketTool {
+  name: string;
+  description: string;
+  params: McpMarketToolParam[];
+}
+
+export interface McpMarketDetail extends McpMarketServer {
+  license: string;
+  updatedOn: string;
+  readme: string;
+  tools: McpMarketTool[];
+}
+
+export function getMcpMarket(id: string) {
+  return api<McpMarketDetail>(`/v1/mcp-market/${encodeURIComponent(id)}`);
+}
+
 export function createMcpConnector(body: {
   name: string;
   transport?: "stdio" | "streamable_http";
