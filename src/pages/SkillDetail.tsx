@@ -1,9 +1,11 @@
-import { useEffect, useMemo, useState, type ReactNode } from "react";
+import { lazy, Suspense, useEffect, useMemo, useState, type ReactNode } from "react";
 import { Link, useParams } from "react-router";
 import { ChevronRight, File, Folder, FolderOpen } from "lucide-react";
-import { Markdown } from "../chat/markdown/Markdown";
 import { describeRoomFailure, getSkill, listSkillFiles, type Skill, type SkillPageMeta, type SkillTextFile } from "../lib/rooms";
 import { safeIcon, sourceLabel, timeAgo } from "./skillFormat";
+
+// Markdown pulls Mermaid's loader. Keep that off the entry chunk; the page loads it when a file is shown.
+const SkillMarkdown = lazy(() => import("../chat/markdown/Markdown").then((module) => ({ default: module.Markdown })));
 
 const TABS = ["概述", "文件", "版本历史", "评测报告"] as const;
 type Tab = (typeof TABS)[number];
@@ -236,6 +238,14 @@ function SafeBadge() {
   );
 }
 
+function RenderedMarkdown({ text }: { text: string }) {
+  return (
+    <Suspense fallback={<p className="text-sm text-[rgba(0,0,0,0.45)]">正在排版</p>}>
+      <SkillMarkdown text={text} />
+    </Suspense>
+  );
+}
+
 function stripFrontmatter(text: string) {
   return text.replace(/^\s*---\s*\n[\s\S]*?\n---\s*\n?/, "").trimStart();
 }
@@ -251,7 +261,7 @@ function overviewBody(files: SkillTextFile[]) {
 function Overview({ files }: { files: SkillTextFile[] }) {
   const text = overviewBody(files);
   if (!text) return <p className="py-16 text-center text-sm text-[rgba(0,0,0,0.45)]">文档内容为空</p>;
-  return <Markdown text={text} />;
+  return <RenderedMarkdown text={text} />;
 }
 
 type TreeNode = { name: string; path: string; type: "dir" | "file"; size: number; children: TreeNode[] };
@@ -444,7 +454,7 @@ function FilePreview({ path, body, onBack }: { path: string; body?: string; onBa
           <p className="flex h-full min-h-[240px] items-center justify-center text-sm text-[rgba(0,0,0,0.45)]">暂不支持预览此类型文件</p>
         ) : kind === "markdown" ? (
           <div className="p-4">
-            <Markdown text={text} />
+            <RenderedMarkdown text={text} />
           </div>
         ) : (
           <pre className="m-4 overflow-auto rounded border border-neutral-200 bg-neutral-50 p-4 text-sm text-neutral-900">
