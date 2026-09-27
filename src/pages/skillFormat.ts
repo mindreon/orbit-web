@@ -45,9 +45,10 @@ export function safeIcon(url: string) {
   }
 }
 
-/** 详情页地址。handle 和 slug 都要有，才能对应本地目录里的一行。 */
+/** 详情页地址。没有作者时只带 slug，对应目录里单独一行。 */
 export function skillPath(handle: string, slug: string) {
-  if (!handle || !slug) return "/experts/skills";
+  if (!slug) return "/experts/skills";
+  if (!handle) return `/experts/skills/${encodeURIComponent(slug)}`;
   return `/experts/skills/${encodeURIComponent(handle)}/${encodeURIComponent(slug)}`;
 }
 

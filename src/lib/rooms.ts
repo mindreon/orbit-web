@@ -326,8 +326,23 @@ export function listSkillCategories() {
   return api<{ items: SkillCategory[] | null }>("/v1/skill-categories");
 }
 
+export interface SkillTextFile {
+  path: string;
+  body: string;
+}
+
+function skillApiPath(handle: string, slug: string) {
+  if (!handle) return `/v1/skills/${encodeURIComponent(slug)}`;
+  return `/v1/skills/${encodeURIComponent(handle)}/${encodeURIComponent(slug)}`;
+}
+
 export function getSkill(handle: string, slug: string) {
-  return api<Skill>(`/v1/skills/${encodeURIComponent(handle)}/${encodeURIComponent(slug)}`);
+  return api<Skill>(skillApiPath(handle, slug));
+}
+
+export function listSkillFiles(handle: string, slug: string) {
+  const path = skillApiPath(handle, slug).replace("/v1/skills/", "/v1/skill-files/");
+  return api<{ items: SkillTextFile[] | null }>(path);
 }
 
 export function createMcpConnector(body: { name: string; command: string; args?: string[]; envRefs?: string[] }) {
