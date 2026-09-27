@@ -3,22 +3,12 @@ import { Link, useParams } from "react-router";
 import { describeRoomFailure, getSkill, listSkillFiles, listSkills, type Skill, type SkillTextFile } from "../lib/rooms";
 import { formatCount, formatUpdated, safeIcon, skillPath, sourceLabel, tint } from "./skillFormat";
 
-const TABS = [
-  { id: "overview", label: "概述" },
-  { id: "files", label: "文件" },
-  { id: "comments", label: "评论" },
-  { id: "versions", label: "版本历史" },
-] as const;
-
-type TabId = (typeof TABS)[number]["id"];
-
 export function SkillDetailPage() {
   const params = useParams();
   const handle = params.handle ?? "";
   const slug = params.slug ?? "";
   const [skill, setSkill] = useState<Skill | null>(null);
   const [related, setRelated] = useState<Skill[]>([]);
-  const [tab, setTab] = useState<TabId>("overview");
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
 
@@ -27,7 +17,6 @@ export function SkillDetailPage() {
     setLoading(true);
     setSkill(null);
     setRelated([]);
-    setTab("overview");
     getSkill(handle, slug)
       .then((body) => {
         if (gone) return;
@@ -66,13 +55,13 @@ export function SkillDetailPage() {
         </nav>
         {loading ? <p className="mt-6 text-sm text-[#888]">正在读取</p> : null}
         {error ? <p className="mt-6 text-sm text-[#c04545]">{error}</p> : null}
-        {skill ? <DetailBody skill={skill} related={related} tab={tab} onTab={setTab} /> : null}
+        {skill ? <DetailBody skill={skill} related={related} /> : null}
       </div>
     </div>
   );
 }
 
-function DetailBody({ skill, related, tab, onTab }: { skill: Skill; related: Skill[]; tab: TabId; onTab: (tab: TabId) => void }) {
+function DetailBody({ skill, related }: { skill: Skill; related: Skill[] }) {
   const color = tint(skill.name);
   const icon = safeIcon(skill.iconUrl);
   const category = skill.categoryName || skill.category;
@@ -108,31 +97,7 @@ function DetailBody({ skill, related, tab, onTab }: { skill: Skill; related: Ski
           {skill.description ? <p className="mt-4 text-sm leading-6 text-[#444]">{skill.description}</p> : null}
         </header>
 
-        <div role="tablist" aria-label="技能内容" className="mt-6 flex gap-2 border-b border-[rgba(0,0,0,0.06)]">
-          {TABS.map((item) => (
-            <button
-              key={item.id}
-              type="button"
-              role="tab"
-              aria-selected={tab === item.id}
-              className={`h-9 px-3 text-sm ${tab === item.id ? "border-b-2 border-[#1a1a1a] font-medium text-[#1a1a1a]" : "text-[#888]"}`}
-              onClick={() => onTab(item.id)}
-            >
-              {item.label}
-            </button>
-          ))}
-        </div>
-        <div role="tabpanel" className="mt-4 rounded-[12px] border border-[rgba(0,0,0,0.06)] bg-white px-6 py-5 text-sm leading-6 text-[#444]">
-          {tab === "overview" ? (
-            <>
-              <p>{skill.description || "本地目录里还没有这段介绍。"}</p>
-              <p className="mt-3 text-[#888]">这是同步时保存的介绍。文件在「文件」里，只供阅读。</p>
-            </>
-          ) : null}
-          {tab === "files" ? <FilesPanel skill={skill} /> : null}
-          {tab === "comments" ? <p>本地目录没有保存评论。</p> : null}
-          {tab === "versions" ? <p>{skill.version ? `已保存的版本是 v${skill.version}。` : "还没有保存版本号。"}更早的版本记录没有同步过来。</p> : null}
-        </div>
+        <FilesPanel skill={skill} />
 
         {related.length > 0 ? (
           <section className="mt-8">
@@ -190,14 +155,15 @@ function FilesPanel({ skill }: { skill: Skill }) {
 
   if (error) return <p className="text-[#c04545]">{error}</p>;
   if (!files) return <p className="text-[#888]">正在读取文件</p>;
-  if (files.length === 0) return <p>这个技能包里没有可展示的文本文件。只展示，不安装，也不运行。</p>;
+  if (files.length === 0) {
+    return <p className="mt-6 text-sm leading-6 text-[#888]">这个技能包里没有可展示的文本文件。只展示，不安装，也不运行。</p>;
+  }
   return (
-    <div className="space-y-4">
-      <p className="text-[#888]">只展示已保存的文本，不安装，也不运行。</p>
+    <div className="mt-6 space-y-8">
       {files.map((file) => (
         <section key={file.path}>
-          <h3 className="font-mono text-xs text-[#1a1a1a]">{file.path}</h3>
-          <pre className="mt-2 max-h-80 overflow-auto whitespace-pre-wrap rounded-lg bg-[#f7f7f8] px-3 py-3 text-xs leading-5">{file.body}</pre>
+          <h2 className="font-mono text-sm text-[#1a1a1a]">{file.path}</h2>
+          <pre className="mt-3 whitespace-pre-wrap font-sans text-sm leading-7 text-[#444]">{file.body}</pre>
         </section>
       ))}
     </div>
