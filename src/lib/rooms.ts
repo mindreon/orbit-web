@@ -251,12 +251,21 @@ export interface Persona {
   createdAt: string;
 }
 
+export interface McpHeaderRef {
+  name: string;
+  env: string;
+}
+
 export interface McpConnector {
   id: string;
   name: string;
+  transport?: "stdio" | "streamable_http";
   command: string;
   args?: string[];
   envRefs?: string[];
+  url?: string;
+  headerRefs?: McpHeaderRef[];
+  defaultOpen?: boolean;
   createdAt: string;
 }
 
@@ -326,7 +335,16 @@ export function listSkillCategories() {
   return api<{ items: SkillCategory[] | null }>("/v1/skill-categories");
 }
 
-export function createMcpConnector(body: { name: string; command: string; args?: string[]; envRefs?: string[] }) {
+export function createMcpConnector(body: {
+  name: string;
+  transport?: "stdio" | "streamable_http";
+  command?: string;
+  args?: string[];
+  envRefs?: string[];
+  url?: string;
+  headerRefs?: McpHeaderRef[];
+  defaultOpen?: boolean;
+}) {
   return api<McpConnector>("/v1/mcp-connectors", {
     method: "POST",
     body: JSON.stringify(body),

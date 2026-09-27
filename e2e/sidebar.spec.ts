@@ -13,6 +13,7 @@
  *   S11 search hides the matching skill or keeps a skill that does not match.
  *   S6 a connector can be saved without a command.
  *   S7 the connector form has a password field, or accepts KEY=value as an env name.
+ *   S12 a remote connector can be saved with a secret in the URL or header.
  *   S8 after leaving and coming back, the assistant created in this session is gone.
  */
 import { expect, test } from "./test";
@@ -57,6 +58,22 @@ test("assistants and connectors are usable; unfinished entries stay grey", async
   await expect(page.getByText("文档")).toBeVisible();
   await expect(page.getByText("环境变量名：DOCS_TOKEN")).toBeVisible();
   await expect(page.getByText("secret")).toHaveCount(0);
+
+  await page.getByLabel("远程地址").check();
+  await page.getByLabel("连接器名称").fill("远程文档");
+  await page.getByRole("button", { name: "添加连接器" }).click();
+  await expect(page.getByText("请填写名称和远程地址")).toBeVisible(); // S6
+  await page.getByLabel("远程 MCP 地址").fill("https://mcp.example.com/mcp");
+  await page.getByLabel("请求头").fill("Authorization=hidden");
+  await page.getByRole("button", { name: "添加连接器" }).click();
+  await expect(page.getByText("请求头只填头名字和环境变量名，不要填写密钥")).toBeVisible(); // S7, S12
+  await page.getByLabel("请求头").fill("Authorization:DOCS_TOKEN");
+  await page.getByLabel("新建任务时默认连接").check();
+  await page.getByRole("button", { name: "添加连接器" }).click();
+  await expect(page.getByText("远程文档")).toBeVisible();
+  await expect(page.getByText("https://mcp.example.com/mcp")).toBeVisible();
+  await expect(page.getByText("请求头：Authorization:DOCS_TOKEN")).toBeVisible();
+  await expect(page.getByText("hidden")).toHaveCount(0);
 
   await page.getByRole("link", { name: "技能" }).click();
   await expect(page.getByRole("heading", { name: "技能" })).toBeVisible();
