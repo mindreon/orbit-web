@@ -17,6 +17,9 @@
  *   S6 a connector can be saved without a command.
  *   S7 the connector form has a password field, or accepts KEY=value as an env name.
  *   S12 a remote connector can be saved with a secret in the URL or header.
+ *   S13 the domestic MCP market section is missing, or a card is an outbound link.
+ *   S14 search for 云开发 hides 云开发MCP, or still shows 滴滴出行.
+ *   S15 the market section offers 安装, or a field for a secret.
  *   S8 after leaving and coming back, the assistant created in this session is gone.
  */
 import { expect, test } from "./test";
@@ -58,7 +61,7 @@ test("assistants and connectors are usable; unfinished entries stay grey", async
   await expect(page.getByText("环境变量只填名字，不要填写密钥")).toBeVisible(); // S7
   await page.getByLabel("环境变量名").fill("DOCS_TOKEN");
   await page.getByRole("button", { name: "添加连接器" }).click();
-  await expect(page.getByText("文档")).toBeVisible();
+  await expect(page.getByText("文档", { exact: true })).toBeVisible();
   await expect(page.getByText("环境变量名：DOCS_TOKEN")).toBeVisible();
   await expect(page.getByText("secret")).toHaveCount(0);
 
@@ -77,6 +80,20 @@ test("assistants and connectors are usable; unfinished entries stay grey", async
   await expect(page.getByText("https://mcp.example.com/mcp")).toBeVisible();
   await expect(page.getByText("请求头：Authorization:DOCS_TOKEN")).toBeVisible();
   await expect(page.getByText("hidden")).toHaveCount(0);
+
+  const markets = page.getByRole("region", { name: "国内 MCP 市场" });
+  await expect(markets).toBeVisible();
+  await expect(markets.getByText("只展示，不在这里连接")).toBeVisible(); // S13
+  await expect(markets.getByText("魔搭社区")).toBeVisible();
+  await expect(markets.getByText("modelscope.cn/mcp")).toBeVisible();
+  await expect(markets.locator("a")).toHaveCount(0); // S13
+  await expect(markets.getByRole("button", { name: "安装" })).toHaveCount(0); // S15
+  await expect(markets.locator("input[type=password]")).toHaveCount(0); // S15
+  await markets.getByLabel("搜索市场服务").fill("云开发");
+  await expect(markets.getByText("云开发MCP", { exact: true })).toBeVisible(); // S14
+  await expect(markets.getByText("滴滴出行", { exact: true })).toHaveCount(0); // S14
+  await markets.getByLabel("搜索市场服务").fill("滴滴");
+  await expect(markets.getByText("滴滴出行", { exact: true })).toBeVisible();
 
   await page.getByRole("link", { name: "技能" }).click();
   await expect(page.getByRole("heading", { name: "技能" })).toBeVisible();

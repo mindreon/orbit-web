@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { createMcpConnector, describeRoomFailure, listMcpConnectors, type McpConnector, type McpHeaderRef } from "../lib/rooms";
+import { McpMarketCatalog } from "./McpMarkets";
 
 function splitList(value: string) {
   return value
@@ -230,6 +231,7 @@ export function ConnectorsPage() {
           </li>
         ))}
       </ul>
+      <McpMarketCatalog />
     </div>
   );
 }
