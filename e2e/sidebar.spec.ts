@@ -91,7 +91,7 @@ test("assistants and connectors are usable; unfinished entries stay grey", async
   await expect(markets.locator("input[type=password]")).toHaveCount(0); // S15
   await expect(markets.getByText("腾讯云 MCP 广场")).toHaveCount(0); // S14
   await markets.getByLabel("搜索市场服务").fill("文件系统");
-  await expect(markets.getByText("文件系统", { exact: true })).toBeVisible(); // S14
+  await expect(markets.getByRole("heading", { name: "文件系统", exact: true })).toBeVisible(); // S14
   await expect(markets.getByText("可离线使用").first()).toBeVisible(); // S16
   await markets.getByLabel("搜索市场服务").fill("Fetch网页内容抓取");
   await expect(markets.getByText("Fetch网页内容抓取", { exact: true })).toBeVisible();
