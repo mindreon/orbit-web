@@ -270,17 +270,30 @@ const server = createServer(async (req, res) => {
   if (path === "/v1/mcp-connectors" && req.method === "POST") {
     const body = await readBody(req);
     const name = String(body.name ?? "").trim();
+    const transport = String(body.transport ?? "stdio");
     const command = String(body.command ?? "").trim();
+    const url = String(body.url ?? "").trim();
     const envRefs = Array.isArray(body.envRefs) ? body.envRefs.map(String) : [];
-    if (!name || !command || envRefs.some((item) => item.includes("="))) {
+    const headerRefs = Array.isArray(body.headerRefs) ? body.headerRefs : [];
+    const headerBad = headerRefs.some((item) => {
+      const env = String(item?.env ?? "");
+      const header = String(item?.name ?? "");
+      return !header || !env || env.includes("=") || env.includes(" ") || header.includes("=");
+    });
+    const missingTarget = transport === "streamable_http" ? !url : !command;
+    if (!name || missingTarget || headerBad || envRefs.some((item) => item.includes("="))) {
       return json(res, 400, { code: "BAD_REQUEST", message: "the request is invalid" });
     }
     const connector = {
       id: `mcp-${state.connectors.length + 1}`,
       name,
-      command,
+      transport,
+      command: transport === "streamable_http" ? "" : command,
       args: Array.isArray(body.args) ? body.args.map(String) : [],
       envRefs,
+      url: transport === "streamable_http" ? url : "",
+      headerRefs,
+      defaultOpen: body.defaultOpen === true,
       createdAt: "2026-09-27T00:00:00Z",
     };
     state.connectors.unshift(connector);
