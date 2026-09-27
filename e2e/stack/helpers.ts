@@ -24,7 +24,7 @@ export type Envelope = { id?: number; type: string; source: string; payload: Rec
 
 export async function newRoom(request: APIRequestContext, title: string): Promise<string> {
   const response = await request.post("/v1/rooms", { data: { kind: "solo", title, permissionPreset: "workspace-write" } });
-  expect(response.ok()).toBeTruthy();
+  if (!response.ok()) throw new Error(`create room failed: HTTP ${response.status()} ${(await response.text()).slice(0, 300)}`);
   return (await response.json()).id as string;
 }
 
@@ -37,7 +37,7 @@ export async function activity(request: APIRequestContext, roomId: string): Prom
 /** Posts a message through control's public API (as another client would) and waits for the turn to return. */
 export async function postMessage(request: APIRequestContext, roomId: string, message: string, base = "") {
   const response = await request.post(`${base}/v1/rooms/${roomId}/messages`, { data: { message }, timeout: 120_000 });
-  expect(response.ok()).toBeTruthy();
+  if (!response.ok()) throw new Error(`post message failed: HTTP ${response.status()} ${(await response.text()).slice(0, 300)}`);
   return response.json();
 }
 
