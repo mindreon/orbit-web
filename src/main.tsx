@@ -32,6 +32,7 @@ const router = createBrowserRouter([
           { path: "experts", element: <UnwiredPage title="专家" /> },
           { path: "experts/skills", element: <SkillsPage /> },
           { path: "experts/skills/:handle/:slug", element: <SkillDetailPage /> },
+          { path: "experts/skills/:slug", element: <SkillDetailPage /> },
           { path: "experts/connectors", element: <ConnectorsPage /> },
           { path: "automation", element: <UnwiredPage title="定时任务" /> },
           { path: "library", element: <UnwiredPage title="资料库" /> },

@@ -77,6 +77,25 @@ const state = {
       trendingRank: 0,
     },
     {
+      id: "notes",
+      slug: "notes",
+      handle: "",
+      name: "随手笔记",
+      description: "没有作者名的技能",
+      category: "office-efficiency",
+      categoryName: "办公效率",
+      iconUrl: "",
+      downloads: 100,
+      stars: 2,
+      source: "community",
+      version: "0.1.0",
+      requiresApiKey: false,
+      paid: false,
+      score: 10,
+      updatedAt: "2026-06-01T00:00:00Z",
+      trendingRank: 0,
+    },
+    {
       id: "demo/meeting",
       slug: "meeting",
       handle: "demo",
@@ -96,6 +115,10 @@ const state = {
       trendingRank: 0,
     },
   ],
+  skillFiles: {
+    "demo/weekly": [{ path: "SKILL.md", body: "周报技能说明正文" }],
+    notes: [{ path: "SKILL.md", body: "没有作者的技能说明" }],
+  },
   skillCategories: [
     { key: "office-efficiency", name: "办公效率", nameEn: "Office", sortOrder: 10 },
     { key: "dev-programming", name: "开发编程", nameEn: "Development", sortOrder: 30 },
@@ -208,6 +231,20 @@ const server = createServer(async (req, res) => {
     const skill = state.skills.find((item) => item.id === id);
     if (!skill) return json(res, 404, { code: "NOT_FOUND", message: "skill not found" });
     return json(res, 200, skill);
+  }
+  const skillOne = path.match(/^\/v1\/skills\/([^/]+)$/);
+  if (skillOne && req.method === "GET") {
+    const id = decodeURIComponent(skillOne[1]);
+    const skill = state.skills.find((item) => item.id === id);
+    if (!skill) return json(res, 404, { code: "NOT_FOUND", message: "skill not found" });
+    return json(res, 200, skill);
+  }
+  const skillFiles = path.match(/^\/v1\/skill-files\/(.+)$/);
+  if (skillFiles && req.method === "GET") {
+    const id = decodeURIComponent(skillFiles[1]);
+    const skill = state.skills.find((item) => item.id === id);
+    if (!skill) return json(res, 404, { code: "NOT_FOUND", message: "skill not found" });
+    return json(res, 200, { items: state.skillFiles[id] ?? [] });
   }
   if (path === "/v1/mcp-connectors" && req.method === "GET") return json(res, 200, { items: state.connectors });
   if (path === "/v1/mcp-connectors" && req.method === "POST") {
