@@ -326,6 +326,10 @@ export function listSkillCategories() {
   return api<{ items: SkillCategory[] | null }>("/v1/skill-categories");
 }
 
+export function getSkill(handle: string, slug: string) {
+  return api<Skill>(`/v1/skills/${encodeURIComponent(handle)}/${encodeURIComponent(slug)}`);
+}
+
 export function createMcpConnector(body: { name: string; command: string; args?: string[]; envRefs?: string[] }) {
   return api<McpConnector>("/v1/mcp-connectors", {
     method: "POST",

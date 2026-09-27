@@ -11,6 +11,7 @@
  *   S9 「技能」 stays disabled, or the page calls something other than the local catalog.
  *   S10 a skill card offers 安装, or the detail says the package will be installed.
  *   S11 search hides the matching skill or keeps a skill that does not match.
+ *   S12 opening a skill stays in a dialog, or the detail page does not show the stored row.
  *   S6 a connector can be saved without a command.
  *   S7 the connector form has a password field, or accepts KEY=value as an env name.
  *   S8 after leaving and coming back, the assistant created in this session is gone.
@@ -61,18 +62,23 @@ test("assistants and connectors are usable; unfinished entries stay grey", async
   await page.getByRole("link", { name: "技能" }).click();
   await expect(page.getByRole("heading", { name: "技能" })).toBeVisible();
   await expect(page.getByText("只展示，不安装")).toBeVisible(); // S9
-  await expect(page.getByRole("button", { name: /周报汇总/ })).toBeVisible();
-  await expect(page.getByRole("button", { name: /代码审查/ })).toBeVisible();
+  await expect(page.getByRole("link", { name: /周报汇总/ })).toBeVisible();
+  await expect(page.getByRole("link", { name: /代码审查/ })).toBeVisible();
   await expect(page.getByRole("button", { name: "安装" })).toHaveCount(0); // S10
   await page.getByLabel("搜索技能").fill("周报");
-  await expect(page.getByRole("button", { name: /周报汇总/ })).toBeVisible();
-  await expect(page.getByRole("button", { name: /代码审查/ })).toHaveCount(0); // S11
+  await expect(page.getByRole("link", { name: /周报汇总/ })).toBeVisible();
+  await expect(page.getByRole("link", { name: /代码审查/ })).toHaveCount(0); // S11
   await page.getByLabel("搜索技能").fill("");
   await page.getByRole("button", { name: "近期飙升" }).click();
-  await expect(page.getByRole("button", { name: /周报汇总/ })).toBeVisible();
-  await expect(page.getByRole("button", { name: /代码审查/ })).toHaveCount(0);
-  await page.getByRole("button", { name: /周报汇总/ }).click();
-  await expect(page.getByRole("dialog", { name: "技能详情" })).toBeVisible();
+  await expect(page.getByRole("link", { name: /周报汇总/ })).toBeVisible();
+  await expect(page.getByRole("link", { name: /代码审查/ })).toHaveCount(0);
+  await page.getByRole("link", { name: /周报汇总/ }).click();
+  await expect(page).toHaveURL(/\/experts\/skills\/demo\/weekly$/); // S12
+  await expect(page.getByRole("heading", { name: "周报汇总" })).toBeVisible();
+  await expect(page.getByText("@demo/weekly")).toBeVisible();
   await expect(page.getByText("不会安装技能")).toBeVisible(); // S10
-  await page.getByRole("button", { name: "关闭" }).click();
+  await expect(page.getByRole("link", { name: /会议纪要/ })).toBeVisible();
+  await expect(page.getByRole("button", { name: "安装" })).toHaveCount(0);
+  await page.getByRole("tab", { name: "文件" }).click();
+  await expect(page.getByText("没有保存技能文件")).toBeVisible();
 });
