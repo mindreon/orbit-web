@@ -18,7 +18,8 @@
  *   S7 the connector form has a password field, or accepts KEY=value as an env name.
  *   S12 a remote connector can be saved with a secret in the URL or header.
  *   S13 the domestic MCP market section is missing, or a card is an outbound link.
- *   S14 search for 云开发 hides 云开发MCP, or still shows 滴滴出行.
+ *   S14 search for 文件系统 hides that card, or still shows a service from another square.
+ *   S16 文件系统 is shown without 可离线使用, or Fetch网页内容抓取 is shown without 需要联网.
  *   S15 the market section offers 安装, or a field for a secret.
  *   S8 after leaving and coming back, the assistant created in this session is gone.
  */
@@ -84,16 +85,17 @@ test("assistants and connectors are usable; unfinished entries stay grey", async
   const markets = page.getByRole("region", { name: "国内 MCP 市场" });
   await expect(markets).toBeVisible();
   await expect(markets.getByText("只展示，不在这里连接")).toBeVisible(); // S13
-  await expect(markets.getByText("魔搭社区")).toBeVisible();
-  await expect(markets.getByText("modelscope.cn/mcp")).toBeVisible();
+  await expect(markets.getByText("modelscope.cn/mcp", { exact: true })).toBeVisible();
   await expect(markets.locator("a")).toHaveCount(0); // S13
   await expect(markets.getByRole("button", { name: "安装" })).toHaveCount(0); // S15
   await expect(markets.locator("input[type=password]")).toHaveCount(0); // S15
-  await markets.getByLabel("搜索市场服务").fill("云开发");
-  await expect(markets.getByText("云开发MCP", { exact: true })).toBeVisible(); // S14
-  await expect(markets.getByText("滴滴出行", { exact: true })).toHaveCount(0); // S14
-  await markets.getByLabel("搜索市场服务").fill("滴滴");
-  await expect(markets.getByText("滴滴出行", { exact: true })).toBeVisible();
+  await expect(markets.getByText("腾讯云 MCP 广场")).toHaveCount(0); // S14
+  await markets.getByLabel("搜索市场服务").fill("文件系统");
+  await expect(markets.getByText("文件系统", { exact: true })).toBeVisible(); // S14
+  await expect(markets.getByText("可离线使用").first()).toBeVisible(); // S16
+  await markets.getByLabel("搜索市场服务").fill("Fetch网页内容抓取");
+  await expect(markets.getByText("Fetch网页内容抓取", { exact: true })).toBeVisible();
+  await expect(markets.getByText("需要联网").first()).toBeVisible(); // S16
 
   await page.getByRole("link", { name: "技能" }).click();
   await expect(page.getByRole("heading", { name: "技能" })).toBeVisible();

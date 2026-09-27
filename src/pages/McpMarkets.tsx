@@ -1,13 +1,7 @@
 import { useMemo, useState } from "react";
-import { MCP_MARKETS, MCP_MARKET_ENTRIES } from "../lib/mcpMarkets";
+import { MCP_MARKETS, entriesForDeploy, offlineDeploy } from "../lib/mcpMarkets";
 
 const PAGE = 12;
-
-const SOURCES = [
-  { id: "", label: "全部来源" },
-  { id: "tencent", label: "腾讯云" },
-  { id: "mcpmarket", label: "MCP 星球" },
-] as const;
 
 function marketName(id: string) {
   return MCP_MARKETS.find((item) => item.id === id)?.name ?? "";
@@ -15,17 +9,17 @@ function marketName(id: string) {
 
 export function McpMarketCatalog() {
   const [keyword, setKeyword] = useState("");
-  const [source, setSource] = useState("");
   const [shown, setShown] = useState(PAGE);
+  const offline = offlineDeploy();
+  const catalog = useMemo(() => entriesForDeploy(), []);
 
   const matched = useMemo(() => {
     const q = keyword.trim();
-    return MCP_MARKET_ENTRIES.filter((item) => {
-      if (source && item.marketId !== source) return false;
-      if (!q) return true;
-      return item.name.includes(q) || item.summary.includes(q);
-    });
-  }, [keyword, source]);
+    if (!q) return catalog;
+    const named = catalog.filter((item) => item.name.includes(q));
+    const described = catalog.filter((item) => !item.name.includes(q) && item.summary.includes(q));
+    return [...named, ...described];
+  }, [catalog, keyword]);
 
   const visible = matched.slice(0, shown);
 
@@ -33,8 +27,11 @@ export function McpMarketCatalog() {
     <section aria-label="国内 MCP 市场" className="mt-10 max-w-6xl">
       <h2 className="text-lg font-medium">国内 MCP 市场</h2>
       <p className="mt-1 max-w-2xl text-sm text-[#666]">
-        2026-09-27 从国内广场抄下的目录。打开这一页只读本地数据，只展示，不在这里连接，也不填写密钥。
+        只收录魔搭社区 modelscope.cn/mcp。同名只留一条。打开这一页只读本地数据，只展示，不在这里连接，也不填写密钥。
       </p>
+      {offline ? (
+        <p className="mt-1 max-w-2xl text-sm text-[#666]">当前是离线部署，需要联网的服务不显示。</p>
+      ) : null}
       <ul className="mt-4 grid gap-2 sm:grid-cols-2">
         {MCP_MARKETS.map((item) => (
           <li key={item.id} className="rounded-xl border border-[#ececee] bg-white p-4">
@@ -61,24 +58,13 @@ export function McpMarketCatalog() {
             setShown(PAGE);
           }}
         />
-        <select
-          aria-label="服务来源"
-          value={source}
-          className="h-9 rounded-[10px] border border-[rgba(0,0,0,0.08)] bg-white px-2 text-sm"
-          onChange={(event) => {
-            setSource(event.target.value);
-            setShown(PAGE);
-          }}
-        >
-          {SOURCES.map((item) => (
-            <option key={item.id || "all"} value={item.id}>
-              {item.label}
-            </option>
-          ))}
-        </select>
         <span className="text-xs text-[#888]">{matched.length} 个</span>
       </div>
-      {matched.length === 0 ? <p className="mt-4 text-sm text-[#666]">没有匹配的服务。</p> : null}
+      {matched.length === 0 ? (
+        <p className="mt-4 text-sm text-[#666]">
+          {offline && catalog.length === 0 ? "离线部署不显示需要联网的服务。这份目录里的服务都要联网。" : "没有匹配的服务。"}
+        </p>
+      ) : null}
       <ul className="mt-3 grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
         {visible.map((item) => (
           <li key={item.id} className="rounded-xl border border-[#ececee] bg-white p-4">
@@ -86,6 +72,7 @@ export function McpMarketCatalog() {
             <p className="mt-1 text-xs text-[#888]">
               {marketName(item.marketId)}
               {item.hosted ? " · 云托管" : ""}
+              {item.needsOnline ? " · 需要联网" : " · 可离线使用"}
             </p>
             <p className="mt-2 text-sm text-[#666]">{item.summary}</p>
           </li>
