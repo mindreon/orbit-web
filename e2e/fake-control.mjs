@@ -76,6 +76,25 @@ const state = {
       updatedAt: "2026-08-01T00:00:00Z",
       trendingRank: 0,
     },
+    {
+      id: "demo/meeting",
+      slug: "meeting",
+      handle: "demo",
+      name: "会议纪要",
+      description: "把会议记录收成纪要",
+      category: "office-efficiency",
+      categoryName: "办公效率",
+      iconUrl: "",
+      downloads: 800,
+      stars: 4,
+      source: "community",
+      version: "0.1.0",
+      requiresApiKey: false,
+      paid: false,
+      score: 20,
+      updatedAt: "2026-07-01T00:00:00Z",
+      trendingRank: 0,
+    },
   ],
   skillCategories: [
     { key: "office-efficiency", name: "办公效率", nameEn: "Office", sortOrder: 10 },
@@ -182,6 +201,13 @@ const server = createServer(async (req, res) => {
       pageSize,
       syncedAt: "2026-09-27T00:00:00Z",
     });
+  }
+  const skillDetail = path.match(/^\/v1\/skills\/([^/]+)\/([^/]+)$/);
+  if (skillDetail && req.method === "GET") {
+    const id = `${decodeURIComponent(skillDetail[1])}/${decodeURIComponent(skillDetail[2])}`;
+    const skill = state.skills.find((item) => item.id === id);
+    if (!skill) return json(res, 404, { code: "NOT_FOUND", message: "skill not found" });
+    return json(res, 200, skill);
   }
   if (path === "/v1/mcp-connectors" && req.method === "GET") return json(res, 200, { items: state.connectors });
   if (path === "/v1/mcp-connectors" && req.method === "POST") {

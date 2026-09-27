@@ -1,5 +1,7 @@
 import { useEffect, useState } from "react";
+import { Link } from "react-router";
 import { describeRoomFailure, listSkillCategories, listSkills, type Skill, type SkillCategory } from "../lib/rooms";
+import { formatCount, safeIcon, skillPath, sourceLabel, tint } from "./skillFormat";
 
 const SORTS = [
   { id: "score", label: "全部" },
@@ -15,51 +17,6 @@ const SOURCES = [
   { id: "enterprise", label: "企业" },
 ] as const;
 
-const ICON_COLORS = [
-  { bg: "rgba(0,122,255,0.12)", fg: "#007AFF" },
-  { bg: "rgba(175,82,222,0.12)", fg: "#AF52DE" },
-  { bg: "rgba(52,199,89,0.12)", fg: "#34C759" },
-  { bg: "rgba(255,149,0,0.12)", fg: "#FF9500" },
-];
-
-const ICON_HOSTS = new Set([
-  "cloudcache.tencent-cloud.com",
-  "cloudcache.tencent-cloud.cn",
-  "cloudcache.tencentcs.com",
-  "cloudcache.tencentcs.cn",
-  "skillhub.cn",
-  "api.skillhub.cn",
-]);
-
-function formatCount(value: number) {
-  if (value >= 10000) return `${(value / 10000).toFixed(1)} 万`;
-  if (value >= 1000) return `${(value / 1000).toFixed(1)} 千`;
-  return String(Math.round(value));
-}
-
-function sourceLabel(source: string) {
-  if (source === "clawhub") return "ClawHub";
-  if (source === "enterprise") return "企业";
-  if (source === "community") return "SkillHub";
-  return "";
-}
-
-function tint(name: string) {
-  let n = 0;
-  for (const ch of name) n += ch.charCodeAt(0);
-  return ICON_COLORS[n % ICON_COLORS.length];
-}
-
-function safeIcon(url: string) {
-  try {
-    const parsed = new URL(url);
-    if (parsed.protocol !== "https:" || !ICON_HOSTS.has(parsed.hostname)) return "";
-    return parsed.toString();
-  } catch {
-    return "";
-  }
-}
-
 export function SkillsPage() {
   const [items, setItems] = useState<Skill[]>([]);
   const [categories, setCategories] = useState<SkillCategory[]>([]);
@@ -72,7 +29,6 @@ export function SkillsPage() {
   const [page, setPage] = useState(1);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
-  const [selected, setSelected] = useState<Skill | null>(null);
 
   useEffect(() => {
     let gone = false;
@@ -188,10 +144,9 @@ export function SkillsPage() {
             const label = skill.categoryName || skill.category;
             return (
               <li key={skill.id}>
-                <button
-                  type="button"
-                  className="h-full w-full rounded-[12px] border border-[rgba(0,0,0,0.06)] bg-white px-5 py-6 text-left hover:shadow-[0_8px_24px_rgba(0,0,0,0.06)]"
-                  onClick={() => setSelected(skill)}
+                <Link
+                  to={skillPath(skill.handle, skill.slug)}
+                  className="block h-full w-full rounded-[12px] border border-[rgba(0,0,0,0.06)] bg-white px-5 py-6 text-left hover:shadow-[0_8px_24px_rgba(0,0,0,0.06)]"
                 >
                   <span className="flex items-center gap-3">
                     {icon ? (
@@ -212,7 +167,7 @@ export function SkillsPage() {
                     <span>下载 {formatCount(skill.downloads)}</span>
                     {sourceLabel(skill.source) ? <span className="ml-auto">{sourceLabel(skill.source)}</span> : null}
                   </span>
-                </button>
+                </Link>
               </li>
             );
           })}
@@ -231,21 +186,6 @@ export function SkillsPage() {
           </div>
         ) : null}
       </div>
-      {selected ? (
-        <div role="dialog" aria-label="技能详情" className="fixed inset-0 z-30 flex items-center justify-center bg-black/30 p-4">
-          <div className="w-full max-w-lg rounded-2xl bg-white p-5">
-            <h2 className="text-base font-medium">{selected.name}</h2>
-            <p className="mt-2 text-sm leading-6 text-[#444]">{selected.description}</p>
-            <p className="mt-3 text-xs text-[#888]">
-              {selected.categoryName || selected.category} · {sourceLabel(selected.source) || "SkillHub"} · {selected.version}
-            </p>
-            <p className="mt-3 text-sm text-[#666]">此页面只展示目录，不会安装技能。</p>
-            <button type="button" className="mt-4 rounded-lg bg-[#1a1a1a] px-3 py-1.5 text-sm text-white" onClick={() => setSelected(null)}>
-              关闭
-            </button>
-          </div>
-        </div>
-      ) : null}
     </div>
   );
 }
