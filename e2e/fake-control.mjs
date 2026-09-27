@@ -116,8 +116,27 @@ const state = {
     },
   ],
   skillFiles: {
-    "demo/weekly": [{ path: "SKILL.md", body: "周报技能说明正文" }],
+    "demo/weekly": [{ path: "SKILL.md", body: "# 周报怎么写\n\n周报技能说明正文\n\n- 本周进展\n- 下周计划\n" }],
     notes: [{ path: "SKILL.md", body: "没有作者的技能说明" }],
+  },
+  skillMeta: {
+    "demo/weekly": {
+      summaryZh: "把一周进展收成周报",
+      subCategories: [{ key: "office-writing", name: "办公写作" }],
+      safe: true,
+      score: 4.7,
+      version: "0.1.0",
+      updatedAt: Date.parse("2026-06-01T00:00:00Z"),
+      versionCreatedAt: Date.parse("2026-06-01T00:00:00Z"),
+      fileIndex: [{ path: "SKILL.md", size: 24 }],
+      versions: [{ version: "0.1.0", changelog: "第一版", createdAt: Date.parse("2026-06-01T00:00:00Z") }],
+      evaluation: {
+        userSummary: "周报技能评测摘要",
+        createdAt: Date.parse("2026-06-01T00:00:00Z"),
+        score: 4.7,
+        dimensions: [{ key: "T", label: "Trust", labelZh: "可信任度", score: 4.7, summary: "安全" }],
+      },
+    },
   },
   skillCategories: [
     { key: "office-efficiency", name: "办公效率", nameEn: "Office", sortOrder: 10 },
@@ -244,7 +263,8 @@ const server = createServer(async (req, res) => {
     const id = decodeURIComponent(skillFiles[1]);
     const skill = state.skills.find((item) => item.id === id);
     if (!skill) return json(res, 404, { code: "NOT_FOUND", message: "skill not found" });
-    return json(res, 200, { items: state.skillFiles[id] ?? [] });
+    const meta = state.skillMeta[id];
+    return json(res, 200, { items: state.skillFiles[id] ?? [], ...(meta ? { meta } : {}) });
   }
   if (path === "/v1/mcp-connectors" && req.method === "GET") return json(res, 200, { items: state.connectors });
   if (path === "/v1/mcp-connectors" && req.method === "POST") {

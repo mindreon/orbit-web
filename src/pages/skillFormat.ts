@@ -52,6 +52,17 @@ export function skillPath(handle: string, slug: string) {
   return `/experts/skills/${encodeURIComponent(handle)}/${encodeURIComponent(slug)}`;
 }
 
+/** 和 SkillHub 详情页一样：今天、N天前、N周前、N个月前、N年前。 */
+export function timeAgo(ms: number) {
+  if (!ms || ms <= 0) return "";
+  const days = Math.floor((Date.now() - ms) / 86_400_000);
+  if (days < 1) return "今天";
+  if (days < 7) return `${days}天前`;
+  if (days < 30) return `${Math.floor(days / 7)}周前`;
+  if (days < 365) return `${Math.floor(days / 30)}个月前`;
+  return `${Math.floor(days / 365)}年前`;
+}
+
 export function formatUpdated(value: string) {
   const date = new Date(value);
   if (Number.isNaN(date.getTime()) || date.getTime() <= 0) return "";

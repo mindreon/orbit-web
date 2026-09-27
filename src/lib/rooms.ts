@@ -331,6 +331,32 @@ export interface SkillTextFile {
   body: string;
 }
 
+export interface SkillPageMeta {
+  summary?: string;
+  summaryZh?: string;
+  subCategories?: { key: string; name: string }[];
+  safe?: boolean;
+  score?: number;
+  version?: string;
+  updatedAt?: number;
+  versionCreatedAt?: number;
+  fileIndex?: { path: string; size: number }[];
+  versions?: { version: string; changelog?: string; createdAt?: number }[];
+  evaluation?: {
+    userSummary?: string;
+    createdAt?: number;
+    score: number;
+    dimensions?: {
+      key: string;
+      label: string;
+      labelZh: string;
+      description?: string;
+      score: number;
+      summary?: string;
+    }[];
+  };
+}
+
 function skillApiPath(handle: string, slug: string) {
   if (!handle) return `/v1/skills/${encodeURIComponent(slug)}`;
   return `/v1/skills/${encodeURIComponent(handle)}/${encodeURIComponent(slug)}`;
@@ -342,7 +368,7 @@ export function getSkill(handle: string, slug: string) {
 
 export function listSkillFiles(handle: string, slug: string) {
   const path = skillApiPath(handle, slug).replace("/v1/skills/", "/v1/skill-files/");
-  return api<{ items: SkillTextFile[] | null }>(path);
+  return api<{ items: SkillTextFile[] | null; meta?: SkillPageMeta }>(path);
 }
 
 export function createMcpConnector(body: { name: string; command: string; args?: string[]; envRefs?: string[] }) {
