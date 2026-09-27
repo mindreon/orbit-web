@@ -52,6 +52,9 @@ test("assistants and connectors are usable; unfinished entries stay grey", async
   await page.getByRole("link", { name: "连接器" }).click();
   await expect(page.getByRole("heading", { name: "连接器" })).toBeVisible();
   await expect(page.locator("input[type=password]")).toHaveCount(0); // S7
+  await expect(page.getByRole("form", { name: "自定义创建" })).toHaveCount(0);
+  await page.getByRole("button", { name: "新建连接器" }).click();
+  await expect(page.getByRole("heading", { name: "自定义创建" })).toBeVisible();
   await page.getByRole("button", { name: "添加连接器" }).click();
   await expect(page.getByText("请填写名称和启动命令")).toBeVisible(); // S6
   await page.getByLabel("连接器名称").fill("文档");
@@ -62,10 +65,12 @@ test("assistants and connectors are usable; unfinished entries stay grey", async
   await expect(page.getByText("环境变量只填名字，不要填写密钥")).toBeVisible(); // S7
   await page.getByLabel("环境变量名").fill("DOCS_TOKEN");
   await page.getByRole("button", { name: "添加连接器" }).click();
+  await expect(page.getByRole("heading", { name: "连接器" })).toBeVisible();
   await expect(page.getByText("文档", { exact: true })).toBeVisible();
   await expect(page.getByText("环境变量名：DOCS_TOKEN")).toBeVisible();
   await expect(page.getByText("secret")).toHaveCount(0);
 
+  await page.getByRole("button", { name: "新建连接器" }).click();
   const create = page.getByRole("form", { name: "自定义创建" });
   await create.getByText("Streamable HTTP", { exact: true }).click();
   await page.getByLabel("连接器名称").fill("远程文档");
@@ -78,31 +83,39 @@ test("assistants and connectors are usable; unfinished entries stay grey", async
   await page.getByLabel("请求头").fill("Authorization:DOCS_TOKEN");
   await page.getByLabel("新建任务时默认连接").check();
   await page.getByRole("button", { name: "添加连接器" }).click();
+  await expect(page.getByRole("heading", { name: "连接器" })).toBeVisible();
   await expect(page.getByText("远程文档")).toBeVisible();
   await expect(page.getByText("https://mcp.example.com/mcp")).toBeVisible();
   await expect(page.getByText("请求头：Authorization:DOCS_TOKEN")).toBeVisible();
   await expect(page.getByText("hidden")).toHaveCount(0);
 
-  await create.getByRole("tab", { name: "JSON" }).click();
-  await create.getByText("Stdio", { exact: true }).click();
-  await page.getByLabel("服务配置 JSON").fill(
-    JSON.stringify({ mcpServers: { time: { command: "uvx", args: ["mcp-server-time"], env: { TZ: "" } } } }),
-  );
-  await page.getByRole("button", { name: "添加连接器" }).click();
-  await expect(page.getByText("time", { exact: true })).toBeVisible();
-  await expect(page.getByText("uvx mcp-server-time")).toBeVisible();
-  await expect(page.getByText("环境变量名：TZ")).toBeVisible();
+  await page.getByRole("button", { name: "新建连接器" }).click();
+  const jsonForm = page.getByRole("form", { name: "自定义创建" });
+  await jsonForm.getByRole("tab", { name: "JSON" }).click();
+  await jsonForm.getByText("Stdio", { exact: true }).click();
   await page.getByLabel("服务配置 JSON").fill(
     JSON.stringify({ mcpServers: { leak: { command: "uvx", env: { TOKEN: "secret" } } } }),
   );
   await page.getByRole("button", { name: "添加连接器" }).click();
   await expect(page.getByText("环境变量只填名字，不要填写密钥")).toBeVisible();
-  await expect(page.getByRole("list").getByText("leak", { exact: true })).toHaveCount(0);
+  await expect(page.getByRole("heading", { name: "自定义创建" })).toBeVisible();
   await page.getByLabel("服务配置 JSON").fill("");
   await expect(page.getByText("secret")).toHaveCount(0);
-  await create.getByText("SSE", { exact: true }).click();
+  await page.getByLabel("服务配置 JSON").fill(
+    JSON.stringify({ mcpServers: { time: { command: "uvx", args: ["mcp-server-time"], env: { TZ: "" } } } }),
+  );
+  await page.getByRole("button", { name: "添加连接器" }).click();
+  await expect(page.getByRole("heading", { name: "连接器" })).toBeVisible();
+  await expect(page.getByText("time", { exact: true })).toBeVisible();
+  await expect(page.getByText("uvx mcp-server-time")).toBeVisible();
+  await expect(page.getByText("环境变量名：TZ")).toBeVisible();
+
+  await page.getByRole("button", { name: "新建连接器" }).click();
+  await page.getByRole("form", { name: "自定义创建" }).getByText("SSE", { exact: true }).click();
   await page.getByRole("button", { name: "添加连接器" }).click();
   await expect(page.getByText("SSE 配置这里不保存。请改用 Streamable HTTP。")).toHaveCount(2);
+  await page.getByRole("navigation", { name: "面包屑" }).getByRole("link", { name: "连接器" }).click();
+  await expect(page.getByRole("heading", { name: "连接器" })).toBeVisible();
 
   const markets = page.getByRole("region", { name: "国内 MCP 市场" });
   await expect(markets).toBeVisible();
