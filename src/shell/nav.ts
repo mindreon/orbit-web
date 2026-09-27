@@ -1,10 +1,9 @@
-/** 侧栏菜单。已去掉活动、积分，以及本地工作区入口。 */
+/** 侧栏菜单。已去掉活动、积分、本地工作区，以及自定义菜单。 */
 
-/** Sidebar entries that stay visible in P0 but must not navigate or call APIs. */
+/** 还没有后端的入口保持可见，但不能点，文案带「未接入」。 */
 export const GREYED_NAV_LABELS = new Set<string>([
-  "助理",
   "项目",
-  "专家·技能·连接器",
+  "专家·技能",
   "定时任务",
   "资料库",
 ]);
@@ -13,7 +12,8 @@ export const PRIMARY_NAV = [
   { to: "/", label: "新建任务", end: true },
   { to: "/assistants", label: "助理", end: false },
   { to: "/projects", label: "项目", end: false },
-  { to: "/experts", label: "专家·技能·连接器", end: false },
+  { to: "/experts", label: "专家·技能", end: false },
+  { to: "/experts/connectors", label: "连接器", end: true },
   { to: "/automation", label: "定时任务", end: false },
   { to: "/library", label: "资料库", end: false },
 ] as const;

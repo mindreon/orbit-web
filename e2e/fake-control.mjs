@@ -35,6 +35,8 @@ const state = {
     ? perfDataset({ messages: Number(process.env.FIXTURE_MESSAGES), replyChars: Number(process.env.FIXTURE_REPLY_CHARS ?? 0) })
     : [],
   approvals: [],
+  personas: [],
+  connectors: [],
   /** Fault knobs for the state tests: an HTTP status for /activity, and a delay before it answers. */
   faults: { activityStatus: 0, activityDelayMs: 0 },
   streams: new Set(),
@@ -99,6 +101,40 @@ const server = createServer(async (req, res) => {
 
   if (path === "/health") return json(res, 200, { status: "ok" });
   if (path === "/v1/rooms" && req.method === "GET") return json(res, 200, { items: [ROOM] });
+  if (path === "/v1/personas" && req.method === "GET") return json(res, 200, { items: state.personas });
+  if (path === "/v1/personas" && req.method === "POST") {
+    const body = await readBody(req);
+    const name = String(body.name ?? "").trim();
+    if (!name) return json(res, 400, { code: "BAD_REQUEST", message: "the request is invalid" });
+    const persona = {
+      id: `persona-${state.personas.length + 1}`,
+      name,
+      instructions: String(body.instructions ?? ""),
+      createdAt: "2026-09-27T00:00:00Z",
+    };
+    state.personas.unshift(persona);
+    return json(res, 200, persona);
+  }
+  if (path === "/v1/mcp-connectors" && req.method === "GET") return json(res, 200, { items: state.connectors });
+  if (path === "/v1/mcp-connectors" && req.method === "POST") {
+    const body = await readBody(req);
+    const name = String(body.name ?? "").trim();
+    const command = String(body.command ?? "").trim();
+    const envRefs = Array.isArray(body.envRefs) ? body.envRefs.map(String) : [];
+    if (!name || !command || envRefs.some((item) => item.includes("="))) {
+      return json(res, 400, { code: "BAD_REQUEST", message: "the request is invalid" });
+    }
+    const connector = {
+      id: `mcp-${state.connectors.length + 1}`,
+      name,
+      command,
+      args: Array.isArray(body.args) ? body.args.map(String) : [],
+      envRefs,
+      createdAt: "2026-09-27T00:00:00Z",
+    };
+    state.connectors.unshift(connector);
+    return json(res, 200, connector);
+  }
   if (path === `/v1/rooms/${ROOM.id}` && req.method === "GET") return json(res, 200, ROOM);
   if (path === "/v1/approvals") return json(res, 200, { items: state.approvals });
   const decide = path.match(/^\/v1\/approvals\/([^/]+)\/decide$/);
@@ -178,6 +214,8 @@ const server = createServer(async (req, res) => {
     state.streams.clear();
     state.activity = [];
     state.approvals = [];
+    state.personas = [];
+    state.connectors = [];
     state.faults = { activityStatus: 0, activityDelayMs: 0 };
     state.sequence = 0;
     state.log = { events: [], activity: 0, posts: [], decisions: [] };
