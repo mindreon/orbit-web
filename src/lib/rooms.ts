@@ -242,3 +242,42 @@ export function steerRoom(roomId: string, instruction: string) {
     timeoutMs: 0,
   });
 }
+
+export interface Persona {
+  id: string;
+  name: string;
+  instructions: string;
+  mcpConnectorIds?: string[];
+  createdAt: string;
+}
+
+export interface McpConnector {
+  id: string;
+  name: string;
+  command: string;
+  args?: string[];
+  envRefs?: string[];
+  createdAt: string;
+}
+
+export function listPersonas() {
+  return api<{ items: Persona[] | null }>("/v1/personas");
+}
+
+export function createPersona(body: { name: string; instructions: string }) {
+  return api<Persona>("/v1/personas", {
+    method: "POST",
+    body: JSON.stringify(body),
+  });
+}
+
+export function listMcpConnectors() {
+  return api<{ items: McpConnector[] | null }>("/v1/mcp-connectors");
+}
+
+export function createMcpConnector(body: { name: string; command: string; args?: string[]; envRefs?: string[] }) {
+  return api<McpConnector>("/v1/mcp-connectors", {
+    method: "POST",
+    body: JSON.stringify(body),
+  });
+}

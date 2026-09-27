@@ -58,9 +58,6 @@ export function App() {
   const startBlank = useMind((s) => s.startBlank);
   const role = useMind((s) => s.role);
   const setRole = useMind((s) => s.setRole);
-  const [menuEdit, setMenuEdit] = useState(false);
-  const [menuTip, setMenuTip] = useState("");
-  const [primaryLabels, setPrimaryLabels] = useState<string[]>(PRIMARY_NAV.map((item) => item.label));
   const [appsOpen, setAppsOpen] = useState(false);
   const buddyApps = useSyncExternalStore(subscribeBuddyApps, getBuddyApps);
   const uiPrefs = useSyncExternalStore(subscribeUiPrefs, getUiPrefs);
@@ -343,9 +340,7 @@ export function App() {
           </div>
         ) : null}
         <nav className="px-2" aria-label="Agents tabs">
-          {primaryLabels.map((label) => {
-            const item = PRIMARY_NAV.find((entry) => entry.label === label);
-            if (!item) return null;
+          {PRIMARY_NAV.map((item) => {
             if (GREYED_NAV_LABELS.has(item.label)) {
               return (
                 <button
@@ -363,7 +358,7 @@ export function App() {
               <NavLink
                 key={item.to}
                 to={item.to}
-                end={"end" in item ? item.end : false}
+                end={item.end}
                 className={({ isActive }) =>
                   cn("mb-0.5 flex h-8 items-center rounded-lg px-3 text-sm", isActive ? "bg-[#e7e7e9] font-medium" : "hover:bg-[#ececee]")
                 }
@@ -372,64 +367,7 @@ export function App() {
               </NavLink>
             );
           })}
-          <button
-            type="button"
-            className="mt-1 flex h-8 w-full items-center rounded-lg px-3 text-left text-sm hover:bg-[#ececee]"
-            onClick={() => {
-              setMenuTip("");
-              setMenuEdit(true);
-            }}
-          >
-            自定义菜单
-          </button>
         </nav>
-        {menuEdit ? (
-          <div className="fixed inset-0 z-40 flex items-center justify-center bg-black/30 p-4">
-            <div className="w-full max-w-md rounded-2xl bg-white p-5 text-sm" role="dialog" aria-label="自定义菜单栏">
-              <p className="font-medium">自定义菜单栏</p>
-              <p className="mt-1 text-xs text-[#888]">拖拽可替换位置</p>
-              {menuTip ? <p className="mt-2 text-xs text-[#c04545]">{menuTip}</p> : null}
-              <div
-                className="mt-3 rounded-xl border border-dashed border-[#e6e6e8] p-2"
-                onDragOver={(event) => event.preventDefault()}
-                onDrop={(event) => {
-                  event.preventDefault();
-                  const label = event.dataTransfer.getData("text/plain");
-                  if (!label || label === "新建任务") return;
-                  const rest = primaryLabels.filter((item) => item !== label);
-                  setPrimaryLabels([...rest, label]);
-                  setMenuTip("");
-                }}
-              >
-                <p className="px-2 py-1 text-xs text-[#888]">一级菜单</p>
-                {primaryLabels.map((label) => (
-                  <button
-                    key={label}
-                    type="button"
-                    draggable={label !== "新建任务"}
-                    className="block w-full rounded-lg px-2 py-1.5 text-left hover:bg-[#f6f6f7]"
-                    onDragStart={(event) => {
-                      if (label === "新建任务") {
-                        event.preventDefault();
-                        setMenuTip("新建任务菜单不支持拖拽替换位置");
-                        return;
-                      }
-                      event.dataTransfer.setData("text/plain", label);
-                      setMenuTip("");
-                    }}
-                  >
-                    {label}
-                  </button>
-                ))}
-              </div>
-              <div className="mt-4 flex justify-end">
-                <button type="button" onClick={() => setMenuEdit(false)}>
-                  取消
-                </button>
-              </div>
-            </div>
-          </div>
-        ) : null}
         <div className="mt-3 min-h-0 flex-1 overflow-auto px-2 pb-2">
           <button type="button" className="flex w-full items-center px-3 py-1 text-xs text-[#888]" onClick={() => setTasksOpen((open) => !open)}>
             任务 ({openTasks.length})
