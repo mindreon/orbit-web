@@ -67,7 +67,8 @@ export function App() {
   const shortcuts = useSyncExternalStore(subscribeShortcuts, getShortcuts);
   const [accountOpen, setAccountOpen] = useState(false);
   const [tasksOpen, setTasksOpen] = useState(true);
-  const [collapsed, setCollapsed] = useState(false);
+  // Phones start with the sidebar closed; when opened it overlays the page instead of squeezing it.
+  const [collapsed, setCollapsed] = useState(() => window.matchMedia("(max-width: 767px)").matches);
   const [searchOpen, setSearchOpen] = useState(false);
   const [query, setQuery] = useState("");
   const [searchIndex, setSearchIndex] = useState(0);
@@ -180,7 +181,12 @@ export function App() {
 
   return (
     <div className="flex h-screen bg-[#f3f3f4] text-[#1a1a1a]">
-      <aside className={cn("flex shrink-0 flex-col border-r border-[#e8e8ea] transition-[width]", collapsed ? "w-0 overflow-hidden border-r-0" : "w-[264px]")}>
+      <aside
+        className={cn(
+          "flex shrink-0 flex-col border-r border-[#e8e8ea] transition-[width] max-md:fixed max-md:inset-y-0 max-md:left-0 max-md:z-40 max-md:bg-[#f3f3f4]",
+          collapsed ? "w-0 overflow-hidden border-r-0" : "w-[264px] max-md:shadow-xl",
+        )}
+      >
         <div className="flex h-14 items-center gap-1 px-3">
           <button type="button" aria-label="收起侧边栏" className="flex h-8 w-8 items-center justify-center rounded-lg text-[#666] hover:bg-[#e8e8ea]" onClick={() => setCollapsed(true)}>
             〈
