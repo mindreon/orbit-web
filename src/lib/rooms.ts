@@ -380,6 +380,56 @@ export function listSkillFiles(handle: string, slug: string) {
   return api<{ items: SkillTextFile[] | null; meta?: SkillPageMeta }>(path);
 }
 
+export interface McpMarketServer {
+  id: string;
+  name: string;
+  summary: string;
+  author: string;
+  category: string;
+  categoryName: string;
+  categoryMore: number;
+  calls: number;
+  views: number;
+  stars: number;
+  verified: boolean;
+  hosted: boolean;
+  needsOnline: boolean;
+}
+
+export interface McpMarketCategory {
+  key: string;
+  name: string;
+  sortOrder: number;
+  count: number;
+}
+
+export interface McpMarketQuery {
+  keyword?: string;
+  category?: string;
+  serviceType?: "" | "hosted" | "local";
+  needsOnline?: "" | "true" | "false";
+  page?: number;
+}
+
+export function listMcpMarket(query: McpMarketQuery = {}) {
+  const params = new URLSearchParams();
+  if (query.keyword) params.set("keyword", query.keyword);
+  if (query.category) params.set("category", query.category);
+  if (query.serviceType) params.set("serviceType", query.serviceType);
+  if (query.needsOnline) params.set("needsOnline", query.needsOnline);
+  if (query.page) params.set("page", String(query.page));
+  params.set("pageSize", "30");
+  const qs = params.toString();
+  return api<{ items: McpMarketServer[] | null; total: number; stored: number; plazaTotal: number; page: number; pageSize: number }>(
+    `/v1/mcp-market?${qs}`,
+  );
+}
+
+export function listMcpMarketCategories(needsOnline?: "true" | "false") {
+  const qs = needsOnline ? `?needsOnline=${needsOnline}` : "";
+  return api<{ items: McpMarketCategory[] | null }>(`/v1/mcp-market-categories${qs}`);
+}
+
 export function createMcpConnector(body: {
   name: string;
   transport?: "stdio" | "streamable_http";

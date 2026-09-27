@@ -1,27 +1,15 @@
-import { useMemo, useState, type ReactNode } from "react";
-import { MCP_PLAZA_TOTAL, entriesForDeploy, offlineDeploy, type McpMarketEntry } from "../lib/mcpMarkets";
+import { useEffect, useState, type ReactNode } from "react";
+import {
+  describeRoomFailure,
+  listMcpMarket,
+  listMcpMarketCategories,
+  type McpMarketCategory,
+  type McpMarketServer,
+} from "../lib/rooms";
 
-const PAGE = 30;
-
-/** 魔搭侧栏的固定分类，顺序和中文名与广场一致。卡片只展示这份名单里的分类。 */
-const PLAZA_CATEGORIES: ReadonlyArray<readonly [string, string]> = [
-  ["browser-automation", "浏览器自动化"],
-  ["search", "搜索工具"],
-  ["communication", "交流协作工具"],
-  ["developer-tools", "开发者工具"],
-  ["entertainment-and-media", "娱乐与多媒体"],
-  ["file-systems", "文件系统"],
-  ["finance", "金融"],
-  ["knowledge-and-memory", "知识管理与记忆"],
-  ["location-services", "位置服务"],
-  ["art-and-culture", "文化与艺术"],
-  ["research-and-data", "学术研究"],
-  ["calendar-management", "日程管理"],
-  ["scientific-tool", "科研工具"],
-  ["other", "其他"],
-];
-
-const CATEGORY_LABEL = new Map(PLAZA_CATEGORIES);
+function offlineDeploy() {
+  return import.meta.env.VITE_ORBIT_OFFLINE === "1";
+}
 
 function formatStat(value: number) {
   if (value >= 1_000_000_000) return `${(value / 1_000_000_000).toFixed(1)}b`;
@@ -52,8 +40,8 @@ function PlazaMark() {
   );
 }
 
-function PlazaCard({ item }: { item: McpMarketEntry }) {
-  const categoryLabel = CATEGORY_LABEL.get(item.category);
+function PlazaCard({ item }: { item: McpMarketServer }) {
+  const categoryLabel = item.categoryName;
   const initial = item.name.trim().slice(0, 1) || "M";
   return (
     <article className="rounded-xl border-2 border-transparent bg-[#F7F9FD] px-[18px] py-[14px] hover:border-[#624AFF]">
@@ -134,40 +122,57 @@ export function McpMarketCatalog() {
   const [hostedOn, setHostedOn] = useState(false);
   const [localOn, setLocalOn] = useState(false);
   const [page, setPage] = useState(1);
+  const [categories, setCategories] = useState<McpMarketCategory[]>([]);
+  const [visible, setVisible] = useState<McpMarketServer[]>([]);
+  const [total, setTotal] = useState(0);
+  const [stored, setStored] = useState(0);
+  const [plazaTotal, setPlazaTotal] = useState(0);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState("");
   const offline = offlineDeploy();
-  const catalog = useMemo(() => entriesForDeploy(), []);
+  const needsOnline = offline ? "false" : "";
+  const serviceType = hostedOn !== localOn ? (hostedOn ? "hosted" : "local") : "";
 
-  const categoryCounts = useMemo(() => {
-    const counts = new Map<string, number>();
-    for (const item of catalog) counts.set(item.category, (counts.get(item.category) ?? 0) + 1);
-    return counts;
-  }, [catalog]);
+  useEffect(() => {
+    let gone = false;
+    listMcpMarketCategories(needsOnline || undefined)
+      .then((body) => {
+        if (!gone) setCategories(body.items ?? []);
+      })
+      .catch(() => {
+        if (!gone) setCategories([]);
+      });
+    return () => {
+      gone = true;
+    };
+  }, [needsOnline]);
 
-  const matched = useMemo(() => {
-    const q = keyword.trim().toLowerCase();
-    const named: McpMarketEntry[] = [];
-    const described: McpMarketEntry[] = [];
-    for (const item of catalog) {
-      if (category && item.category !== category) continue;
-      if (hostedOn !== localOn) {
-        if (hostedOn && !item.hosted) continue;
-        if (localOn && item.hosted) continue;
-      }
-      if (!q) {
-        named.push(item);
-        continue;
-      }
-      const label = CATEGORY_LABEL.get(item.category) ?? "";
-      if (item.name.toLowerCase().includes(q) || item.author.toLowerCase().includes(q)) named.push(item);
-      else if (item.summary.toLowerCase().includes(q) || item.category.toLowerCase().includes(q) || label.includes(q)) described.push(item);
-    }
-    return [...named, ...described];
-  }, [catalog, keyword, category, hostedOn, localOn]);
+  useEffect(() => {
+    let gone = false;
+    setLoading(true);
+    listMcpMarket({ keyword: keyword.trim(), category, serviceType, needsOnline, page })
+      .then((body) => {
+        if (gone) return;
+        setVisible(body.items ?? []);
+        setTotal(body.total ?? 0);
+        setStored(body.stored ?? 0);
+        setPlazaTotal(body.plazaTotal ?? 0);
+        setError("");
+      })
+      .catch((err: unknown) => {
+        if (!gone) setError(describeRoomFailure("读取市场目录失败", err));
+      })
+      .finally(() => {
+        if (!gone) setLoading(false);
+      });
+    return () => {
+      gone = true;
+    };
+  }, [keyword, category, serviceType, needsOnline, page]);
 
   const filtering = keyword.trim() !== "" || category !== "" || hostedOn || localOn;
-  const pages = Math.max(1, Math.ceil(matched.length / PAGE));
+  const pages = Math.max(1, Math.ceil(total / 30));
   const current = Math.min(page, pages);
-  const visible = matched.slice((current - 1) * PAGE, current * PAGE);
 
   function toggleType(kind: "hosted" | "local") {
     if (kind === "hosted") setHostedOn((value) => !value);
@@ -195,22 +200,20 @@ export function McpMarketCatalog() {
           <div className="mb-5 mt-1">
             <span className="text-[16px] font-semibold text-[#27254C]">MCP 服务</span>
           </div>
-          {PLAZA_CATEGORIES.map(([slug, label]) => {
-            const count = categoryCounts.get(slug) ?? 0;
-            if (count <= 0) return null;
-            const active = category === slug;
+          {categories.map((item) => {
+            const active = category === item.key;
             return (
               <button
-                key={slug}
+                key={item.key}
                 type="button"
                 className={`mb-4 flex w-full items-center justify-between rounded-xl py-[14px] pl-5 pr-[14px] text-left ${active ? "bg-[#EFF2F9]" : "bg-[#F7F9FD] hover:bg-[#EFF2F9]"}`}
                 onClick={() => {
-                  setCategory(active ? "" : slug);
+                  setCategory(active ? "" : item.key);
                   setPage(1);
                 }}
               >
-                <span className={`min-w-0 truncate text-[14px] leading-5 ${active ? "font-semibold text-[#624AFF]" : "font-medium text-[#27254C]"}`}>{label}</span>
-                <span className="ml-2 shrink-0 rounded-full bg-white px-[7px] text-[12px] font-medium leading-5 text-[#464D5B]">{count}</span>
+                <span className={`min-w-0 truncate text-[14px] leading-5 ${active ? "font-semibold text-[#624AFF]" : "font-medium text-[#27254C]"}`}>{item.name}</span>
+                <span className="ml-2 shrink-0 rounded-full bg-white px-[7px] text-[12px] font-medium leading-5 text-[#464D5B]">{item.count}</span>
               </button>
             );
           })}
@@ -220,7 +223,7 @@ export function McpMarketCatalog() {
             <input
               aria-label="搜索市场服务"
               value={keyword}
-              placeholder={`搜索MCP服务（共${matched.length}个）`}
+              placeholder={`搜索MCP服务（共${total}个）`}
               className="h-9 w-full rounded-[5px] border border-[#F7F9FD] bg-[#F7F9FD] px-3 text-[14px] text-[#27254C] outline-none placeholder:text-[#8284A4] hover:border-[#6A57FF] hover:bg-white focus:border-[#6A57FF] focus:bg-white lg:w-[calc(33.333%-9px)]"
               onChange={(event) => {
                 setKeyword(event.target.value);
@@ -248,7 +251,7 @@ export function McpMarketCatalog() {
           {filtering ? (
             <div className="mb-4 flex items-center gap-2 text-[14px] text-[#8284A4]">
               <span className="whitespace-nowrap">
-                共找到 <span className="text-[#624AFF]">{matched.length}</span> 个结果
+                共找到 <span className="text-[#624AFF]">{total}</span> 个结果
               </span>
               <button
                 type="button"
@@ -265,9 +268,11 @@ export function McpMarketCatalog() {
               </button>
             </div>
           ) : null}
-          {visible.length === 0 ? (
+          {error ? (
+            <p className="mt-6 text-[14px] text-[#464D5B]">{error}</p>
+          ) : visible.length === 0 ? (
             <p className="mt-6 text-[14px] text-[#464D5B]">
-              {offline && catalog.length === 0 ? "离线部署不显示需要联网的服务。这份目录里的服务都要联网。" : "没有匹配的服务。"}
+              {loading ? "正在读取目录。" : offline && stored === 0 ? "离线部署不显示需要联网的服务。这份目录里的服务都要联网。" : "没有匹配的服务。"}
             </p>
           ) : (
             <div className="grid grid-cols-[repeat(auto-fill,minmax(320px,1fr))] gap-5">
@@ -282,7 +287,7 @@ export function McpMarketCatalog() {
                 下一页
               </button>
               <span>
-                {current} / {pages}
+                {page} / {pages}
               </span>
               <button type="button" className="h-8 rounded bg-[#F7F9FD] px-3 disabled:opacity-40" disabled={current <= 1} onClick={() => setPage(current - 1)}>
                 上一页
@@ -293,7 +298,7 @@ export function McpMarketCatalog() {
       </div>
       <div className="mt-8 text-[12px] leading-5 text-[#8284A4]">
         <p>modelscope.cn/mcp</p>
-        <p>同名只留一条。打开这一页只读本地数据，只展示，不在这里连接，也不填写密钥。广场标注 {MCP_PLAZA_TOTAL} 条，这里收了 {catalog.length} 条。</p>
+        <p>同名只留一条。打开这一页通过接口读取已经存好的目录，只展示，不在这里连接，也不填写密钥。广场标注 {plazaTotal} 条，这里收了 {stored} 条。</p>
         <p className="mt-2">提示：本广场内部分MCP由第三方提供。使用前，请务必评估其安全性并同意相关协议。因使用第三方MCP产生的任何风险需由您自行承担。</p>
       </div>
     </section>

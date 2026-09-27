@@ -19,6 +19,44 @@ const PORT = Number(process.env.FAKE_CONTROL_PORT ?? 18080);
 const STATIC_DIR = process.env.STATIC_DIR ?? "";
 const MIME = { ".html": "text/html", ".js": "text/javascript", ".css": "text/css", ".svg": "image/svg+xml", ".woff2": "font/woff2", ".woff": "font/woff", ".ttf": "font/ttf", ".png": "image/png" };
 
+const MCP_MARKET = [
+  {
+    id: "modelcontextprotocol-fetch",
+    name: "Fetch网页内容抓取",
+    summary: "检索并整理网页内容",
+    author: "@modelcontextprotocol",
+    category: "browser-automation",
+    categoryName: "浏览器自动化",
+    categoryMore: 0,
+    calls: 322054194,
+    views: 617691,
+    stars: 1046,
+    verified: true,
+    hosted: true,
+    needsOnline: true,
+  },
+  {
+    id: "modelcontextprotocol-filesystem",
+    name: "文件系统",
+    summary: "读写本机文件",
+    author: "@modelcontextprotocol",
+    category: "file-systems",
+    categoryName: "文件系统",
+    categoryMore: 0,
+    calls: 0,
+    views: 73400,
+    stars: 182,
+    verified: true,
+    hosted: false,
+    needsOnline: false,
+  },
+];
+
+const MCP_CATEGORIES = [
+  { key: "browser-automation", name: "浏览器自动化", sortOrder: 1 },
+  { key: "file-systems", name: "文件系统", sortOrder: 6 },
+];
+
 const ROOM = {
   id: "room-e2e",
   kind: "solo",
@@ -265,6 +303,47 @@ const server = createServer(async (req, res) => {
     if (!skill) return json(res, 404, { code: "NOT_FOUND", message: "skill not found" });
     const meta = state.skillMeta[id];
     return json(res, 200, { items: state.skillFiles[id] ?? [], ...(meta ? { meta } : {}) });
+  }
+  if (path === "/v1/mcp-market-categories" && req.method === "GET") {
+    const needsOnline = url.searchParams.get("needsOnline") || "";
+    const counts = new Map();
+    for (const item of MCP_MARKET) {
+      if (needsOnline === "true" && !item.needsOnline) continue;
+      if (needsOnline === "false" && item.needsOnline) continue;
+      counts.set(item.category, (counts.get(item.category) || 0) + 1);
+    }
+    const items = MCP_CATEGORIES.filter((item) => counts.get(item.key)).map((item) => ({ ...item, count: counts.get(item.key) }));
+    return json(res, 200, { items });
+  }
+  if (path === "/v1/mcp-market" && req.method === "GET") {
+    const keyword = (url.searchParams.get("keyword") || "").trim().toLowerCase();
+    const category = url.searchParams.get("category") || "";
+    const serviceType = url.searchParams.get("serviceType") || "";
+    const needsOnline = url.searchParams.get("needsOnline") || "";
+    const page = Math.max(1, Number(url.searchParams.get("page") || 1));
+    const pageSize = Math.min(48, Math.max(1, Number(url.searchParams.get("pageSize") || 30)));
+    const stored = MCP_MARKET.filter((item) => {
+      if (needsOnline === "true" && !item.needsOnline) return false;
+      if (needsOnline === "false" && item.needsOnline) return false;
+      return true;
+    });
+    const matched = stored.filter((item) => {
+      if (category && item.category !== category) return false;
+      if (serviceType === "hosted" && !item.hosted) return false;
+      if (serviceType === "local" && item.hosted) return false;
+      if (!keyword) return true;
+      const blob = `${item.name} ${item.author} ${item.summary} ${item.category} ${item.categoryName}`.toLowerCase();
+      return blob.includes(keyword);
+    });
+    const start = (page - 1) * pageSize;
+    return json(res, 200, {
+      items: matched.slice(start, start + pageSize),
+      total: matched.length,
+      stored: stored.length,
+      plazaTotal: 12525,
+      page,
+      pageSize,
+    });
   }
   if (path === "/v1/mcp-connectors" && req.method === "GET") return json(res, 200, { items: state.connectors });
   if (path === "/v1/mcp-connectors" && req.method === "POST") {
