@@ -377,7 +377,8 @@ export function getSkill(handle: string, slug: string) {
 
 export function listSkillFiles(handle: string, slug: string) {
   const path = skillApiPath(handle, slug).replace("/v1/skills/", "/v1/skill-files/");
-  return api<{ items: SkillTextFile[] | null; meta?: SkillPageMeta }>(path);
+  // The first open of a skill may copy the package. That is slower than a saved read.
+  return api<{ items: SkillTextFile[] | null; meta?: SkillPageMeta }>(path, { timeoutMs: 60000 });
 }
 
 export interface McpMarketServer {

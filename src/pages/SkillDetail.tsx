@@ -302,14 +302,16 @@ function formatFileSize(size: number) {
   return `${(kb / 1024).toFixed(1)} MB`;
 }
 
+function fileKey(path: string) {
+  return path.replaceAll("\\", "/").replace(/^\/+/, "");
+}
+
 function previewKind(path: string) {
-  const base = path.slice(path.lastIndexOf("/") + 1).toLowerCase();
+  const base = fileKey(path).slice(fileKey(path).lastIndexOf("/") + 1).toLowerCase();
   const dot = base.lastIndexOf(".");
   const ext = dot <= 0 ? "" : base.slice(dot + 1);
   if (ext === "md" || ext === "mdx") return "markdown";
-  const text = new Set(["txt", "json", "yaml", "yml", "toml", "py", "js", "ts", "tsx", "jsx", "css", "html", "xml", "csv", "sh"]);
-  if (text.has(ext)) return "text";
-  return "unsupported";
+  return "text";
 }
 
 function FileTab({ files, meta }: { files: SkillTextFile[]; meta?: SkillPageMeta }) {
@@ -318,7 +320,7 @@ function FileTab({ files, meta }: { files: SkillTextFile[]; meta?: SkillPageMeta
     return files.map((file) => ({ path: file.path, size: new TextEncoder().encode(file.body).length }));
   }, [files, meta]);
   const tree = useMemo(() => buildTree(entries), [entries]);
-  const bodies = useMemo(() => new Map(files.map((file) => [file.path, file.body])), [files]);
+  const bodies = useMemo(() => new Map(files.map((file) => [fileKey(file.path), file.body])), [files]);
   const [selected, setSelected] = useState<string | null>(null);
   const [open, setOpen] = useState<Set<string>>(() => new Set());
   const [mode, setMode] = useState<"tree" | "preview">("tree");
@@ -344,7 +346,7 @@ function FileTab({ files, meta }: { files: SkillTextFile[]; meta?: SkillPageMeta
   if (mode === "preview" && selected) {
     return (
       <div className="flex h-[70vh] flex-col overflow-hidden rounded border border-[rgba(0,0,0,0.08)]">
-        <FilePreview path={selected} body={bodies.get(selected)} onBack={() => setMode("tree")} />
+        <FilePreview path={selected} body={bodies.get(fileKey(selected))} onBack={() => setMode("tree")} />
       </div>
     );
   }
@@ -449,8 +451,6 @@ function FilePreview({ path, body, onBack }: { path: string; body?: string; onBa
       </div>
       <div className="flex-1 overflow-auto">
         {!text ? (
-          <p className="flex h-full min-h-[240px] items-center justify-center text-sm text-[rgba(0,0,0,0.45)]">这份文本没有留在本地目录里。</p>
-        ) : kind === "unsupported" ? (
           <p className="flex h-full min-h-[240px] items-center justify-center text-sm text-[rgba(0,0,0,0.45)]">暂不支持预览此类型文件</p>
         ) : kind === "markdown" ? (
           <div className="p-4">
