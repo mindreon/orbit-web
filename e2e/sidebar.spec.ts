@@ -13,6 +13,7 @@
  *   S11 search hides the matching skill or keeps a skill that does not match.
  *   S12 opening a skill stays in a dialog, or the detail page does not show the stored row.
  *   S13 a skill with no author stays on the list, or the file tab does not show saved text.
+ *   S14 the skill page still has 评论, 概述, or 版本历史 tabs, or the file text stays behind a 文件 tab.
  *   S6 a connector can be saved without a command.
  *   S7 the connector form has a password field, or accepts KEY=value as an env name.
  *   S8 after leaving and coming back, the assistant created in this session is gone.
@@ -78,15 +79,15 @@ test("assistants and connectors are usable; unfinished entries stay grey", async
   await expect(page.getByRole("heading", { name: "周报汇总" })).toBeVisible();
   await expect(page.getByText("@demo/weekly")).toBeVisible();
   await expect(page.getByText("不会安装技能")).toBeVisible(); // S10
+  await expect(page.getByRole("tab")).toHaveCount(0); // S14
+  await expect(page.getByText("评论")).toHaveCount(0);
   await expect(page.getByRole("link", { name: /会议纪要/ })).toBeVisible();
   await expect(page.getByRole("button", { name: "安装" })).toHaveCount(0);
-  await page.getByRole("tab", { name: "文件" }).click();
-  await expect(page.getByText("SKILL.md")).toBeVisible();
+  await expect(page.getByRole("heading", { name: "SKILL.md" })).toBeVisible();
   await expect(page.getByText("周报技能说明正文")).toBeVisible(); // S13
   await page.getByRole("link", { name: "返回技能目录" }).click();
   await page.getByRole("link", { name: /随手笔记/ }).click();
   await expect(page).toHaveURL(/\/experts\/skills\/notes$/); // S13
   await expect(page.getByRole("heading", { name: "随手笔记" })).toBeVisible();
-  await page.getByRole("tab", { name: "文件" }).click();
   await expect(page.getByText("没有作者的技能说明")).toBeVisible();
 });
