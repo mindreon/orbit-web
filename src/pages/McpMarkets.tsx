@@ -85,7 +85,7 @@ function PlazaCard({ item }: { item: McpMarketEntry }) {
             {categoryLabel ? (
               <span className="inline-block max-w-[180px] truncate rounded bg-white px-[5px] text-[12px] leading-5 text-[#464D5B]">{categoryLabel}</span>
             ) : null}
-            {item.categoryMore > 0 ? (
+            {categoryLabel && item.categoryMore > 0 ? (
               <span
                 aria-label={`还有 ${item.categoryMore} 个分类`}
                 className="inline-flex h-5 w-5 shrink-0 items-center justify-center rounded bg-[rgba(175,156,255,0.1)] text-[12px] leading-5 text-[#816DF8]"
