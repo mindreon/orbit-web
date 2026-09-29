@@ -2,7 +2,7 @@
  * Acceptance E1–E7 (13 §2) on the running stack: each scenario drives the task desk in the browser and checks a
  * backend fact (the API, Postgres, or Temporal) next to what the page shows.
  */
-import { expect, test } from "@playwright/test";
+import { expect, test, type APIRequestContext } from "@playwright/test";
 import {
   type Policy,
   addNodes, attemptIds, attemptRows, createTask, eventRows, eventually, followTask, getPlan, getTask, killControl, killWorker, networkOutage, openTask,
@@ -486,4 +486,87 @@ test("E20 tenant, task and profile policy layers only tighten each other (05 §6
 
   // The tenant layer is stored and read back, and the task layer is part of the task.
   expect(((await (await request.get(`/v1/tasks/${capped}`)).json()) as { policy: Policy }).policy.exploration_max_tool_calls).toBe(1);
+});
+
+/** The node the test added, by title. */
+const nodeTitled = async (request: APIRequestContext, taskId: string, title: string) =>
+  (await getPlan(request, taskId)).nodes.find((node) => node.title === title)!;
+
+/** Durable events of one task whose payload matches a jsonb condition. */
+const eventCount = (taskId: string, type: string, where: string) =>
+  Number(sql(`SELECT count(*) FROM task_events WHERE task_id = '${taskId}' AND event_type = '${type}' AND ${where}`));
+
+/** Waits for the projection to hold at least one such event: it lags the workflow by a moment. */
+const eventRecorded = (taskId: string, type: string, where: string, what: string) =>
+  eventually(async () => eventCount(taskId, type, where), (count) => count >= 1, what, 30_000);
+
+test("E21 an attempt that misses its completion contract is refused, its node is not frozen and is tried again (04 §5)", async ({ page, request }) => {
+  const title = unique("E21");
+  // The exploration node is held for a few seconds so that the plan change lands while the task is open (as in E5).
+  const taskId = await createTask(request, title, `slow:e21-${Date.now()}`);
+  await addNodes(request, taskId, [{
+    type: "agent_turn", title: "Report", goal: "write the report",
+    completion_contract: { required_artifacts: [{ name: "report.md", media_type: "text/markdown" }] },
+  }]);
+  await openTask(page, title);
+
+  // The mock attempt ends with a result.txt only, so no attempt of Report can meet the contract.
+  const retried = await eventually(() => nodeTitled(request, taskId, "Report"), (node) => node.attempt_count >= 2, "the refused node to be tried again", 90_000);
+  expect(retried.frozen).toBe(false);
+  expect(retried.status).not.toBe("COMPLETED");
+  await expect(page.locator('[data-testid="attempt-row"][data-status="failed"]').first()).toBeVisible({ timeout: 30_000 });
+  await expect(planNodes(page).filter({ hasText: "Report" })).not.toHaveAttribute("data-status", "COMPLETED");
+
+  // The refusal is on record with its structured reason: the attempt failed as a verification failure, and the node's
+  // move to RETRY_PENDING says why.
+  const failed = `body->'payload'->>'outcome' = 'failed' AND body->'payload'->'failure'->>'failure_class' = 'verification' AND body->'payload'->'failure'->>'retryable' = 'true'`;
+  await eventRecorded(taskId, "attempt.finished", `${failed} AND body->'payload'->'failure'->>'message' LIKE '%required_artifact/artifact_missing%report.md%'`, "the refused attempt's failure");
+  await eventRecorded(taskId, "node.status_changed", `body->'payload'->>'to_status' = 'RETRY_PENDING' AND body->'payload'->>'reason' LIKE '%artifact_missing%'`, "the node's move to RETRY_PENDING with its reason");
+  // No attempt of this node was ever reported completed, and the node never completed.
+  expect(eventCount(taskId, "node.status_changed", `body->'payload'->>'node_id' = '${retried.node_id}' AND body->'payload'->>'to_status' = 'COMPLETED'`)).toBe(0);
+
+  // Stop the retries.
+  await page.getByRole("button", { name: "取消", exact: true }).click();
+  await expect(taskStatus(page)).toHaveAttribute("data-status", "CANCELLED", { timeout: 30_000 });
+  expect((await nodeTitled(request, taskId, "Report")).frozen).toBe(false);
+});
+
+test("E22 an attempt that meets its completion contract, artifacts and a command on its workspace, is frozen", async ({ page, request }) => {
+  const title = unique("E22");
+  const taskId = await createTask(request, title, `slow:e22-${Date.now()}`);
+  await addNodes(request, taskId, [{
+    type: "agent_turn", title: "Report", goal: "write the report", workspace_access: "write",
+    completion_contract: {
+      required_artifacts: [{ name: "result.txt", media_type: "text/plain" }],
+      verifications: [{ kind: "command", spec: { command: "test -d .", timeout_s: 60 } }],
+    },
+  }]);
+  await openTask(page, title);
+
+  await expect(taskStatus(page)).toHaveAttribute("data-status", "COMPLETED", { timeout: 120_000 });
+  const node = await nodeTitled(request, taskId, "Report");
+  expect(node).toMatchObject({ status: "COMPLETED", frozen: true, attempt_count: 1 });
+  // The manifest the check read is the one the worker stored with the workspace snapshot: the command ran on it.
+  const manifest = sql(`SELECT count(*) FROM artifact_manifests WHERE task_id = '${taskId}' AND workspace_snapshot_id LIKE 'sha256:%'`);
+  expect(Number(manifest)).toBeGreaterThanOrEqual(1);
+  expect(eventCount(taskId, "attempt.finished", `body->'payload'->>'outcome' = 'failed'`)).toBe(0);
+  expect(eventCount(taskId, "node.status_changed", `body->'payload'->>'node_id' = '${node.node_id}' AND body->'payload'->>'to_status' = 'RETRY_PENDING'`)).toBe(0);
+});
+
+test("E23 a command check that fails on the attempt's workspace refuses the completion with the exit code", async ({ page, request }) => {
+  const title = unique("E23");
+  const taskId = await createTask(request, title, `slow:e23-${Date.now()}`);
+  await addNodes(request, taskId, [{
+    type: "agent_turn", title: "Tested", goal: "make the tests pass", workspace_access: "write",
+    completion_contract: { verifications: [{ kind: "command", spec: { command: "exit 3", timeout_s: 60 } }] },
+  }]);
+  await openTask(page, title);
+
+  const retried = await eventually(() => nodeTitled(request, taskId, "Tested"), (node) => node.attempt_count >= 2, "the refused node to be tried again", 90_000);
+  expect(retried.frozen).toBe(false);
+  expect(retried.status).not.toBe("COMPLETED");
+  await eventRecorded(taskId, "attempt.finished", `body->'payload'->'failure'->>'failure_class' = 'verification' AND body->'payload'->'failure'->>'message' LIKE '%command/command_failed%exited with 3%'`, "the refused attempt's failure");
+
+  await page.getByRole("button", { name: "取消", exact: true }).click();
+  await expect(taskStatus(page)).toHaveAttribute("data-status", "CANCELLED", { timeout: 30_000 });
 });

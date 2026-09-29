@@ -9,7 +9,7 @@ const RELAY_ADMIN = "http://127.0.0.1:18183";
 const PG_CONTAINER = "orbit-stack-pg";
 const CROCKFORD = "0123456789ABCDEFGHJKMNPQRSTVWXYZ";
 
-export type Node = { node_id: string; type: string; title: string; status: string; attempt_count: number };
+export type Node = { node_id: string; type: string; title: string; status: string; attempt_count: number; frozen: boolean; current_attempt_id?: string };
 export type PlanView = { plan_version: number; nodes: Node[] };
 export type TaskView = { task_id: string; status: string; plan_version: number; pending_approvals: string[] | null };
 
@@ -67,7 +67,16 @@ export const waitForStatus = (request: APIRequestContext, taskId: string, status
 
 const ulid = () => "01" + Array.from({ length: 24 }, () => CROCKFORD[Math.floor(Math.random() * 32)]).join("");
 
-type NodeDraft = { type: "agent_turn"; title: string; goal: string } | { type: "sop_stage"; title: string; sop: string };
+/** What a node has to show before it is frozen (04 §5). */
+export type CompletionContract = {
+  required_artifacts?: Array<{ name: string; media_type: string; min_count?: number }>;
+  verifications?: Array<{ kind: "command" | "schema" | "human" | "sop_verifier"; spec?: Record<string, unknown> }>;
+};
+
+type NodeDraft = ({ type: "agent_turn"; title: string; goal: string } | { type: "sop_stage"; title: string; sop: string }) & {
+  workspace_access?: "write" | "read" | "none";
+  completion_contract?: CompletionContract;
+};
 
 /**
  * Commits one plan change that adds `drafts` as a chain after the exploration node (as a user plan change; the
@@ -84,6 +93,8 @@ export async function addNodes(request: APIRequestContext, taskId: string, draft
       owner_profile: "default@1",
       depends_on: [index === 0 ? plan.nodes[0].node_id : `tmp:${index}`],
       spec: draft.type === "sop_stage" ? { sop: draft.sop } : { goal: draft.goal },
+      ...(draft.workspace_access ? { workspace_access: draft.workspace_access } : {}),
+      ...(draft.completion_contract ? { completion_contract: draft.completion_contract } : {}),
     },
   }));
   const response = await request.post(`/v1/tasks/${taskId}/plan`, {
