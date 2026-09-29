@@ -8,6 +8,9 @@
     "start": "vite preview --host 0.0.0.0 --port 3000",
     "preview": "vite preview --host 0.0.0.0 --port 3000",
     "typecheck": "tsc --noEmit",
+    "lint": "eslint .",
+    "test": "vitest run",
+    "test:coverage": "vitest run --coverage",
     "test:e2e": "playwright test",
     "test:stack": "playwright test -c playwright.stack.config.ts",
     "report:acceptance": "node e2e/report/build.mjs"
@@ -35,16 +38,23 @@
     "zustand": "^5.0.14"
   },
   "devDependencies": {
+    "@eslint/js": "^10.0.1",
     "@playwright/test": "^1.63.0",
     "@types/hast": "^3.0.5",
     "@types/react": "^19.2.14",
     "@types/react-dom": "^19.2.3",
     "@vitejs/plugin-react": "^6.0.0",
+    "@vitest/coverage-v8": "^5.0.2",
     "autoprefixer": "^10.4.21",
+    "eslint": "^10.11.0",
+    "eslint-plugin-react-hooks": "^7.1.1",
+    "globals": "^17.12.0",
     "json-schema-to-typescript": "^16.0.0",
     "postcss": "^8.5.3",
     "tailwindcss": "^3.4.17",
     "typescript": "^5.9.3",
-    "vite": "^8.0.3"
+    "typescript-eslint": "^8.71.0",
+    "vite": "^8.0.3",
+    "vitest": "^5.0.2"
   }
 }

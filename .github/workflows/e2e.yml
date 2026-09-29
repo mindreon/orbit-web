@@ -189,3 +189,30 @@ jobs:
           path: acceptance-report
           if-no-files-found: error
           retention-days: 30
+
+  # No browser, no stack: type check, lint and the unit tests of the pure logic in src/lib (17 G12).
+  # The coverage run fails when the covered lib files drop under the thresholds in vitest.config.ts.
+  check:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10.33.4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+
+      - run: pnpm install --frozen-lockfile
+
+      - run: pnpm typecheck
+
+      - run: pnpm lint
+
+      - run: pnpm test:coverage

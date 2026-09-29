@@ -24,9 +24,11 @@ export interface TaskLiveState {
   readonly live: Readonly<Record<string, string>>;
   /** Attempts whose live text may miss chunks because the stream dropped while they were writing. */
   readonly truncated: Readonly<Record<string, true>>;
+  /** The highest `entity.version` applied per `kind:id`. Only events with a version above it are applied (09 §1). */
+  readonly versions: Readonly<Record<string, number>>;
 }
 
-export const emptyLiveState: TaskLiveState = { attempts: [], question: null, live: {}, truncated: {} };
+export const emptyLiveState: TaskLiveState = { attempts: [], question: null, live: {}, truncated: {}, versions: {} };
 
 const field = (payload: Record<string, unknown>, key: string): string => {
   const value = payload[key];
@@ -47,7 +49,7 @@ const without = <T extends Record<string, unknown>>(record: T, key: string): T =
 const finishedStatus = (outcome: string): AttemptStatus =>
   outcome === "completed" ? "completed" : outcome === "cancelled" ? "cancelled" : "failed";
 
-export function applyEvent(state: TaskLiveState, event: TaskEvent): TaskLiveState {
+function applyChange(state: TaskLiveState, event: TaskEvent): TaskLiveState {
   const payload = event.payload;
   const attemptId = field(payload, "attempt_id");
   switch (event.type) {
@@ -95,6 +97,20 @@ export function applyEvent(state: TaskLiveState, event: TaskEvent): TaskLiveStat
   }
 }
 
+/**
+ * Folds one event into the state. Per entity only a higher `entity.version` is accepted, so a duplicate or a
+ * late older event cannot turn the state back (09 §1). Version 0 marks an unversioned event (a worker's): it is
+ * always applied and does not move the mark; so does an event with no entity.
+ */
+export function applyEvent(state: TaskLiveState, event: TaskEvent): TaskLiveState {
+  const version = event.entity?.version ?? 0;
+  if (!event.entity || version <= 0) return applyChange(state, event);
+  const key = `${event.entity.kind}:${event.entity.id}`;
+  if (version <= (state.versions[key] ?? 0)) return state;
+  const next = applyChange(state, event);
+  return { ...next, versions: { ...next.versions, [key]: version } };
+}
+
 /** The stream dropped: text streamed so far may be missing chunks until the attempt's final message arrives. */
 export function markStreamGap(state: TaskLiveState): TaskLiveState {
   const streaming = Object.keys(state.live).filter((id) => state.live[id] !== "");
@@ -110,6 +126,6 @@ const position = (event: TaskEvent): number => (event.seq > 0 ? event.seq * 2 : 
  * by folding the log is the same whichever order the frames arrived in (09 §1).
  */
 export function mergeEvent(events: readonly TaskEvent[], event: TaskEvent): readonly TaskEvent[] {
-  if (events.some((item) => item.event_id === event.event_id)) return events;
+  if (events.some((item) => item.event_id === event.event_id || (event.seq > 0 && item.seq === event.seq))) return events;
   return [...events, event].sort((a, b) => position(a) - position(b));
 }
