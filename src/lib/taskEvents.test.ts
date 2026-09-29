@@ -139,10 +139,22 @@ describe("entity.version merging (09 §1)", () => {
     expect(state.attempts[0]).toMatchObject({ status: "completed", resumed: 0 });
   });
 
-  it("ignores a replay of the same version", () => {
+  it("applies an event stamped with the entity's current version (control's rewrite of a worker's version 0)", () => {
+    const state = fold([
+      started("a1", 1, 1),
+      event("attempt.parked", { attempt_id: "a1", reason: "input", question: "Which file?" }, { seq: 2, entity: ["attempt", "a1", 2] }),
+      // control gives the worker's attempt.resumed the version the attempt is at, here 2
+      event("attempt.resumed", { attempt_id: "a1" }, { seq: 3, entity: ["attempt", "a1", 2] }),
+    ]);
+    expect(state.attempts[0]).toMatchObject({ status: "running", resumed: 1 });
+    expect(state.question).toBeNull();
+  });
+
+  it("does not apply a replay of the same event twice (mergeEvent drops it by seq or event_id)", () => {
     const resume = event("attempt.resumed", { attempt_id: "a1" }, { seq: 2, entity: ["attempt", "a1", 2] });
-    const state = fold([started("a1", 1, 1), resume, { ...resume, event_id: "evt_other" }]);
-    expect(state.attempts[0]?.resumed).toBe(1);
+    const log = [started("a1", 1, 1), resume, { ...resume, event_id: "evt_other" }].reduce(mergeEvent, [] as readonly TaskEvent[]);
+    expect(log).toHaveLength(2);
+    expect(fold(log).attempts[0]?.resumed).toBe(1);
   });
 
   it("does not let an old version undo a question that a newer park set", () => {

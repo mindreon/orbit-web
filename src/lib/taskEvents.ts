@@ -98,15 +98,17 @@ function applyChange(state: TaskLiveState, event: TaskEvent): TaskLiveState {
 }
 
 /**
- * Folds one event into the state. Per entity only a higher `entity.version` is accepted, so a duplicate or a
- * late older event cannot turn the state back (09 §1). Version 0 marks an unversioned event (a worker's): it is
- * always applied and does not move the mark; so does an event with no entity.
+ * Folds one event into the state. Per entity an event with an older `entity.version` than the one already applied is
+ * ignored, so a late older event cannot turn the state back (09 §1). An equal version is applied: control stamps an
+ * unversioned worker event (a worker's `attempt.resumed`, version 0) with the entity's current version, and a
+ * duplicate delivery is removed by `mergeEvent` (same event_id or seq), not here. Version 0, and an event with no
+ * entity, are always applied and do not move the mark.
  */
 export function applyEvent(state: TaskLiveState, event: TaskEvent): TaskLiveState {
   const version = event.entity?.version ?? 0;
   if (!event.entity || version <= 0) return applyChange(state, event);
   const key = `${event.entity.kind}:${event.entity.id}`;
-  if (version <= (state.versions[key] ?? 0)) return state;
+  if (version < (state.versions[key] ?? 0)) return state;
   const next = applyChange(state, event);
   return { ...next, versions: { ...next.versions, [key]: version } };
 }
