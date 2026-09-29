@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { Link } from "react-router";
-import { describeRoomFailure, listSkillCategories, listSkills, type Skill, type SkillCategory } from "../lib/rooms";
+import { describeFailure } from "../lib/api";
+import { listSkillCategories, listSkills, type Skill, type SkillCategory } from "../lib/catalog";
 import { formatCount, safeIcon, skillPath, sourceLabel, tint } from "./skillFormat";
 
 const SORTS = [
@@ -56,7 +57,7 @@ export function SkillsPage() {
         setError("");
       })
       .catch((err: unknown) => {
-        if (!gone) setError(describeRoomFailure("读取技能目录失败", err));
+        if (!gone) setError(describeFailure("读取技能目录失败", err));
       })
       .finally(() => {
         if (!gone) setLoading(false);

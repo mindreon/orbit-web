@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { Link, useNavigate } from "react-router";
-import { createMcpConnector, describeRoomFailure, type McpHeaderRef } from "../lib/rooms";
+import { describeFailure } from "../lib/api";
+import { createMcpConnector, type McpHeaderRef } from "../lib/catalog";
 
 type Transport = "stdio" | "streamable_http" | "sse";
 type FillMode = "form" | "json";
@@ -226,7 +227,7 @@ export function ConnectorCreatePage() {
           setError("");
           createMcpConnector({ ...body, defaultOpen })
             .then(() => navigate("/experts/connectors"))
-            .catch((err: unknown) => setError(describeRoomFailure("添加连接器失败", err)))
+            .catch((err: unknown) => setError(describeFailure("添加连接器失败", err)))
             .finally(() => setSaving(false));
         }}
       >

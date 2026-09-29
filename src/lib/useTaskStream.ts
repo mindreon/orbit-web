@@ -28,11 +28,15 @@ export function useTaskStream(taskId: string | null): TaskStream {
     setTask(null); setPlan(null); setArtifacts([]); setEvents([]); setGaps(0); setError(null);
     if (!taskId) return;
     let active = true;
+    // Every durable event starts a refresh, and responses can come back out of order: only the newest one may land.
+    let latest = 0;
     const fail = (err: unknown) => { if (active) setError(String(err)); };
     const refresh = () => {
-      void getTask(taskId).then((next) => active && setTask(next)).catch(fail);
-      void getPlan(taskId).then((next) => active && setPlan(next)).catch(fail);
-      void listTaskArtifacts(taskId).then((next) => active && setArtifacts(next)).catch(() => undefined);
+      const mine = ++latest;
+      const current = () => active && mine === latest;
+      void getTask(taskId).then((next) => current() && setTask(next)).catch(fail);
+      void getPlan(taskId).then((next) => current() && setPlan(next)).catch(fail);
+      void listTaskArtifacts(taskId).then((next) => current() && setArtifacts(next)).catch(() => undefined);
     };
     refresh();
     const close = subscribeTaskEvents(

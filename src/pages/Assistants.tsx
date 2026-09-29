@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
-import { createPersona, describeRoomFailure, listPersonas, type Persona } from "../lib/rooms";
+import { describeFailure } from "../lib/api";
+import { createPersona, listPersonas, type Persona } from "../lib/catalog";
 
 export function AssistantsPage() {
   const [items, setItems] = useState<Persona[]>([]);
@@ -22,7 +23,7 @@ export function AssistantsPage() {
         if (!gone) setItems(body.items ?? []);
       })
       .catch((err: unknown) => {
-        if (!gone) setError(describeRoomFailure("读取助理失败", err));
+        if (!gone) setError(describeFailure("读取助理失败", err));
       })
       .finally(() => {
         if (!gone) setLoading(false);
@@ -54,7 +55,7 @@ export function AssistantsPage() {
               setName("");
               setInstructions("");
             })
-            .catch((err: unknown) => setError(describeRoomFailure("创建助理失败", err)))
+            .catch((err: unknown) => setError(describeFailure("创建助理失败", err)))
             .finally(() => setSaving(false));
         }}
       >

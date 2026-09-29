@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { Link, useParams } from "react-router";
-import { describeRoomFailure, getMcpMarket, type McpMarketDetail, type McpMarketTool } from "../lib/rooms";
+import { describeFailure } from "../lib/api";
+import { getMcpMarket, type McpMarketDetail, type McpMarketTool } from "../lib/catalog";
 
 function formatStat(value: number) {
   if (value >= 1_000_000_000) return `${(value / 1_000_000_000).toFixed(1)}b`;
@@ -89,7 +90,7 @@ export function McpMarketDetailPage() {
         if (!gone) setItem(body);
       })
       .catch((err: unknown) => {
-        if (!gone) setError(describeRoomFailure("读取服务详情失败", err));
+        if (!gone) setError(describeFailure("读取服务详情失败", err));
       })
       .finally(() => {
         if (!gone) setLoading(false);

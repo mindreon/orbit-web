@@ -29,10 +29,19 @@ export async function eventually<T>(read: () => Promise<T>, predicate: (value: T
   throw new Error(`timed out waiting for ${what}; last value: ${JSON.stringify(last)}`);
 }
 
-export async function createTask(request: APIRequestContext, title: string, goal: string, profile?: string): Promise<string> {
-  const response = await request.post("/v1/tasks", { data: { title, goal, ...(profile ? { profile } : {}) }, timeout: 120_000 });
+export type Policy = { denied_tools?: string[]; exploration_max_tool_calls?: number };
+
+export async function createTask(request: APIRequestContext, title: string, goal: string, profile?: string, policy?: Policy): Promise<string> {
+  const response = await request.post("/v1/tasks", { data: { title, goal, ...(profile ? { profile } : {}), ...(policy ? { policy } : {}) }, timeout: 120_000 });
   expect(response.status()).toBe(201);
   return (await response.json()).task_id as string;
+}
+
+/** Sets the tenant-wide policy, the outermost layer; returns what to put back afterwards. */
+export async function setTenantPolicy(request: APIRequestContext, policy: Policy): Promise<Policy> {
+  const before = (await (await request.get("/v1/policy")).json()) as Policy;
+  expect((await request.put("/v1/policy", { data: policy })).status()).toBe(200);
+  return before;
 }
 
 /** Registers an immutable agent profile version and returns its ref. */

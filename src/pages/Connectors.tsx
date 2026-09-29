@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { useNavigate } from "react-router";
-import { describeRoomFailure, listMcpConnectors, type McpConnector } from "../lib/rooms";
+import { describeFailure } from "../lib/api";
+import { listMcpConnectors, type McpConnector } from "../lib/catalog";
 import { McpMarketCatalog } from "./McpMarkets";
 
 export function ConnectorsPage() {
@@ -16,7 +17,7 @@ export function ConnectorsPage() {
         if (!gone) setItems(body.items ?? []);
       })
       .catch((err: unknown) => {
-        if (!gone) setError(describeRoomFailure("读取连接器失败", err));
+        if (!gone) setError(describeFailure("读取连接器失败", err));
       })
       .finally(() => {
         if (!gone) setLoading(false);

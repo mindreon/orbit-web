@@ -1,12 +1,7 @@
 import { useEffect, useState, type ReactNode } from "react";
 import { Link } from "react-router";
-import {
-  describeRoomFailure,
-  listMcpMarket,
-  listMcpMarketCategories,
-  type McpMarketCategory,
-  type McpMarketServer,
-} from "../lib/rooms";
+import { describeFailure } from "../lib/api";
+import { listMcpMarket, listMcpMarketCategories, type McpMarketCategory, type McpMarketServer } from "../lib/catalog";
 
 function offlineDeploy() {
   return import.meta.env.VITE_ORBIT_OFFLINE === "1";
@@ -164,7 +159,7 @@ export function McpMarketCatalog() {
         setError("");
       })
       .catch((err: unknown) => {
-        if (!gone) setError(describeRoomFailure("读取市场目录失败", err));
+        if (!gone) setError(describeFailure("读取市场目录失败", err));
       })
       .finally(() => {
         if (!gone) setLoading(false);

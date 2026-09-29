@@ -1,3 +1,4 @@
+import { api } from "./api";
 export type TaskStatus =
   | "CREATED" | "PLANNING" | "RUNNING" | "WAITING" | "PAUSED"
   | "PAUSED_NEEDS_REVIEW" | "TAKEN_OVER" | "COMPLETED" | "FAILED" | "CANCELLED";
@@ -61,12 +62,6 @@ export type Plan = {
   }>;
   edges: Array<{ from: string; to: string }>;
 };
-
-async function api<T>(path: string, init?: RequestInit): Promise<T> {
-  const response = await fetch(path, { headers: { "Content-Type": "application/json", ...(init?.headers ?? {}) }, ...init });
-  if (!response.ok) throw new Error(await response.text() || `HTTP ${response.status}`);
-  return response.json() as Promise<T>;
-}
 
 export async function listTasks(): Promise<Task[]> {
   const body = await api<{ items: Task[] }>("/v1/tasks");

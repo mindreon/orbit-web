@@ -1,23 +1,18 @@
 import { StrictMode } from "react";
 import { createRoot } from "react-dom/client";
-import { createBrowserRouter, RouterProvider } from "react-router";
+import { createBrowserRouter, Navigate, RouterProvider } from "react-router";
 import { App } from "./App";
-import { purgeLegacyModelStorage } from "./lib/legacyStorage";
 import { AssistantsPage } from "./pages/Assistants";
 import { ConnectorCreatePage } from "./pages/ConnectorCreate";
 import { ConnectorsPage } from "./pages/Connectors";
 import { McpMarketDetailPage } from "./pages/McpMarketDetail";
 import { SkillDetailPage } from "./pages/SkillDetail";
 import { SkillsPage } from "./pages/Skills";
-import { HomePage } from "./pages/Home";
 import { NotFoundPage, RouteErrorPage } from "./pages/NotFound";
-import { ArchivedPage, SettingsPage } from "./pages/Sections";
+import { SettingsPage } from "./pages/Settings";
 import { UnwiredPage } from "./pages/UnwiredPage";
-import { WorkbenchPage } from "./pages/Workbench";
 import { TasksPage } from "./pages/Tasks";
 import "./index.css";
-
-purgeLegacyModelStorage();
 
 const router = createBrowserRouter([
   {
@@ -28,9 +23,8 @@ const router = createBrowserRouter([
       {
         errorElement: <RouteErrorPage />,
         children: [
-          { index: true, element: <HomePage /> },
+          { index: true, element: <Navigate to="/tasks" replace /> },
           { path: "tasks", element: <TasksPage /> },
-          { path: "task/:id", element: <WorkbenchPage /> },
           { path: "assistants", element: <AssistantsPage /> },
           { path: "projects", element: <UnwiredPage title="项目" /> },
           { path: "experts", element: <UnwiredPage title="专家" /> },
@@ -43,7 +37,6 @@ const router = createBrowserRouter([
           { path: "automation", element: <UnwiredPage title="定时任务" /> },
           { path: "library", element: <UnwiredPage title="资料库" /> },
           { path: "settings", element: <SettingsPage /> },
-          { path: "archived", element: <ArchivedPage /> },
           { path: "*", element: <NotFoundPage /> },
         ],
       },

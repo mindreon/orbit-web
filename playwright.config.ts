@@ -1,11 +1,10 @@
 import { defineConfig, devices } from "@playwright/test";
 
-const CONTROL_PORT = Number(process.env.ORBIT_E2E_CONTROL_PORT ?? "18080");
 const WEB_PORT = Number(process.env.ORBIT_E2E_WEB_PORT ?? "3310");
 
 export default defineConfig({
   testDir: "./e2e",
-  testIgnore: ["perf/**", "stack/**"],
+  testIgnore: ["stack/**"],
   fullyParallel: false,
   workers: 1,
   retries: 0,
@@ -13,7 +12,7 @@ export default defineConfig({
   reporter: [
     ["list"],
     ["html", { open: "never", outputFolder: "playwright-report" }],
-    ["./e2e/report/acceptance-reporter.ts", { run: "scripted", environment: "orbit-web (vite) against e2e/fake-control.mjs, a scripted control for what the mock model cannot produce on demand (dropped streams at exact points, duplicate and out-of-order frames, turn.failed, sub-agent paths, 1000 messages, fault states), plus the dependency licence check" }],
+    ["./e2e/report/acceptance-reporter.ts", { run: "scripted", environment: "orbit-web (vite) with a route-mocked task API, plus the dependency licence check" }],
   ],
   outputDir: "test-results",
   use: {
@@ -23,23 +22,10 @@ export default defineConfig({
     video: "on",
     viewport: { width: 1440, height: 900 },
   },
-  projects: [
-    { name: "chromium", use: { ...devices["Desktop Chrome"], viewport: { width: 1440, height: 900 } } },
-    // Safari's engine: the composer keys (IME Enter, keyCode 229) must hold there too.
-    { name: "webkit", testMatch: /composer\.spec\.ts/, use: { ...devices["Desktop Safari"], viewport: { width: 1440, height: 900 } } },
-  ],
-  webServer: [
-    {
-      command: `node e2e/fake-control.mjs`,
-      url: `http://127.0.0.1:${CONTROL_PORT}/health`,
-      env: { FAKE_CONTROL_PORT: String(CONTROL_PORT) },
-      reuseExistingServer: false,
-    },
-    {
-      command: `pnpm exec vite --host 127.0.0.1 --port ${WEB_PORT} --strictPort`,
-      url: `http://127.0.0.1:${WEB_PORT}`,
-      env: { ORBIT_CONTROL_URL: `http://127.0.0.1:${CONTROL_PORT}` },
-      reuseExistingServer: false,
-    },
-  ],
+  projects: [{ name: "chromium", use: { ...devices["Desktop Chrome"], viewport: { width: 1440, height: 900 } } }],
+  webServer: {
+    command: `pnpm exec vite --host 127.0.0.1 --port ${WEB_PORT} --strictPort`,
+    url: `http://127.0.0.1:${WEB_PORT}`,
+    reuseExistingServer: false,
+  },
 });

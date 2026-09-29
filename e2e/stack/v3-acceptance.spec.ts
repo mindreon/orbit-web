@@ -4,8 +4,9 @@
  */
 import { expect, test } from "@playwright/test";
 import {
+  type Policy,
   addNodes, attemptIds, attemptRows, createTask, eventRows, eventually, followTask, getPlan, getTask, killControl, killWorker, networkOutage, openTask,
-  planNodes, registerProfile, release, rollBack, setControlReplica, registerSop, runningAttemptWorkflows, sql, taskStatus, toolRuns, waitForStatus, workflowVersion,
+  planNodes, registerProfile, setTenantPolicy, release, rollBack, setControlReplica, registerSop, runningAttemptWorkflows, sql, taskStatus, toolRuns, waitForStatus, workflowVersion,
 } from "./tasks";
 
 // The mock streams each part of a `stream:` goal as it is; a part ends in a space so the worker's secret redactor releases it.
@@ -451,4 +452,35 @@ test("E19 one agent-state checkpoint is taken per batch of tool calls, before th
   await page.getByRole("button", { name: "批准", exact: true }).click();
   await waitForStatus(request, batch, "COMPLETED", 60_000);
   expect(sql(`SELECT count(*) FROM checkpoints WHERE task_id = '${batch}' AND kind = 'agent_state'`)).toBe("1");
+});
+
+test("E20 tenant, task and profile policy layers only tighten each other (05 §6)", async ({ request }) => {
+  const stamp = Date.now();
+  const [a, b, c, d] = [`pa-${stamp}`, `pb-${stamp}`, `pc-${stamp}`, `pd-${stamp}`];
+  const wide = await registerProfile(request, `wide${stamp}`, 1, {});
+  const before = await setTenantPolicy(request, { denied_tools: ["slow_echo"] });
+  try {
+    // The tenant denies the tool: a task, whatever its own policy or profile says, cannot run it.
+    const denied = await createTask(request, unique("E20 tenant"), `slow:${a}`, wide, { denied_tools: [] });
+    await waitForStatus(request, denied, "COMPLETED", 60_000);
+    expect(toolRuns(a)).toBe(0);
+    expect(sql(`SELECT string_agg(body->'payload'->>'state', ',') FROM task_events WHERE task_id = '${denied}' AND event_type = 'tool.call_finished'`)).toBe("denied");
+  } finally {
+    await setTenantPolicy(request, before);
+  }
+
+  // Without the tenant's denial, the task layer denies it on its own.
+  const byTask = await createTask(request, unique("E20 task"), `slow:${b}`, wide, { denied_tools: ["slow_echo"] });
+  await waitForStatus(request, byTask, "COMPLETED", 60_000);
+  expect(toolRuns(b)).toBe(0);
+
+  // Caps combine to the smallest: the profile allows 5 calls, the task 1, so the second call is refused.
+  const loose = await registerProfile(request, `loose${stamp}`, 1, { exploration: { max_tool_calls: 5 } });
+  const capped = await createTask(request, unique("E20 cap"), `slow:${c}|${d}`, loose, { exploration_max_tool_calls: 1 });
+  await waitForStatus(request, capped, "PAUSED_NEEDS_REVIEW", 90_000);
+  expect(toolRuns(c)).toBe(1);
+  expect(toolRuns(d)).toBe(0);
+
+  // The tenant layer is stored and read back, and the task layer is part of the task.
+  expect(((await (await request.get(`/v1/tasks/${capped}`)).json()) as { policy: Policy }).policy.exploration_max_tool_calls).toBe(1);
 });

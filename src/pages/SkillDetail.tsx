@@ -1,11 +1,12 @@
 import { lazy, Suspense, useEffect, useMemo, useState, type ReactNode } from "react";
 import { Link, useParams } from "react-router";
 import { ChevronRight, File, Folder, FolderOpen } from "lucide-react";
-import { describeRoomFailure, getSkill, listSkillFiles, type Skill, type SkillPageMeta, type SkillTextFile } from "../lib/rooms";
+import { describeFailure } from "../lib/api";
+import { getSkill, listSkillFiles, type Skill, type SkillPageMeta, type SkillTextFile } from "../lib/catalog";
 import { safeIcon, sourceLabel, timeAgo } from "./skillFormat";
 
 // Markdown pulls Mermaid's loader. Keep that off the entry chunk; the page loads it when a file is shown.
-const SkillMarkdown = lazy(() => import("../chat/markdown/Markdown").then((module) => ({ default: module.Markdown })));
+const SkillMarkdown = lazy(() => import("../components/markdown/Markdown").then((module) => ({ default: module.Markdown })));
 
 const TABS = ["概述", "文件", "版本历史", "评测报告"] as const;
 type Tab = (typeof TABS)[number];
@@ -49,7 +50,7 @@ export function SkillDetailPage() {
         });
       })
       .catch((err: unknown) => {
-        if (!gone) setError(describeRoomFailure("读取技能失败", err));
+        if (!gone) setError(describeFailure("读取技能失败", err));
       })
       .finally(() => {
         if (!gone) setLoading(false);

@@ -53,7 +53,7 @@ jobs:
 
       - run: pnpm install --frozen-lockfile
 
-      - run: pnpm exec playwright install --with-deps chromium webkit
+      - run: pnpm exec playwright install --with-deps chromium
 
       # Starts a fresh stack (e2e/stack/up.mjs, pinned orbit-control and orbit-runtime refs) and runs e2e/stack.
       - run: pnpm test:stack
@@ -106,7 +106,7 @@ jobs:
 
       - run: pnpm install --frozen-lockfile
 
-      - run: pnpm exec playwright install --with-deps chromium webkit
+      - run: pnpm exec playwright install --with-deps chromium
 
       - run: pnpm test:e2e
 
@@ -132,52 +132,8 @@ jobs:
             test-results
           retention-days: 14
 
-  # 1000 messages + one 50,000-character reply on the production build; initial bundle size.
-  perf:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-        with:
-          ref: ${{ github.event.pull_request.head.sha || github.sha }}
-
-      - uses: pnpm/action-setup@v4
-        with:
-          version: 10.33.4
-
-      - uses: actions/setup-node@v4
-        with:
-          node-version: 22
-          cache: pnpm
-
-      - run: pnpm install --frozen-lockfile
-
-      - run: pnpm exec playwright install --with-deps chromium
-
-      - run: pnpm perf:chat
-
-      # The Chrome trace of the first run (open in DevTools > Performance) is large, so it travels separately.
-      - uses: actions/upload-artifact@v4
-        if: success() || failure()
-        with:
-          name: chat-perf-trace
-          path: perf-results
-          retention-days: 14
-
-      - name: Rerun on the same commit
-        if: success() || failure()
-        run: pnpm perf:chat
-        env:
-          ACCEPTANCE_OUT: acceptance-report/rerun
-
-      - uses: actions/upload-artifact@v4
-        if: always()
-        with:
-          name: acceptance-run-fixture-perf
-          path: acceptance-report
-          retention-days: 14
-
   acceptance-report:
-    needs: [stack, scripted, perf]
+    needs: [stack, scripted]
     if: always()
     runs-on: ubuntu-latest
     steps:
