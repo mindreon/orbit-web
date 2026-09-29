@@ -68,6 +68,9 @@ test("E2 an approval survives a worker restart and the tool runs once", async ({
   expect(sql(`SELECT string_agg(body->'payload'->>'state', ',') FROM task_events WHERE task_id = '${taskId}' AND event_type = 'tool.call_finished'`)).toBe("success");
   // The tool ran once: the ledger holds one side effect for this task's attempt, and it succeeded.
   expect(sql(`SELECT string_agg(status, ',') FROM idempotency_ledger WHERE scope = 'side_effect' AND key LIKE '${attemptIds(taskId)[0]}:%'`)).toBe("succeeded");
+  // The session that the restarted worker resumed is a turn-end checkpoint: one for opening it, one for the parked
+  // turn, one for the resumed turn, and the session id is the attempt id.
+  expect(sql(`SELECT count(*) FROM checkpoints WHERE task_id = '${taskId}' AND attempt_id = '${attemptIds(taskId)[0]}' AND kind = 'agent_state' AND seq >= 1000000000`)).toBe("3");
 });
 
 test("E3 the agent asks a question and the same attempt continues with the answer", async ({ page, request }) => {
@@ -436,7 +439,7 @@ test("E19 one agent-state checkpoint is taken per batch of tool calls, before th
   // Three rounds with one call each: three batches, so three checkpoints, and none for the closing answer.
   const rounds = await createTask(request, unique("E19 rounds"), `slow:r1-${stamp}|r2-${stamp}|r3-${stamp}`);
   await waitForStatus(request, rounds, "COMPLETED", 120_000);
-  expect(sql(`SELECT count(DISTINCT seq) FROM checkpoints WHERE task_id = '${rounds}' AND kind = 'agent_state'`)).toBe("3");
+  expect(sql(`SELECT count(DISTINCT seq) FROM checkpoints WHERE task_id = '${rounds}' AND kind = 'agent_state' AND seq < 1000000000`)).toBe("3");
 
   // Two calls announced together are one batch: one checkpoint, even though a person decides them one by one.
   const title = unique("E19 batch");
@@ -451,7 +454,7 @@ test("E19 one agent-state checkpoint is taken per batch of tool calls, before th
   }, { timeout: 30_000 }).toBe(true);
   await page.getByRole("button", { name: "批准", exact: true }).click();
   await waitForStatus(request, batch, "COMPLETED", 60_000);
-  expect(sql(`SELECT count(*) FROM checkpoints WHERE task_id = '${batch}' AND kind = 'agent_state'`)).toBe("1");
+  expect(sql(`SELECT count(*) FROM checkpoints WHERE task_id = '${batch}' AND kind = 'agent_state' AND seq < 1000000000`)).toBe("1");
 });
 
 test("E20 tenant, task and profile policy layers only tighten each other (05 §6)", async ({ request }) => {

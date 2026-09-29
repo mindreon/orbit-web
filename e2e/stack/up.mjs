@@ -120,7 +120,6 @@ async function startPostgres() {
   }
   await new Promise((r) => setTimeout(r, 1000));
   psql("postgres", readFileSync(join(controlDir, "deploy", "postgres", "bootstrap-roles.sql")), Object.entries(PG_PASSWORDS).flatMap(([role, password]) => ["-v", `${role}_password=${password}`]));
-  psql("postgres", "CREATE DATABASE orbit_state;");
 }
 
 const children = [];
@@ -271,8 +270,6 @@ const workerEnv = {
   ORBIT_WORKER_PORT: String(PORTS.worker),
   ORBIT_CHECKPOINT_DIR: join(ROOT, `checkpoints-${Date.now()}`),
   ...objectStoreEnv,
-  ORBIT_STATE_STORE_URL: `postgres://postgres:stack@127.0.0.1:${PORTS.postgres}/orbit_state`,
-  ORBIT_ALLOW_PLAINTEXT_STATE: "1",
   ORBIT_CONTROL_WORKER_DB_URL: pgUrl("orbit_worker", "orbit_control"),
 };
 // One release is an orbit-orch plus an orbit-worker under one build id. `v1` is the first and is made current at once.
