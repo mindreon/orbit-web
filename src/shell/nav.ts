@@ -9,6 +9,7 @@ export const GREYED_NAV_LABELS = new Set<string>([
 ]);
 
 export const PRIMARY_NAV = [
+  { to: "/tasks", label: "任务", end: true },
   { to: "/", label: "新建任务", end: true },
   { to: "/assistants", label: "助理", end: false },
   { to: "/projects", label: "项目", end: false },

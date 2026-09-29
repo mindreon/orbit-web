@@ -1,7 +1,7 @@
 import { defineConfig, devices } from "@playwright/test";
 
-const CONTROL_PORT = 18080;
-const WEB_PORT = 3310;
+const CONTROL_PORT = Number(process.env.ORBIT_E2E_CONTROL_PORT ?? "18080");
+const WEB_PORT = Number(process.env.ORBIT_E2E_WEB_PORT ?? "3310");
 
 export default defineConfig({
   testDir: "./e2e",

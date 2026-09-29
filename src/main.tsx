@@ -14,6 +14,7 @@ import { NotFoundPage, RouteErrorPage } from "./pages/NotFound";
 import { ArchivedPage, SettingsPage } from "./pages/Sections";
 import { UnwiredPage } from "./pages/UnwiredPage";
 import { WorkbenchPage } from "./pages/Workbench";
+import { TasksPage } from "./pages/Tasks";
 import "./index.css";
 
 purgeLegacyModelStorage();
@@ -28,6 +29,7 @@ const router = createBrowserRouter([
         errorElement: <RouteErrorPage />,
         children: [
           { index: true, element: <HomePage /> },
+          { path: "tasks", element: <TasksPage /> },
           { path: "task/:id", element: <WorkbenchPage /> },
           { path: "assistants", element: <AssistantsPage /> },
           { path: "projects", element: <UnwiredPage title="项目" /> },

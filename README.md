@@ -35,7 +35,7 @@ pnpm gen:events   # 重新生成 src/lib/events/orbit-event.gen.ts
 
 | 命令 | 跑在哪里 | 覆盖什么 |
 |---|---|---|
-| `pnpm test:stack` | 真实栈，假模型模式：Temporal + orbit-control + orbit-orch + orbit-worker（`ORBIT_MODEL_MODE=mock`）+ orbit-web 生产构建，由 `e2e/stack/up.mjs` 拉起，版本钉在脚本里 | 流式回复、审批、停止、子助手、断线续传和 reset、安全、复制和 375px、自动滚动和 CLS、输入框（含 WebKit）、5 万字回复的性能 |
+| `pnpm test:stack` | 真实栈，假模型模式：Temporal + 当前工作区 orbit-control + orbit-orch + orbit-worker（`ORBIT_MODEL_MODE=mock`）+ orbit-web 生产构建，由 `e2e/stack/up.mjs` 拉起；CI 可用 `ORBIT_*_REF` 固定提交 | v3 task 创建、workflow projection、计划图和 TaskWorkflow 事件；旧 RoomWorkflow 场景保留在源码中但不再由新项目 runner 执行 |
 | `pnpm test:e2e` | `e2e/fake-control.mjs`，按脚本发事件的假 control | 假模型不能按需造出来的情况：精确时刻断线、重复和乱序的片段、`turn.failed`、子助手路径、1000 条消息、加载和出错状态；另有依赖许可证检查 |
 | `pnpm perf:chat` | 生产构建加固定数据集（`e2e/fixtures/datasets.mjs`：1000 条消息 + 一条 5 万字回复） | 滚动帧率、打字延迟、流式 CLS、首屏包体积 |
 

@@ -15,10 +15,15 @@ permissions:
 # everything, and uploads it as `acceptance-report`.
 jobs:
   # The acceptance suite against the running stack in mock model mode:
-  # Temporal dev server + orbit-control + orbit-orch + orbit-worker (ORBIT_MODEL_MODE=mock) + orbit-web production build.
+  # PostgreSQL (a container, with the control roles and migrations) + Temporal dev server + orbit-control + orbit-orch +
+  # orbit-worker (ORBIT_MODEL_MODE=mock) + orbit-web production build. E1–E7 (13 §2) run on it.
   stack:
     runs-on: ubuntu-latest
     timeout-minutes: 40
+    env:
+      # A standalone checkout has no sibling submodules, so up.mjs clones these refs. Pin a commit SHA to freeze them.
+      ORBIT_CONTROL_REF: main
+      ORBIT_RUNTIME_REF: main
     steps:
       # The PR head, not the merge commit, so the report names the commit under review.
       - uses: actions/checkout@v4

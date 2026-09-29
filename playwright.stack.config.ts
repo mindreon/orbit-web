@@ -8,6 +8,10 @@ const WEB = "http://127.0.0.1:3410";
  */
 export default defineConfig({
   testDir: "./e2e/stack",
+  // RoomWorkflow was intentionally removed from the new v3 project. Keep the
+  // legacy room specs in the tree for historical reference, but run only the
+  // task desk acceptance against the current stack.
+  testMatch: /(?:task|v3-acceptance|real-model)\.spec\.ts/,
   workers: 1,
   retries: 0,
   timeout: 120_000,

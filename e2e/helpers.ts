@@ -38,7 +38,7 @@ async function attachCheck(check: { items: number[]; step: string; expected: str
   await test.info().attach("check", { body: JSON.stringify(check), contentType: "application/json" });
 }
 
-export const CONTROL = "http://127.0.0.1:18080";
+export const CONTROL = `http://127.0.0.1:${process.env.ORBIT_E2E_CONTROL_PORT ?? "18080"}`;
 export const ROOM = "room-e2e";
 
 /** An SSE frame. Without `id` the fake control assigns the next per-task sequence, as orbit-control does (C33). */
@@ -111,4 +111,3 @@ export async function openRoom(page: Page, request: APIRequestContext) {
 export const draft = (page: Page) => page.getByTestId("assistant-draft");
 export const assistant = (page: Page) => page.locator('[data-testid="chat-item"][data-kind="assistant"]');
 export const toolRows = (page: Page) => page.getByTestId("tool-row");
-
