@@ -21,9 +21,16 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 40
     env:
-      # A standalone checkout has no sibling submodules, so up.mjs clones these refs. Pin a commit SHA to freeze them.
-      ORBIT_CONTROL_REF: main
-      ORBIT_RUNTIME_REF: main
+      # A standalone checkout has no sibling submodules, so up.mjs clones these refs. They are the commits that
+      # orbit-infra pins for orbit-control and orbit-runtime, so the stack under test is the one that gets deployed.
+      # Update both together with the orbit-infra pin (`git -C orbit-infra ls-tree HEAD orbit-control orbit-runtime`).
+      ORBIT_CONTROL_REF: 00603f351079d1a770048fbd17d6150f1e022409
+      ORBIT_RUNTIME_REF: f41612509e994afc8b706f8f902ad9d3247866e4
+      # Keep the stack's files (bin, logs, stack.json, tool log) in the workspace, where the steps below collect them,
+      # and the two clones out of it. Without these, up.mjs would use the parent of the checkout.
+      ORBIT_STACK_DIR: ${{ github.workspace }}/.stack
+      ORBIT_CONTROL_DIR: ${{ runner.temp }}/orbit-control
+      ORBIT_RUNTIME_DIR: ${{ runner.temp }}/orbit-runtime
     steps:
       # The PR head, not the merge commit, so the report names the commit under review.
       - uses: actions/checkout@v4
@@ -39,9 +46,10 @@ jobs:
           node-version: 22
           cache: pnpm
 
+      # orbit-control's go.mod says `go 1.25.0`.
       - uses: actions/setup-go@v5
         with:
-          go-version: "1.23"
+          go-version: "1.25"
 
       - uses: astral-sh/setup-uv@v5
         with:
@@ -55,7 +63,7 @@ jobs:
 
       - run: pnpm exec playwright install --with-deps chromium
 
-      # Starts a fresh stack (e2e/stack/up.mjs, pinned orbit-control and orbit-runtime refs) and runs e2e/stack.
+      # Starts a fresh stack (e2e/stack/up.mjs, orbit-control and orbit-runtime at the orbit-infra pins) and runs e2e/stack.
       - run: pnpm test:stack
 
       - if: success() || failure()
