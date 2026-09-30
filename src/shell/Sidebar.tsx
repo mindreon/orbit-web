@@ -1,0 +1,113 @@
+import { Clock, FolderKanban, GraduationCap, Library, PanelLeftClose, Plug, Search, Settings as SettingsIcon, Sparkles, SquarePen, type LucideIcon } from "lucide-react";
+import { useState } from "react";
+import { NavLink } from "react-router";
+import { cn } from "../lib/cn";
+import { GREYED_NAV_LABELS, PRIMARY_NAV, type NavIcon, type NavItem } from "./nav";
+import { TaskListSection } from "./TaskListSection";
+
+const ICONS: Record<NavIcon, LucideIcon> = {
+  "square-pen": SquarePen,
+  "graduation-cap": GraduationCap,
+  sparkles: Sparkles,
+  plug: Plug,
+  "folder-kanban": FolderKanban,
+  clock: Clock,
+  library: Library,
+};
+
+const ITEM = "flex h-9 items-center gap-2.5 rounded-lg px-3 text-sm";
+const ACTIVE = "bg-sidebar-accent font-medium text-accent-foreground hover:bg-sidebar-accent";
+
+function link() {
+  return ({ isActive }: { isActive: boolean }) => cn(ITEM, "text-foreground/80 hover:bg-secondary", isActive && ACTIVE);
+}
+
+function NavEntry({ item }: { item: NavItem }) {
+  const Icon = ICONS[item.icon];
+  if (GREYED_NAV_LABELS.has(item.label)) {
+    return (
+      <span aria-disabled="true" className={cn(ITEM, "cursor-not-allowed text-muted-foreground/60")}>
+        <Icon aria-hidden="true" className="h-4 w-4" />
+        {item.label}
+        <span className="ml-auto rounded bg-secondary px-1.5 py-0.5 text-[11px] text-muted-foreground">即将</span>
+      </span>
+    );
+  }
+  if (!item.children) {
+    return (
+      <NavLink to={item.to} end={item.end} className={link()}>
+        <Icon aria-hidden="true" className="h-4 w-4" />
+        {item.label}
+      </NavLink>
+    );
+  }
+  return (
+    <div className="group relative">
+      <NavLink to={item.to} end={item.end} className={link()}>
+        <Icon aria-hidden="true" className="h-4 w-4" />
+        {item.label}
+      </NavLink>
+      <div className="absolute left-full top-0 z-30 hidden pl-1 group-focus-within:block group-hover:block">
+        <div className="w-40 rounded-xl border border-border bg-card p-1.5 shadow-lg">
+          {item.children.map((child) => {
+            const ChildIcon = ICONS[child.icon];
+            return (
+              <NavLink key={child.to} to={child.to} end={child.end} className={({ isActive }) => cn(ITEM, "text-foreground/80 hover:bg-secondary", isActive && "font-medium text-accent-foreground")}>
+                <ChildIcon aria-hidden="true" className="h-4 w-4" />
+                {child.label}
+              </NavLink>
+            );
+          })}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+/** 独立部署时的左侧栏。嵌入 baize 后由基座提供导航，不渲染这个。 */
+export function Sidebar({ onCollapse }: { onCollapse: () => void }) {
+  const [searching, setSearching] = useState(false);
+  const [query, setQuery] = useState("");
+  return (
+    <>
+      <div className="flex h-14 shrink-0 items-center gap-2 px-4">
+        <span aria-hidden="true" className="flex h-7 w-7 items-center justify-center rounded-lg bg-primary text-sm font-bold text-primary-foreground">
+          O
+        </span>
+        <p className="text-[15px] font-semibold">Orbit</p>
+        <button type="button" aria-label="搜索任务" aria-pressed={searching} className="ml-auto flex h-8 w-8 items-center justify-center rounded-lg text-muted-foreground hover:bg-secondary" onClick={() => setSearching((value) => !value)}>
+          <Search className="h-4 w-4" />
+        </button>
+        <button type="button" aria-label="收起侧边栏" className="flex h-8 w-8 items-center justify-center rounded-lg text-muted-foreground hover:bg-secondary" onClick={onCollapse}>
+          <PanelLeftClose className="h-4 w-4" />
+        </button>
+      </div>
+      {searching ? (
+        <div className="px-3 pb-2">
+          <input
+            autoFocus
+            value={query}
+            placeholder="搜索任务"
+            aria-label="搜索任务标题"
+            className="h-8 w-full rounded-lg border border-border bg-card px-2.5 text-sm outline-none placeholder:text-muted-foreground focus:border-primary"
+            onChange={(event) => setQuery(event.target.value)}
+          />
+        </div>
+      ) : null}
+      <nav aria-label="主导航" className="shrink-0 space-y-0.5 px-3">
+        {PRIMARY_NAV.map((item) => (
+          <NavEntry key={item.to} item={item} />
+        ))}
+      </nav>
+      <div className="mt-3 min-h-0 flex-1 overflow-y-auto px-3 pb-3">
+        <TaskListSection query={query} />
+      </div>
+      <div className="shrink-0 border-t border-sidebar-border p-3">
+        <NavLink to="/settings" className={link()}>
+          <SettingsIcon aria-hidden="true" className="h-4 w-4" />
+          设置
+        </NavLink>
+      </div>
+    </>
+  );
+}

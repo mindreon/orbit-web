@@ -105,7 +105,7 @@ export function McpMarketDetailPage() {
   const initial = item?.name.trim().slice(0, 1) || "M";
   return (
     <div className="flex min-h-0 flex-1 flex-col bg-card">
-      <PageHeader title="服务详情" back={{ to: "/experts/connectors?tab=market", label: "MCP 广场" }} />
+      <PageHeader title="服务详情" back={{ to: "/experts/connectors", label: "MCP 广场" }} />
       <div className="min-h-0 flex-1 overflow-auto px-6 py-6">
       <section aria-label="MCP 详情" className="mx-auto max-w-[920px]">
         {loading ? <p className="text-[14px] text-muted-foreground">正在读取服务详情。</p> : null}

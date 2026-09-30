@@ -145,8 +145,8 @@ export function runningAttemptWorkflows(taskId: string): number {
 
 /** Opens the task desk on one task. */
 export async function openTask(page: Page, title: string): Promise<void> {
-  await page.goto("/tasks");
-  await page.getByRole("button", { name: title }).click();
+  await page.goto("/");
+  await page.getByRole("link", { name: title }).click();
   await expect(page.getByRole("heading", { name: title })).toBeVisible();
 }
 

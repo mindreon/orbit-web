@@ -2,7 +2,7 @@ import { useState } from "react";
 import { Alert } from "../ui/Alert";
 import { Button } from "../ui/Button";
 import { PageHeader } from "../ui/PageHeader";
-import { useNavigate } from "react-router";
+import { useNavigate, useSearchParams } from "react-router";
 import { describeFailure } from "../lib/api";
 import { createMcpConnector, type McpHeaderRef } from "../lib/catalog";
 
@@ -144,7 +144,9 @@ function parseServerConfig(raw: string, fallbackName: string): {
 
 export function ConnectorCreatePage() {
   const navigate = useNavigate();
-  const [name, setName] = useState("");
+  // 从 MCP 广场点「+」过来时，带着服务名，省得再敲一遍。
+  const [searchParams] = useSearchParams();
+  const [name, setName] = useState(searchParams.get("name") ?? "");
   const [transport, setTransport] = useState<Transport>("stdio");
   const [fillMode, setFillMode] = useState<FillMode>("form");
   const [command, setCommand] = useState("");

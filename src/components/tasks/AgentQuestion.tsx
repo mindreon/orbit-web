@@ -17,7 +17,7 @@ export function AgentQuestion({ question, onAnswer }: AgentQuestionProps) {
     setAnswer("");
   };
   return (
-    <section aria-label="Agent 提问" className="border-t border-warning/30 bg-warning/10 p-4">
+    <section aria-label="Agent 提问" className="rounded-xl border border-warning/30 bg-warning/10 p-4">
       <p className="text-xs font-semibold text-warning">Agent 向你提问</p>
       <p data-testid="agent-question" className="mt-1 text-sm text-foreground">{question.text}</p>
       <div className="mt-2 flex gap-2">

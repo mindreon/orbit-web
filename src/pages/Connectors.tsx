@@ -1,19 +1,19 @@
 import { Plug, Plus } from "lucide-react";
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useNavigate, useSearchParams } from "react-router";
 import { describeFailure } from "../lib/api";
 import { listMcpConnectors, type McpConnector } from "../lib/catalog";
+import { CatalogHeader } from "../shell/CatalogHeader";
 import { Alert } from "../ui/Alert";
 import { Button } from "../ui/Button";
 import { EmptyState } from "../ui/EmptyState";
-import { PageBody, PageHeader } from "../ui/PageHeader";
 import { Skeleton } from "../ui/Skeleton";
-import { SegmentedTabs } from "../ui/Tabs";
+import { HeadingTabs } from "../ui/Tabs";
 import { McpMarketCatalog } from "./McpMarkets";
 
 const TABS = [
-  { id: "mine", label: "我的连接器" },
   { id: "market", label: "MCP 广场" },
+  { id: "mine", label: "我的连接器" },
 ] as const;
 
 type Tab = (typeof TABS)[number]["id"];
@@ -22,7 +22,7 @@ function ConnectorCard({ item }: { item: McpConnector }) {
   const http = item.transport === "streamable_http";
   const target = http ? item.url : `${item.command ?? ""}${item.args && item.args.length > 0 ? ` ${item.args.join(" ")}` : ""}`;
   return (
-    <li className="rounded-lg border border-border bg-card p-4">
+    <li className="rounded-xl border border-border bg-card p-4">
       <div className="flex items-center gap-3">
         <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-accent text-accent-foreground">
           <Plug aria-hidden="true" className="h-5 w-5" />
@@ -42,7 +42,7 @@ function ConnectorCard({ item }: { item: McpConnector }) {
   );
 }
 
-function MyConnectors({ onBrowse }: { onBrowse: () => void }) {
+function MyConnectors({ keyword, onBrowse }: { keyword: string; onBrowse: () => void }) {
   const navigate = useNavigate();
   const [items, setItems] = useState<McpConnector[]>([]);
   const [loading, setLoading] = useState(true);
@@ -51,23 +51,22 @@ function MyConnectors({ onBrowse }: { onBrowse: () => void }) {
   useEffect(() => {
     let gone = false;
     listMcpConnectors()
-      .then((body) => {
-        if (!gone) setItems(body.items ?? []);
-      })
-      .catch((err: unknown) => {
-        if (!gone) setError(describeFailure("读取连接器失败", err));
-      })
-      .finally(() => {
-        if (!gone) setLoading(false);
-      });
+      .then((body) => !gone && setItems(body.items ?? []))
+      .catch((err: unknown) => !gone && setError(describeFailure("读取连接器失败", err)))
+      .finally(() => !gone && setLoading(false));
     return () => {
       gone = true;
     };
   }, []);
 
+  const shown = useMemo(() => {
+    const needle = keyword.trim().toLowerCase();
+    return needle ? items.filter((item) => item.name.toLowerCase().includes(needle)) : items;
+  }, [items, keyword]);
+
   if (!loading && !error && items.length === 0) {
     return (
-      <div className="flex min-h-0 flex-1 bg-muted">
+      <div className="flex min-h-0 flex-1">
         <EmptyState
           icon={Plug}
           title="还没有连接器"
@@ -76,7 +75,7 @@ function MyConnectors({ onBrowse }: { onBrowse: () => void }) {
             <>
               <Button variant="primary" onClick={() => navigate("/experts/connectors/new")}>
                 <Plus aria-hidden="true" className="h-4 w-4" />
-                新建连接器
+                自定义连接器
               </Button>
               <Button onClick={onBrowse}>去 MCP 广场看看</Button>
             </>
@@ -87,46 +86,48 @@ function MyConnectors({ onBrowse }: { onBrowse: () => void }) {
   }
 
   return (
-    <PageBody>
-      {error ? <Alert>{error}</Alert> : null}
-      {loading ? (
-        <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
-          {Array.from({ length: 3 }, (_, index) => (
-            <Skeleton key={index} className="h-32" />
+    <div className="min-h-0 flex-1 overflow-auto px-6 py-5">
+      <div className="mx-auto max-w-6xl">
+        {error ? <Alert>{error}</Alert> : null}
+        {loading ? (
+          <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
+            {Array.from({ length: 4 }, (_, index) => (
+              <Skeleton key={index} className="h-32" />
+            ))}
+          </div>
+        ) : null}
+        {!loading && shown.length === 0 && items.length > 0 ? <p className="text-sm text-muted-foreground">没有匹配的连接器</p> : null}
+        <ul className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
+          {shown.map((item) => (
+            <ConnectorCard key={item.id} item={item} />
           ))}
-        </div>
-      ) : null}
-      <ul className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
-        {items.map((item) => (
-          <ConnectorCard key={item.id} item={item} />
-        ))}
-      </ul>
-    </PageBody>
+        </ul>
+      </div>
+    </div>
   );
 }
 
 export function ConnectorsPage() {
   const navigate = useNavigate();
   const [params, setParams] = useSearchParams();
-  const tab: Tab = params.get("tab") === "market" ? "market" : "mine";
-  const select = (next: Tab) => setParams(next === "mine" ? {} : { tab: next }, { replace: true });
+  const [keyword, setKeyword] = useState("");
+  const tab: Tab = params.get("tab") === "mine" ? "mine" : "market";
+  const select = (next: Tab) => setParams(next === "market" ? {} : { tab: next }, { replace: true });
 
   return (
     <div className="flex min-h-0 flex-1 flex-col bg-card">
-      <PageHeader
-        title="连接器"
-        description="登记 MCP 连接器，任务运行时按需连接"
-        actions={
-          <Button variant="primary" onClick={() => navigate("/experts/connectors/new")}>
-            <Plus aria-hidden="true" className="h-4 w-4" />
-            新建连接器
-          </Button>
-        }
-      />
-      <div className="flex h-12 shrink-0 items-center border-b border-border bg-card px-6">
-        <SegmentedTabs label="连接器" value={tab} options={TABS} onChange={select} />
+      <CatalogHeader title="连接器" search={{ value: keyword, onChange: setKeyword, placeholder: "搜索连接器" }}>
+        <Button variant="primary" onClick={() => navigate("/experts/connectors/new")}>
+          <Plus aria-hidden="true" className="h-4 w-4" />
+          自定义连接器
+        </Button>
+      </CatalogHeader>
+      <div className="shrink-0 px-6 pt-5">
+        <div className="mx-auto max-w-6xl">
+          <HeadingTabs label="连接器" value={tab} options={TABS} onChange={select} />
+        </div>
       </div>
-      {tab === "market" ? <McpMarketCatalog /> : <MyConnectors onBrowse={() => select("market")} />}
+      {tab === "market" ? <McpMarketCatalog keyword={keyword} /> : <MyConnectors keyword={keyword} onBrowse={() => select("market")} />}
     </div>
   );
 }

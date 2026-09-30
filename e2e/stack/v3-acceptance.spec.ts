@@ -197,7 +197,7 @@ test("E7 a dropped stream and a reload lose no durable event, and streamed text 
   await expect.poll(contiguous).toBe(durable);
 
   await page.reload();
-  await page.getByRole("button", { name: title }).click();
+  await page.getByRole("link", { name: title }).click();
   await expect(finalText).toContainText("one two three four five");
   await expect.poll(contiguous).toBe(durable);
   expect((await getTask(request, taskId)).status).toBe("COMPLETED");

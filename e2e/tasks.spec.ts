@@ -42,11 +42,12 @@ test("task desk creates a task, renders its plan and sends an interrupt", async 
     return route.fulfill({ status: 404, json: {} });
   });
 
-  await page.goto("/tasks");
-  await expect(page.getByText("任务中心")).toBeVisible();
+  await page.goto("/");
+  await page.getByRole("link", { name: "部署报告" }).click();
   await expect(page.getByRole("heading", { name: "部署报告" })).toBeVisible();
   await expect(page.getByText("探索")).toBeVisible();
   await page.getByPlaceholder("向任务发送消息").fill("立即停止当前执行");
   await page.getByRole("button", { name: "打断" }).click();
+  await page.getByText(/事件日志/).click();
   await expect(page.getByText("task.created")).toBeVisible();
 });

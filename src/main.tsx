@@ -1,4 +1,4 @@
-import { Clock, FolderKanban, GraduationCap, Library } from "lucide-react";
+import { Clock, FolderKanban, Library } from "lucide-react";
 import { StrictMode } from "react";
 import { createRoot } from "react-dom/client";
 import { createBrowserRouter, Navigate, RouterProvider } from "react-router";
@@ -6,7 +6,8 @@ import { App } from "./App";
 import { ensureMountPoint } from "./embed/mount";
 import { ensureEmbeddedStyles } from "./embed/styles";
 import { isEmbeddedInWujie } from "./embed/wujie";
-import { AssistantsPage } from "./pages/Assistants";
+import { ExpertsPage } from "./pages/Experts";
+import { NewTaskPage } from "./pages/NewTask";
 import { ConnectorCreatePage } from "./pages/ConnectorCreate";
 import { ConnectorsPage } from "./pages/Connectors";
 import { McpMarketDetailPage } from "./pages/McpMarketDetail";
@@ -15,7 +16,8 @@ import { SkillsPage } from "./pages/Skills";
 import { NotFoundPage, RouteErrorPage } from "./pages/NotFound";
 import { SettingsPage } from "./pages/Settings";
 import { UnwiredPage } from "./pages/UnwiredPage";
-import { TasksPage } from "./pages/Tasks";
+import { TaskPage } from "./pages/Task";
+import { TasksLayout } from "./shell/TaskRail";
 import "./index.css";
 
 const routes = [
@@ -27,19 +29,25 @@ const routes = [
       {
         errorElement: <RouteErrorPage />,
         children: [
-          { index: true, element: <Navigate to="/tasks" replace /> },
-          { path: "tasks", element: <TasksPage /> },
-          { path: "assistants", element: <AssistantsPage /> },
-          { path: "projects", element: <UnwiredPage title="项目" icon={FolderKanban} /> },
-          { path: "experts", element: <UnwiredPage title="专家" icon={GraduationCap} /> },
+          {
+            element: <TasksLayout />,
+            children: [
+              { index: true, element: <NewTaskPage /> },
+              { path: "tasks/:taskId", element: <TaskPage /> },
+            ],
+          },
+          { path: "tasks", element: <Navigate to="/" replace /> },
+          { path: "assistants", element: <Navigate to="/experts" replace /> },
+          { path: "projects", element: <UnwiredPage title="项目" icon={FolderKanban} subtitle="多人协同，打造超级团队" action="新建项目" /> },
+          { path: "experts", element: <ExpertsPage /> },
           { path: "experts/skills", element: <SkillsPage /> },
           { path: "experts/skills/:handle/:slug", element: <SkillDetailPage /> },
           { path: "experts/skills/:slug", element: <SkillDetailPage /> },
           { path: "experts/connectors", element: <ConnectorsPage /> },
           { path: "experts/connectors/new", element: <ConnectorCreatePage /> },
           { path: "experts/connectors/:id", element: <McpMarketDetailPage /> },
-          { path: "automation", element: <UnwiredPage title="定时任务" icon={Clock} /> },
-          { path: "library", element: <UnwiredPage title="资料库" icon={Library} /> },
+          { path: "automation", element: <UnwiredPage title="定时任务" icon={Clock} subtitle="让任务按时间自动运行" action="添加定时任务" /> },
+          { path: "library", element: <UnwiredPage title="资料库" icon={Library} subtitle="沉淀文档和资料，供任务引用" action="添加资料" /> },
           { path: "settings", element: <SettingsPage /> },
           { path: "*", element: <NotFoundPage /> },
         ],
