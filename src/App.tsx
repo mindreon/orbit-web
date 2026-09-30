@@ -1,10 +1,26 @@
 import { useEffect, useState, useSyncExternalStore } from "react";
 import { NavLink, Outlet } from "react-router";
+import { EmbedBridge } from "./embed/EmbedBridge";
+import { isEmbeddedInWujie } from "./embed/wujie";
 import { cn } from "./lib/cn";
 import { fontSizePx, getUiPrefs, subscribeUiPrefs } from "./lib/uiPrefs";
 import { GREYED_NAV_LABELS, PRIMARY_NAV } from "./shell/nav";
 
+/** 嵌入 baize 时顶栏、菜单和主题都归基座，这里只出内容区。 */
+function EmbeddedApp() {
+  return (
+    <div className="flex size-full min-h-0 flex-col bg-card text-foreground">
+      <EmbedBridge />
+      <Outlet />
+    </div>
+  );
+}
+
 export function App() {
+  return isEmbeddedInWujie() ? <EmbeddedApp /> : <StandaloneApp />;
+}
+
+function StandaloneApp() {
   const uiPrefs = useSyncExternalStore(subscribeUiPrefs, getUiPrefs);
   // Phones start with the sidebar closed; when opened it overlays the page instead of squeezing it.
   const [collapsed, setCollapsed] = useState(() => window.matchMedia("(max-width: 767px)").matches);

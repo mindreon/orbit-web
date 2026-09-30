@@ -25,3 +25,22 @@ export const SETTINGS_NAV = [
     items: ["个人主页", "语言", "主题"],
   },
 ] as const;
+
+/** 基座菜单用的 lucide 图标名，由基座自己映射到它的图标集。 */
+const MENU_ICONS: Record<string, string> = {
+  "/tasks": "list-checks",
+  "/assistants": "bot",
+  "/experts/skills": "sparkles",
+  "/experts/connectors": "plug",
+};
+
+/** 嵌入 wujie 时上报给基座的菜单目录。未接入的入口不上报。 */
+export function menuSections() {
+  const items = PRIMARY_NAV.filter((item) => !GREYED_NAV_LABELS.has(item.label)).map((item) => ({
+    key: item.to,
+    href: item.to,
+    title: item.label,
+    icon: MENU_ICONS[item.to] ?? "",
+  }));
+  return [{ group: "orbit", groupTitle: "Orbit", items }];
+}

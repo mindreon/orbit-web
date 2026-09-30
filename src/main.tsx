@@ -2,6 +2,9 @@ import { StrictMode } from "react";
 import { createRoot } from "react-dom/client";
 import { createBrowserRouter, Navigate, RouterProvider } from "react-router";
 import { App } from "./App";
+import { ensureMountPoint } from "./embed/mount";
+import { ensureEmbeddedStyles } from "./embed/styles";
+import { isEmbeddedInWujie } from "./embed/wujie";
 import { AssistantsPage } from "./pages/Assistants";
 import { ConnectorCreatePage } from "./pages/ConnectorCreate";
 import { ConnectorsPage } from "./pages/Connectors";
@@ -14,7 +17,7 @@ import { UnwiredPage } from "./pages/UnwiredPage";
 import { TasksPage } from "./pages/Tasks";
 import "./index.css";
 
-const router = createBrowserRouter([
+const routes = [
   {
     path: "/",
     element: <App />,
@@ -42,10 +45,24 @@ const router = createBrowserRouter([
       },
     ],
   },
-]);
+];
 
-createRoot(document.getElementById("root")!).render(
-  <StrictMode>
-    <RouterProvider router={router} />
-  </StrictMode>,
-);
+const router = createBrowserRouter(routes, { basename: import.meta.env.BASE_URL });
+
+function start() {
+  createRoot(ensureMountPoint("root")).render(
+    <StrictMode>
+      <RouterProvider router={router} />
+    </StrictMode>,
+  );
+}
+
+if (isEmbeddedInWujie()) {
+  // wujie 会丢掉模板 head 里的样式表，嵌入态自带 CSS，样式就位后再渲染。
+  import("./index.css?inline").then((css) => {
+    ensureEmbeddedStyles(css.default);
+    start();
+  });
+} else {
+  start();
+}

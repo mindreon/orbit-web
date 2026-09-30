@@ -2,8 +2,9 @@
 @tailwind components;
 @tailwind utilities;
 
-/* 与 web-template packages/design-tokens 亮色主题一致 */
-:root {
+/* 与 web-template packages/design-tokens 亮色主题一致。shadow DOM 里没有 :root，嵌入 wujie 时靠 :host 生效 */
+:root,
+:host {
   --background: 0 0% 100%;
   --foreground: 225 17% 8%;
   --card: 0 0% 100%;
