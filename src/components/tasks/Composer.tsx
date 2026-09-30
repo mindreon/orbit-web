@@ -1,4 +1,6 @@
 import { useState } from "react";
+import { Button } from "../../ui/Button";
+import { Textarea } from "../../ui/fields";
 
 interface ComposerProps {
   readonly onSend: (text: string, delivery: "queue" | "interrupt") => Promise<void>;
@@ -6,18 +8,36 @@ interface ComposerProps {
 
 export function Composer({ onSend }: ComposerProps) {
   const [draft, setDraft] = useState("");
+  const empty = !draft.trim();
   const send = async (delivery: "queue" | "interrupt") => {
-    if (!draft.trim()) return;
+    if (empty) return;
     await onSend(draft.trim(), delivery);
     setDraft("");
   };
   return (
-    <div className="border-t border-slate-100 p-4">
-      <div className="flex gap-2">
-        <textarea value={draft} onChange={(e) => setDraft(e.target.value)} placeholder="向任务发送消息" className="h-12 min-w-0 flex-1 resize-none rounded-lg border border-slate-200 px-3 py-2 text-sm" />
-        <button type="button" onClick={() => void send("queue")} className="rounded-lg bg-slate-900 px-4 py-2 text-sm text-white">发送</button>
-        <button type="button" onClick={() => void send("interrupt")} className="rounded-lg border border-amber-300 px-3 py-2 text-xs text-amber-700">打断</button>
+    <div className="border-t border-border p-4">
+      <div className="flex items-end gap-2">
+        <Textarea
+          value={draft}
+          onChange={(e) => setDraft(e.target.value)}
+          onKeyDown={(event) => {
+            // Enter 发送，Shift+Enter 换行；输入法选字期间的 Enter 不算发送。
+            if (event.key === "Enter" && !event.shiftKey && !event.nativeEvent.isComposing && event.keyCode !== 229) {
+              event.preventDefault();
+              void send("queue");
+            }
+          }}
+          placeholder="向任务发送消息"
+          className="h-12 min-w-0 flex-1 resize-none"
+        />
+        <Button variant="primary" className="h-12" disabled={empty} onClick={() => void send("queue")}>
+          发送
+        </Button>
+        <Button title="立即中断当前执行，并把这条消息交给 Agent" className="h-12" disabled={empty} onClick={() => void send("interrupt")}>
+          打断
+        </Button>
       </div>
+      <p className="mt-2 text-xs text-muted-foreground">Enter 发送，Shift+Enter 换行。「打断」会中止正在执行的尝试。</p>
     </div>
   );
 }

@@ -1,3 +1,6 @@
+import { Button } from "../../ui/Button";
+import { Section, SectionEmpty } from "./Section";
+
 interface ApprovalInboxProps {
   readonly approvals: readonly string[];
   readonly onDecide: (approvalId: string, decision: "approve" | "reject") => void;
@@ -5,17 +8,16 @@ interface ApprovalInboxProps {
 
 export function ApprovalInbox({ approvals, onDecide }: ApprovalInboxProps) {
   return (
-    <section aria-label="审批收件箱" className="mt-6">
-      <h3 className="text-xs font-semibold uppercase tracking-wide text-slate-500">审批收件箱</h3>
-      {approvals.length === 0 ? <p className="mt-2 text-xs text-slate-400">暂无待审批项</p> : approvals.map((approval) => (
-        <div key={approval} data-testid="approval-item" className="mt-2 rounded-xl border border-amber-200 bg-amber-50 p-3 text-xs text-amber-800">
-          <p>{approval}</p>
+    <Section title="审批收件箱" label="审批收件箱">
+      {approvals.length === 0 ? <SectionEmpty>暂无待审批项</SectionEmpty> : approvals.map((approval) => (
+        <div key={approval} data-testid="approval-item" className="mt-2 rounded-lg border border-warning/30 bg-warning/10 p-3 text-xs text-foreground">
+          <p className="break-all">{approval}</p>
           <div className="mt-2 flex gap-2">
-            <button type="button" onClick={() => onDecide(approval, "approve")} className="rounded border border-emerald-300 px-2 py-1 text-emerald-700">批准</button>
-            <button type="button" onClick={() => onDecide(approval, "reject")} className="rounded border border-red-300 px-2 py-1 text-red-700">拒绝</button>
+            <Button size="sm" variant="primary" onClick={() => onDecide(approval, "approve")}>批准</Button>
+            <Button size="sm" variant="danger" onClick={() => onDecide(approval, "reject")}>拒绝</Button>
           </div>
         </div>
       ))}
-    </section>
+    </Section>
   );
 }

@@ -2,7 +2,7 @@
  * Acceptance E1–E7 (13 §2) on the running stack: each scenario drives the task desk in the browser and checks a
  * backend fact (the API, Postgres, or Temporal) next to what the page shows.
  */
-import { expect, test, type APIRequestContext } from "@playwright/test";
+import { expect, test, type APIRequestContext, type Page } from "@playwright/test";
 import {
   type Policy,
   addNodes, attemptIds, attemptRows, createTask, eventRows, eventually, followTask, getPlan, getTask, killControl, killWorker, networkOutage, openTask,
@@ -12,6 +12,11 @@ import {
 // The mock streams each part of a `stream:` goal as it is; a part ends in a space so the worker's secret redactor releases it.
 const SEP = "\u001f";
 const unique = (label: string) => `${label} ${Date.now()}`;
+/** 取消任务要在确认弹窗里再点一次。 */
+const cancelTask = async (page: Page) => {
+  await page.getByRole("button", { name: "取消", exact: true }).click();
+  await page.getByRole("dialog").getByRole("button", { name: "确认取消任务" }).click();
+};
 
 test("E1 an agent plans two nodes, they run to completion and the artifact downloads", async ({ page, request }) => {
   const title = unique("E1");
@@ -136,7 +141,7 @@ test("E5 pause holds the next attempt, resume continues, cancel ends every child
   await addNodes(request, cancelledId, [{ type: "agent_turn", title: "Second", goal: "second" }]);
   await openTask(page, cancelled);
   await expect(attemptRows(page).first()).toHaveAttribute("data-status", "running", { timeout: 30_000 });
-  await page.getByRole("button", { name: "取消", exact: true }).click();
+  await cancelTask(page);
 
   await expect(taskStatus(page)).toHaveAttribute("data-status", "CANCELLED", { timeout: 30_000 });
   await eventually(async () => runningAttemptWorkflows(cancelledId), (count) => count === 0, "every child AttemptWorkflow to end");
@@ -526,7 +531,7 @@ test("E21 an attempt that misses its completion contract is refused, its node is
   expect(eventCount(taskId, "node.status_changed", `body->'payload'->>'node_id' = '${retried.node_id}' AND body->'payload'->>'to_status' = 'COMPLETED'`)).toBe(0);
 
   // Stop the retries.
-  await page.getByRole("button", { name: "取消", exact: true }).click();
+  await cancelTask(page);
   await expect(taskStatus(page)).toHaveAttribute("data-status", "CANCELLED", { timeout: 30_000 });
   expect((await nodeTitled(request, taskId, "Report")).frozen).toBe(false);
 });
@@ -567,6 +572,6 @@ test("E23 a command check that fails on the attempt's workspace refuses the comp
   expect(retried.status).not.toBe("COMPLETED");
   await eventRecorded(taskId, "attempt.finished", `body->'payload'->'failure'->>'failure_class' = 'verification' AND body->'payload'->'failure'->>'message' LIKE '%command/command_failed%exited with 3%'`, "the refused attempt's failure");
 
-  await page.getByRole("button", { name: "取消", exact: true }).click();
+  await cancelTask(page);
   await expect(taskStatus(page)).toHaveAttribute("data-status", "CANCELLED", { timeout: 30_000 });
 });

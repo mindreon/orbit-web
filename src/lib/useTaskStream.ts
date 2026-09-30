@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
+import { describeFailure } from "./api";
 import { applyEvent, emptyLiveState, markStreamGap, mergeEvent, type TaskLiveState } from "./taskEvents";
 import { getPlan, getTask, listTaskArtifacts, subscribeTaskEvents, type ArtifactManifest, type Plan, type StreamState, type Task, type TaskEvent } from "./tasks";
 
@@ -30,7 +31,7 @@ export function useTaskStream(taskId: string | null): TaskStream {
     let active = true;
     // Every durable event starts a refresh, and responses can come back out of order: only the newest one may land.
     let latest = 0;
-    const fail = (err: unknown) => { if (active) setError(String(err)); };
+    const fail = (err: unknown) => { if (active) setError(describeFailure("读取任务失败", err)); };
     const refresh = () => {
       const mine = ++latest;
       const current = () => active && mine === latest;

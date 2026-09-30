@@ -1,45 +1,38 @@
-import { useMemo, useState } from "react";
+import { useMemo } from "react";
+import { cn } from "../../lib/cn";
 import type { Task } from "../../lib/tasks";
-import { taskStatusText } from "./statusText";
+import { StatusBadge } from "../../ui/StatusBadge";
+import { formatTime, isLive, statusTone, taskStatusText } from "./statusText";
 
 interface TaskListProps {
   readonly tasks: readonly Task[];
   readonly selectedId: string | null;
   readonly onSelect: (taskId: string) => void;
-  readonly onCreate: (input: { title: string; goal: string }) => Promise<void>;
 }
 
-const field = "mb-2 w-full rounded-lg border border-slate-200 px-3 py-2 text-sm";
-
-export function TaskList({ tasks, selectedId, onSelect, onCreate }: TaskListProps) {
-  const [title, setTitle] = useState("");
-  const [goal, setGoal] = useState("");
+export function TaskList({ tasks, selectedId, onSelect }: TaskListProps) {
   const newestFirst = useMemo(() => [...tasks].sort((a, b) => b.updated_at.localeCompare(a.updated_at)), [tasks]);
-
-  const create = async () => {
-    if (!title.trim() || !goal.trim()) return;
-    await onCreate({ title: title.trim(), goal: goal.trim() });
-    setTitle("");
-    setGoal("");
-  };
-
   return (
-    <aside className="flex min-h-0 flex-col rounded-2xl border border-slate-200 bg-white p-3 shadow-sm">
-      <div className="mb-3 border-b border-slate-100 pb-3">
-        <input value={title} onChange={(e) => setTitle(e.target.value)} placeholder="任务标题" className={field} />
-        <textarea value={goal} onChange={(e) => setGoal(e.target.value)} placeholder="任务目标" className={`${field} h-16 resize-none`} />
-        <button type="button" onClick={() => void create()} className="w-full rounded-lg bg-slate-900 px-3 py-2 text-sm font-medium text-white">创建任务</button>
+    <aside aria-label="任务列表" className="flex min-h-0 flex-col border-r border-border bg-card">
+      <div className="flex h-11 shrink-0 items-center justify-between border-b border-border px-4 text-xs text-muted-foreground">
+        <span>全部任务</span>
+        <span>{tasks.length}</span>
       </div>
-      <div className="min-h-0 flex-1 space-y-1 overflow-y-auto">
+      <div className="min-h-0 flex-1 overflow-y-auto p-2">
         {newestFirst.map((item) => (
           <button
             type="button"
             key={item.task_id}
             onClick={() => onSelect(item.task_id)}
-            className={`w-full rounded-xl px-3 py-3 text-left ${selectedId === item.task_id ? "bg-slate-100" : "hover:bg-slate-50"}`}
+            className={cn("mb-1 w-full rounded-lg px-3 py-2.5 text-left", selectedId === item.task_id ? "bg-accent" : "hover:bg-secondary")}
           >
-            <p className="truncate text-sm font-medium text-slate-900">{item.title}</p>
-            <p className="mt-1 text-xs text-slate-500">{taskStatusText[item.status] ?? item.status}</p>
+            <p className="truncate text-sm font-medium text-foreground">{item.title}</p>
+            <p className="mt-1.5 flex items-center justify-between gap-2">
+              <StatusBadge tone={statusTone(item.status)} pulse={isLive(item.status)}>
+                {taskStatusText[item.status] ?? item.status}
+              </StatusBadge>
+              <span className="text-xs text-muted-foreground">{formatTime(item.updated_at)}</span>
+            </p>
           </button>
         ))}
       </div>
