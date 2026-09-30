@@ -11,16 +11,16 @@ function formatStat(value: number) {
 }
 
 function ReadmeBody({ text }: { text: string }) {
-  if (!text.trim()) return <p className="text-[14px] leading-6 text-[#8284A4]">这份快照没有服务说明。</p>;
+  if (!text.trim()) return <p className="text-[14px] leading-6 text-muted-foreground">这份快照没有服务说明。</p>;
   const blocks = text.split(/\n{2,}/);
   return (
-    <div className="space-y-3 text-[14px] font-light leading-6 text-[#27254C]">
+    <div className="space-y-3 text-[14px] font-light leading-6 text-foreground">
       {blocks.map((block, index) => {
         const fenced = block.startsWith("```");
         if (fenced) {
           const code = block.replace(/^```[^\n]*\n?/, "").replace(/```$/, "");
           return (
-            <pre key={index} className="overflow-auto rounded-lg bg-[#F7F9FD] p-3 text-[12px] leading-5 text-[#464D5B]">
+            <pre key={index} className="overflow-auto rounded-lg bg-muted p-3 text-[12px] leading-5 text-foreground/80">
               {code}
             </pre>
           );
@@ -28,7 +28,7 @@ function ReadmeBody({ text }: { text: string }) {
         const heading = block.match(/^(#{1,3})\s+([\s\S]+)$/);
         if (heading && !block.includes("\n")) {
           return (
-            <h3 key={index} className="text-[16px] font-semibold leading-7 text-[#27254C]">
+            <h3 key={index} className="text-[16px] font-semibold leading-7 text-foreground">
               {heading[2]}
             </h3>
           );
@@ -44,19 +44,19 @@ function ReadmeBody({ text }: { text: string }) {
 }
 
 function ToolList({ tools }: { tools: McpMarketTool[] }) {
-  if (tools.length === 0) return <p className="text-[14px] leading-6 text-[#8284A4]">工具信息暂未提供</p>;
+  if (tools.length === 0) return <p className="text-[14px] leading-6 text-muted-foreground">工具信息暂未提供</p>;
   return (
     <ul className="space-y-4">
       {tools.map((tool) => (
-        <li key={tool.name} className="rounded-xl bg-[#F7F9FD] px-[18px] py-[14px]">
-          <h3 className="text-[16px] font-semibold leading-7 text-[#27254C]">{tool.name}</h3>
-          {tool.description ? <p className="mt-1 whitespace-pre-wrap text-[14px] font-light leading-6 text-[#464D5B]">{tool.description}</p> : null}
+        <li key={tool.name} className="rounded-xl bg-muted px-[18px] py-[14px]">
+          <h3 className="text-[16px] font-semibold leading-7 text-foreground">{tool.name}</h3>
+          {tool.description ? <p className="mt-1 whitespace-pre-wrap text-[14px] font-light leading-6 text-foreground/80">{tool.description}</p> : null}
           {tool.params.length > 0 ? (
             <ul className="mt-3 space-y-2">
               {tool.params.map((param) => (
-                <li key={param.name} className="text-[13px] leading-5 text-[#464D5B]">
-                  <span className="font-medium text-[#27254C]">{param.name}</span>
-                  <span className="text-[#8284A4]">
+                <li key={param.name} className="text-[13px] leading-5 text-foreground/80">
+                  <span className="font-medium text-foreground">{param.name}</span>
+                  <span className="text-muted-foreground">
                     {" "}
                     ({param.type || "string"}
                     {param.required ? "，必填" : "，可选"})
@@ -104,50 +104,50 @@ export function McpMarketDetailPage() {
   return (
     <div className="min-h-0 flex-1 overflow-auto bg-white px-6 py-6">
       <section aria-label="MCP 详情" className="mx-auto max-w-[920px]">
-        <nav className="mb-4 text-[12px] leading-4 text-[#8284A4]" aria-label="面包屑">
-          <Link to="/experts/connectors" className="text-[#624AFF] no-underline">
+        <nav className="mb-4 text-[12px] leading-4 text-muted-foreground" aria-label="面包屑">
+          <Link to="/experts/connectors" className="text-primary no-underline">
             MCP 广场
           </Link>
           <span className="mx-2">/</span>
           <span>服务详情</span>
         </nav>
-        {loading ? <p className="text-[14px] text-[#8284A4]">正在读取服务详情。</p> : null}
-        {error ? <p className="text-[14px] text-[#c04545]">{error}</p> : null}
+        {loading ? <p className="text-[14px] text-muted-foreground">正在读取服务详情。</p> : null}
+        {error ? <p className="text-[14px] text-destructive">{error}</p> : null}
         {item ? (
           <>
             <div className="flex items-start gap-4">
-              <div className="flex h-[60px] w-[60px] shrink-0 items-center justify-center rounded-lg bg-[#F7F9FD] text-[22px] font-semibold text-[#624AFF]">
+              <div className="flex h-[60px] w-[60px] shrink-0 items-center justify-center rounded-lg bg-muted text-[22px] font-semibold text-primary">
                 {initial}
               </div>
               <div className="min-w-0 flex-1">
                 <div className="flex flex-wrap items-center gap-2">
-                  <h1 className="text-[18px] font-semibold leading-6 text-[#27254C]">{item.name}</h1>
-                  <span className={`inline-flex h-5 items-center rounded-full bg-[#F7F9FD] px-2 text-[11px] font-medium ${item.hosted ? "text-[#3B29B3]" : "text-[#329E87]"}`}>
+                  <h1 className="text-[18px] font-semibold leading-6 text-foreground">{item.name}</h1>
+                  <span className={`inline-flex h-5 items-center rounded-full bg-muted px-2 text-[11px] font-medium ${item.hosted ? "text-primary" : "text-[#329E87]"}`}>
                     {item.hosted ? "Hosted" : "Local"}
                   </span>
-                  {item.updatedOn ? <span className="text-[12px] leading-4 text-[#8284A4]">{item.updatedOn}</span> : null}
+                  {item.updatedOn ? <span className="text-[12px] leading-4 text-muted-foreground">{item.updatedOn}</span> : null}
                 </div>
-                <p className="mt-2 flex flex-wrap gap-3 text-[12px] leading-4 text-[#8284A4]">
+                <p className="mt-2 flex flex-wrap gap-3 text-[12px] leading-4 text-muted-foreground">
                   {item.hosted && item.calls > 0 ? <span title="托管服务调用次数">{formatStat(item.calls)}</span> : null}
                   {item.views > 0 ? <span title="浏览">{formatStat(item.views)}</span> : null}
                   {item.stars > 0 ? <span title="收藏">{formatStat(item.stars)}</span> : null}
                   <span>{item.needsOnline ? "需要联网" : "可离线使用"}</span>
                 </p>
-                <p className="mt-2 text-[12px] leading-4 text-[#8284A4]">{item.author}</p>
+                <p className="mt-2 text-[12px] leading-4 text-muted-foreground">{item.author}</p>
               </div>
             </div>
-            <p className="mt-4 text-[14px] font-light leading-6 text-[#464D5B]">{item.summary}</p>
-            <div className="mt-3 flex flex-wrap items-center gap-3 text-[12px] leading-5 text-[#464D5B]">
-              {item.categoryName ? <span className="rounded bg-[#F7F9FD] px-[5px]">{item.categoryName}</span> : null}
+            <p className="mt-4 text-[14px] font-light leading-6 text-foreground/80">{item.summary}</p>
+            <div className="mt-3 flex flex-wrap items-center gap-3 text-[12px] leading-5 text-foreground/80">
+              {item.categoryName ? <span className="rounded bg-muted px-[5px]">{item.categoryName}</span> : null}
               {item.license ? <span>许可证：{item.license}</span> : null}
               {item.author ? <span>开发者：{item.author}</span> : null}
             </div>
-            <div className="mt-6 flex gap-6 border-b border-[#ECEDF1]" role="tablist" aria-label="服务内容">
+            <div className="mt-6 flex gap-6 border-b border-border" role="tablist" aria-label="服务内容">
               <button
                 type="button"
                 role="tab"
                 aria-selected={tab === "readme"}
-                className={`border-b-2 pb-2 text-[14px] font-medium ${tab === "readme" ? "border-[#624AFF] text-[#624AFF]" : "border-transparent text-[#8284A4]"}`}
+                className={`border-b-2 pb-2 text-[14px] font-medium ${tab === "readme" ? "border-primary text-primary" : "border-transparent text-muted-foreground"}`}
                 onClick={() => setTab("readme")}
               >
                 服务详情
@@ -156,7 +156,7 @@ export function McpMarketDetailPage() {
                 type="button"
                 role="tab"
                 aria-selected={tab === "tools"}
-                className={`border-b-2 pb-2 text-[14px] font-medium ${tab === "tools" ? "border-[#624AFF] text-[#624AFF]" : "border-transparent text-[#8284A4]"}`}
+                className={`border-b-2 pb-2 text-[14px] font-medium ${tab === "tools" ? "border-primary text-primary" : "border-transparent text-muted-foreground"}`}
                 onClick={() => setTab("tools")}
               >
                 工具
@@ -165,8 +165,8 @@ export function McpMarketDetailPage() {
             <div className="mt-5" role="tabpanel">
               {tab === "readme" ? <ReadmeBody text={item.readme} /> : <ToolList tools={item.tools} />}
             </div>
-            <aside className="mt-8 rounded-xl bg-[#F7F9FD] px-[18px] py-[14px] text-[13px] leading-6 text-[#464D5B]">
-              <h2 className="text-[14px] font-medium text-[#27254C]">服务配置</h2>
+            <aside className="mt-8 rounded-xl bg-muted px-[18px] py-[14px] text-[13px] leading-6 text-foreground/80">
+              <h2 className="text-[14px] font-medium text-foreground">服务配置</h2>
               {item.hosted ? (
                 <p className="mt-1">托管服务的连接地址按账号发放，属于敏感信息。这里不保存，也不在这里连接。</p>
               ) : (
