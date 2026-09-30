@@ -1,5 +1,8 @@
 import { useState } from "react";
-import { Link, useNavigate } from "react-router";
+import { Alert } from "../ui/Alert";
+import { Button } from "../ui/Button";
+import { PageHeader } from "../ui/PageHeader";
+import { useNavigate } from "react-router";
 import { describeFailure } from "../lib/api";
 import { createMcpConnector, type McpHeaderRef } from "../lib/catalog";
 
@@ -158,21 +161,15 @@ export function ConnectorCreatePage() {
   const placeholder = transport === "stdio" ? STDIO_PLACEHOLDER : transport === "sse" ? SSE_PLACEHOLDER : HTTP_PLACEHOLDER;
 
   return (
-    <div className="min-h-0 flex-1 overflow-auto bg-white px-6 py-8 text-[#27254C]">
-      <nav className="mb-4 text-[12px] leading-4 text-[#8284A4]" aria-label="面包屑">
-        <Link to="/experts/connectors" className="text-[#624AFF] no-underline">
-          连接器
-        </Link>
-        <span className="mx-2">/</span>
-        <span>自定义创建</span>
-      </nav>
-      <h1 className="text-[18px] font-semibold leading-6">自定义创建</h1>
-      <p className="mt-1 max-w-[760px] text-[14px] font-light leading-6 text-[#464D5B]">
+    <div className="flex min-h-0 flex-1 flex-col bg-card text-foreground">
+      <PageHeader title="自定义创建" back={{ to: "/experts/connectors", label: "连接器" }} />
+      <div className="min-h-0 flex-1 overflow-auto bg-muted px-6 py-5">
+      <p className="max-w-[760px] text-[14px] leading-6 text-muted-foreground">
         登记一个 MCP 连接器。本地命令由任务在运行时启动，远程地址由任务在运行时连接。这个页面只保存名字和连接方式，不会在这里运行，也不填写密钥。
       </p>
       <form
         aria-label="自定义创建"
-        className="mt-5 max-w-[760px] rounded-xl border border-[#ECEDF1] bg-white p-5"
+        className="mt-4 max-w-[760px] rounded-lg border border-border bg-card p-5"
         onSubmit={(event) => {
           event.preventDefault();
           if (transport === "sse") {
@@ -234,9 +231,9 @@ export function ConnectorCreatePage() {
         <div className="flex flex-wrap items-end justify-between gap-3">
           <div>
             <h2 className="text-[16px] font-semibold leading-6">服务配置</h2>
-            <p className="mt-1 text-[12px] leading-5 text-[#8284A4]">服务配置支持 Stdio 和 Streamable HTTP。环境变量只写名字，值留空。</p>
+            <p className="mt-1 text-[12px] leading-5 text-muted-foreground">服务配置支持 Stdio 和 Streamable HTTP。环境变量只写名字，值留空。</p>
           </div>
-          <div className="inline-flex rounded-lg bg-[#F7F9FD] p-1" role="tablist" aria-label="填写方式">
+          <div className="inline-flex rounded-lg bg-muted p-1" role="tablist" aria-label="填写方式">
             {(
               [
                 ["form", "表单"],
@@ -248,7 +245,7 @@ export function ConnectorCreatePage() {
                 type="button"
                 role="tab"
                 aria-selected={fillMode === value}
-                className={`h-8 rounded-md px-3 text-[13px] font-medium ${fillMode === value ? "bg-white text-[#624AFF] shadow-sm" : "text-[#8284A4]"}`}
+                className={`h-8 rounded-md px-3 text-[13px] font-medium ${fillMode === value ? "bg-card text-primary shadow-sm" : "text-muted-foreground"}`}
                 onClick={() => {
                   setFillMode(value);
                   setFormError("");
@@ -261,7 +258,7 @@ export function ConnectorCreatePage() {
         </div>
         <fieldset className="mt-4">
           <legend className="text-[14px] font-medium">服务配置</legend>
-          <div className="mt-2 inline-flex rounded-lg bg-[#F7F9FD] p-1">
+          <div className="mt-2 inline-flex rounded-lg bg-muted p-1">
             {(
               [
                 ["stdio", "Stdio"],
@@ -271,7 +268,7 @@ export function ConnectorCreatePage() {
             ).map(([value, label]) => (
               <label
                 key={value}
-                className={`inline-flex h-8 cursor-pointer items-center rounded-md px-3 text-[13px] font-medium ${transport === value ? "bg-white text-[#624AFF] shadow-sm" : "text-[#8284A4]"}`}
+                className={`inline-flex h-8 cursor-pointer items-center rounded-md px-3 text-[13px] font-medium ${transport === value ? "bg-card text-primary shadow-sm" : "text-muted-foreground"}`}
               >
                 <input
                   type="radio"
@@ -290,7 +287,7 @@ export function ConnectorCreatePage() {
           </div>
         </fieldset>
         {transport === "sse" ? (
-          <p className="mt-4 text-[14px] leading-6 text-[#464D5B]">SSE 配置这里不保存。请改用 Streamable HTTP。</p>
+          <p className="mt-4 text-[14px] leading-6 text-foreground/80">SSE 配置这里不保存。请改用 Streamable HTTP。</p>
         ) : fillMode === "json" ? (
           <label className="mt-4 block text-[14px]">
             服务配置
@@ -299,7 +296,7 @@ export function ConnectorCreatePage() {
               value={serverConfig}
               placeholder={placeholder}
               spellCheck={false}
-              className="mt-2 h-56 w-full resize-none rounded-lg border border-[#ECEDF1] bg-[#F7F9FD] p-3 font-mono text-[12px] leading-5 text-[#27254C] outline-none"
+              className="mt-2 h-56 w-full resize-none rounded-lg border border-border bg-muted p-3 font-mono text-[12px] leading-5 text-foreground outline-none"
               onChange={(event) => setServerConfig(event.target.value)}
             />
           </label>
@@ -311,7 +308,7 @@ export function ConnectorCreatePage() {
                 aria-label="连接器名称"
                 value={name}
                 placeholder="MCP Server 名称，如 fetch、time 等"
-                className="mt-1 h-9 w-full rounded-lg border border-[#ECEDF1] px-3 text-[14px] outline-none"
+                className="mt-1 h-9 w-full rounded-lg border border-border px-3 text-[14px] outline-none"
                 onChange={(event) => setName(event.target.value)}
               />
             </label>
@@ -322,7 +319,7 @@ export function ConnectorCreatePage() {
                   <input
                     aria-label="启动命令"
                     value={command}
-                    className="mt-1 h-9 w-full rounded-lg border border-[#ECEDF1] px-3 text-[14px] outline-none"
+                    className="mt-1 h-9 w-full rounded-lg border border-border px-3 text-[14px] outline-none"
                     onChange={(event) => setCommand(event.target.value)}
                   />
                 </label>
@@ -332,7 +329,7 @@ export function ConnectorCreatePage() {
                     aria-label="启动参数"
                     value={args}
                     placeholder="用空格分开"
-                    className="mt-1 h-9 w-full rounded-lg border border-[#ECEDF1] px-3 text-[14px] outline-none"
+                    className="mt-1 h-9 w-full rounded-lg border border-border px-3 text-[14px] outline-none"
                     onChange={(event) => setArgs(event.target.value)}
                   />
                 </label>
@@ -342,11 +339,11 @@ export function ConnectorCreatePage() {
                     aria-label="环境变量名"
                     value={envRefs}
                     placeholder="例如 DOCS_TOKEN"
-                    className="mt-1 h-9 w-full rounded-lg border border-[#ECEDF1] px-3 text-[14px] outline-none"
+                    className="mt-1 h-9 w-full rounded-lg border border-border px-3 text-[14px] outline-none"
                     onChange={(event) => setEnvRefs(event.target.value)}
                   />
                 </label>
-                <p className="mt-1 text-[12px] leading-5 text-[#8284A4]">只写变量名字。值放在运行任务的环境里，不要在这里填写密钥。</p>
+                <p className="mt-1 text-[12px] leading-5 text-muted-foreground">只写变量名字。值放在运行任务的环境里，不要在这里填写密钥。</p>
               </>
             ) : (
               <>
@@ -356,7 +353,7 @@ export function ConnectorCreatePage() {
                     aria-label="远程 MCP 地址"
                     value={url}
                     placeholder="MCP Server StreamableHTTP 链接"
-                    className="mt-1 h-9 w-full rounded-lg border border-[#ECEDF1] px-3 text-[14px] outline-none"
+                    className="mt-1 h-9 w-full rounded-lg border border-border px-3 text-[14px] outline-none"
                     onChange={(event) => setUrl(event.target.value)}
                   />
                 </label>
@@ -366,11 +363,11 @@ export function ConnectorCreatePage() {
                     aria-label="请求头"
                     value={headerRefs}
                     placeholder="Authorization:DOCS_TOKEN"
-                    className="mt-1 h-9 w-full rounded-lg border border-[#ECEDF1] px-3 text-[14px] outline-none"
+                    className="mt-1 h-9 w-full rounded-lg border border-border px-3 text-[14px] outline-none"
                     onChange={(event) => setHeaderRefs(event.target.value)}
                   />
                 </label>
-                <p className="mt-1 text-[12px] leading-5 text-[#8284A4]">冒号左边是头名字，右边是环境变量名。不要填写密钥。</p>
+                <p className="mt-1 text-[12px] leading-5 text-muted-foreground">冒号左边是头名字，右边是环境变量名。不要填写密钥。</p>
               </>
             )}
           </>
@@ -382,7 +379,7 @@ export function ConnectorCreatePage() {
               aria-label="连接器名称"
               value={name}
               placeholder="留空时使用 JSON 里的服务名"
-              className="mt-1 h-9 w-full rounded-lg border border-[#ECEDF1] px-3 text-[14px] outline-none"
+              className="mt-1 h-9 w-full rounded-lg border border-border px-3 text-[14px] outline-none"
               onChange={(event) => setName(event.target.value)}
             />
           </label>
@@ -391,12 +388,16 @@ export function ConnectorCreatePage() {
           <input type="checkbox" checked={defaultOpen} onChange={(event) => setDefaultOpen(event.target.checked)} />
           新建任务时默认连接
         </label>
-        {formError ? <p className="mt-2 text-[14px] text-[#c04545]">{formError}</p> : null}
-        <button type="submit" disabled={saving} className="mt-4 block h-9 rounded-lg bg-[#624AFF] px-4 text-[14px] font-medium text-white disabled:opacity-40">
-          {saving ? "正在保存" : "添加连接器"}
-        </button>
+        {formError ? <Alert className="mt-3">{formError}</Alert> : null}
+        <div className="sticky bottom-0 -mx-5 -mb-5 mt-5 flex items-center gap-3 rounded-b-lg border-t border-border bg-card px-5 py-3">
+          <Button type="submit" variant="primary" disabled={saving}>
+            {saving ? "正在保存" : "添加连接器"}
+          </Button>
+          <Button onClick={() => navigate("/experts/connectors")}>取消</Button>
+        </div>
       </form>
-      {error ? <p className="mt-4 text-[14px] text-[#c04545]">{error}</p> : null}
+      {error ? <Alert className="mt-4 max-w-[760px]">{error}</Alert> : null}
+      </div>
     </div>
   );
 }

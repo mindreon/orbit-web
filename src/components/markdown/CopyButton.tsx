@@ -7,7 +7,7 @@ export function CopyButton({ text, label = "复制" }: { text: string; label?: s
   return (
     <button
       type="button"
-      className="inline-flex items-center gap-1 rounded px-1.5 py-0.5 text-[11px] text-[#666] hover:bg-black/5"
+      className="inline-flex items-center gap-1 rounded px-1.5 py-0.5 text-[11px] text-muted-foreground hover:bg-black/5"
       onClick={() => {
         const settle = (next: "done" | "failed") => {
           setState(next);

@@ -1,6 +1,8 @@
 import { useEffect, useState } from "react";
-import { Link, useParams } from "react-router";
+import { useParams } from "react-router";
 import { describeFailure } from "../lib/api";
+import { Alert } from "../ui/Alert";
+import { PageHeader } from "../ui/PageHeader";
 import { getMcpMarket, type McpMarketDetail, type McpMarketTool } from "../lib/catalog";
 
 function formatStat(value: number) {
@@ -102,17 +104,12 @@ export function McpMarketDetailPage() {
 
   const initial = item?.name.trim().slice(0, 1) || "M";
   return (
-    <div className="min-h-0 flex-1 overflow-auto bg-white px-6 py-6">
+    <div className="flex min-h-0 flex-1 flex-col bg-card">
+      <PageHeader title="服务详情" back={{ to: "/experts/connectors?tab=market", label: "MCP 广场" }} />
+      <div className="min-h-0 flex-1 overflow-auto px-6 py-6">
       <section aria-label="MCP 详情" className="mx-auto max-w-[920px]">
-        <nav className="mb-4 text-[12px] leading-4 text-muted-foreground" aria-label="面包屑">
-          <Link to="/experts/connectors" className="text-primary no-underline">
-            MCP 广场
-          </Link>
-          <span className="mx-2">/</span>
-          <span>服务详情</span>
-        </nav>
         {loading ? <p className="text-[14px] text-muted-foreground">正在读取服务详情。</p> : null}
-        {error ? <p className="text-[14px] text-destructive">{error}</p> : null}
+        {error ? <Alert>{error}</Alert> : null}
         {item ? (
           <>
             <div className="flex items-start gap-4">
@@ -122,7 +119,7 @@ export function McpMarketDetailPage() {
               <div className="min-w-0 flex-1">
                 <div className="flex flex-wrap items-center gap-2">
                   <h1 className="text-[18px] font-semibold leading-6 text-foreground">{item.name}</h1>
-                  <span className={`inline-flex h-5 items-center rounded-full bg-muted px-2 text-[11px] font-medium ${item.hosted ? "text-primary" : "text-[#329E87]"}`}>
+                  <span className={`inline-flex h-5 items-center rounded-full bg-muted px-2 text-[11px] font-medium ${item.hosted ? "text-primary" : "text-success"}`}>
                     {item.hosted ? "Hosted" : "Local"}
                   </span>
                   {item.updatedOn ? <span className="text-[12px] leading-4 text-muted-foreground">{item.updatedOn}</span> : null}
@@ -176,6 +173,7 @@ export function McpMarketDetailPage() {
           </>
         ) : null}
       </section>
+      </div>
     </div>
   );
 }

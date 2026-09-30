@@ -1,3 +1,4 @@
+import { Clock, FolderKanban, GraduationCap, Library } from "lucide-react";
 import { StrictMode } from "react";
 import { createRoot } from "react-dom/client";
 import { createBrowserRouter, Navigate, RouterProvider } from "react-router";
@@ -29,16 +30,16 @@ const routes = [
           { index: true, element: <Navigate to="/tasks" replace /> },
           { path: "tasks", element: <TasksPage /> },
           { path: "assistants", element: <AssistantsPage /> },
-          { path: "projects", element: <UnwiredPage title="项目" /> },
-          { path: "experts", element: <UnwiredPage title="专家" /> },
+          { path: "projects", element: <UnwiredPage title="项目" icon={FolderKanban} /> },
+          { path: "experts", element: <UnwiredPage title="专家" icon={GraduationCap} /> },
           { path: "experts/skills", element: <SkillsPage /> },
           { path: "experts/skills/:handle/:slug", element: <SkillDetailPage /> },
           { path: "experts/skills/:slug", element: <SkillDetailPage /> },
           { path: "experts/connectors", element: <ConnectorsPage /> },
           { path: "experts/connectors/new", element: <ConnectorCreatePage /> },
           { path: "experts/connectors/:id", element: <McpMarketDetailPage /> },
-          { path: "automation", element: <UnwiredPage title="定时任务" /> },
-          { path: "library", element: <UnwiredPage title="资料库" /> },
+          { path: "automation", element: <UnwiredPage title="定时任务" icon={Clock} /> },
+          { path: "library", element: <UnwiredPage title="资料库" icon={Library} /> },
           { path: "settings", element: <SettingsPage /> },
           { path: "*", element: <NotFoundPage /> },
         ],

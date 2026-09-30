@@ -1,8 +1,12 @@
-import { useSyncExternalStore } from "react";
+import { useSyncExternalStore, type ReactNode } from "react";
 import { useSearchParams } from "react-router";
 import { cn } from "../lib/cn";
 import { getUiPrefs, setUiPrefs, subscribeUiPrefs } from "../lib/uiPrefs";
 import { SETTINGS_NAV } from "../shell/nav";
+import { Button } from "../ui/Button";
+import { PageBody, PageHeader } from "../ui/PageHeader";
+import { panelClass } from "../ui/card";
+import { SegmentedTabs } from "../ui/Tabs";
 
 function knownSection(value: string | null) {
   const items = SETTINGS_NAV.flatMap((group) => [...group.items]);
@@ -13,89 +17,91 @@ export function SettingsPage() {
   const [params, setParams] = useSearchParams();
   const section = knownSection(params.get("section"));
   return (
-    <div className="grid min-h-0 flex-1 grid-cols-[220px_minmax(0,1fr)] bg-[#f7f7f8]">
-      <aside className="overflow-auto border-r border-[#ececee] p-4">
-        {SETTINGS_NAV.map((group) => (
-          <div key={group.group} className="mb-4">
-            <p className="mb-1 px-2 text-xs text-[#999]">{group.group}</p>
-            {group.items.map((item) => (
-              <button
-                key={item}
-                className={cn("block w-full rounded-lg px-2 py-1.5 text-left text-sm", section === item ? "bg-white font-medium" : "text-[#444]")}
-                onClick={() => setParams(item === "个人主页" ? {} : { section: item })}
-              >
-                {item}
-              </button>
-            ))}
-          </div>
-        ))}
-      </aside>
-      <div className="overflow-auto p-8">
-        <h1 className="text-xl font-semibold">{section}</h1>
-        <SettingsBody section={section} />
+    <div className="flex min-h-0 flex-1 flex-col bg-card">
+      <PageHeader title="设置" />
+      <div className="flex min-h-0 flex-1">
+        <aside className="hidden w-56 shrink-0 overflow-auto border-r border-border bg-card p-3 md:block">
+          {SETTINGS_NAV.map((group) => (
+            <div key={group.group} className="mb-4">
+              <p className="mb-1 px-3 text-xs text-muted-foreground">{group.group}</p>
+              {group.items.map((item) => (
+                <button
+                  key={item}
+                  type="button"
+                  className={cn("flex h-9 w-full items-center rounded-lg px-3 text-left text-sm", section === item ? "bg-accent font-medium text-accent-foreground" : "text-foreground/80 hover:bg-secondary")}
+                  onClick={() => setParams(item === "个人主页" ? {} : { section: item })}
+                >
+                  {item}
+                </button>
+              ))}
+            </div>
+          ))}
+        </aside>
+        <PageBody narrow>
+          <h2 className="mb-4 text-base font-semibold text-foreground">{section}</h2>
+          <SettingsBody section={section} />
+        </PageBody>
       </div>
     </div>
   );
 }
+
+function Row({ title, hint, children }: { title: string; hint?: string; children?: ReactNode }) {
+  return (
+    <div className={cn(panelClass, "flex items-center gap-4 p-4")}>
+      <div className="min-w-0 flex-1">
+        <p className="text-sm font-medium text-foreground">{title}</p>
+        {hint ? <p className="mt-0.5 text-[13px] text-muted-foreground">{hint}</p> : null}
+      </div>
+      {children}
+    </div>
+  );
+}
+
+const THEMES = [
+  { id: "浅色", label: "浅色" },
+  { id: "深色", label: "深色" },
+] as const;
+
+/** 预览色块故意写死：它展示的是另一套主题，不该跟当前主题变。 */
+const PREVIEW = { 浅色: "bg-white text-neutral-900", 深色: "bg-[#1c1c1e] text-white" } as const;
 
 function SettingsBody({ section }: { section: string }) {
   const uiPrefs = useSyncExternalStore(subscribeUiPrefs, getUiPrefs);
 
   if (section === "个人主页") {
     return (
-      <div className="mt-6 max-w-lg space-y-4 text-sm">
-        <div className="rounded-xl bg-white p-4">
-          <p className="text-xs text-[#999]">昵称</p>
-          <div className="mt-2 flex items-center">
-            <span>经办人</span>
-            <button
-              type="button"
-              disabled
-              aria-disabled="true"
-              className="ml-auto cursor-not-allowed text-[#b0b0b0] disabled:cursor-not-allowed"
-            >
-              修改昵称 · 未接入
-            </button>
-          </div>
-        </div>
+      <div className="space-y-3">
+        <Row title="昵称" hint="经办人">
+          <Button size="sm" disabled title="后端还没有接入">
+            修改昵称
+          </Button>
+        </Row>
       </div>
     );
   }
 
   if (section === "语言") {
     return (
-      <div className="mt-6 max-w-lg space-y-3 text-sm">
-        <div className="rounded-xl bg-white p-4">
-          <p className="font-medium">显示语言</p>
-          <p className="mt-1 text-[#888]">设置应用程序界面的显示语言。</p>
-          <p className="mt-2">简体中文</p>
-        </div>
+      <div className="space-y-3">
+        <Row title="显示语言" hint="设置应用程序界面的显示语言。">
+          <span className="text-sm text-foreground">简体中文</span>
+        </Row>
       </div>
     );
   }
 
   if (section === "主题") {
     return (
-      <div className="mt-6 grid max-w-2xl gap-3 sm:grid-cols-2">
-        <div className="rounded-xl bg-white p-4">
-          <p className="font-medium">基础</p>
-          <p className="mt-1 text-sm text-[#888]">经典明暗，简约耐看</p>
-          <div className="mt-3 flex gap-2">
-            {(["浅色", "深色"] as const).map((item) => (
-              <button key={item} type="button" className={cn("rounded-lg px-3 py-1 text-sm", uiPrefs.theme === item ? "bg-[#1a1a1a] text-white" : "bg-[#f3f3f4]")} onClick={() => setUiPrefs({ theme: item })}>
-                {item}
-              </button>
-            ))}
-          </div>
-          <p className="mt-3 text-xs text-[#999]">永久有效</p>
-          <p className="mt-3 text-xs text-[#888]">效果预览</p>
-          <div className={cn("mt-1 rounded-lg border border-[#e6e6e8] p-3 text-sm", uiPrefs.theme === "深色" ? "bg-[#1c1c1e] text-white" : "bg-white text-[#1a1a1a]")}>界面主题</div>
+      <div className="space-y-3">
+        <Row title="外观" hint="经典明暗，简约耐看。">
+          <SegmentedTabs label="外观" value={uiPrefs.theme} options={THEMES} onChange={(theme) => setUiPrefs({ theme })} />
+        </Row>
+        <div className={cn(panelClass, "p-4")}>
+          <p className="text-sm font-medium text-foreground">效果预览</p>
+          <div className={cn("mt-3 rounded-lg border border-border p-4 text-sm", PREVIEW[uiPrefs.theme])}>界面主题</div>
         </div>
-        <div className="rounded-xl bg-white p-4">
-          <p className="font-medium">个性</p>
-          <p className="mt-1 text-sm text-[#888]">换个皮肤，换种心情</p>
-          <p className="mt-3 text-sm text-[#888]">全部主题 · 敬请期待</p>
-        </div>
+        <Row title="个性主题" hint="换个皮肤，换种心情，敬请期待。" />
       </div>
     );
   }

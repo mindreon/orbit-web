@@ -1,7 +1,17 @@
+import { BadgeCheck, Eye, Globe, Search, Server, Star, TrendingUp } from "lucide-react";
 import { useEffect, useState, type ReactNode } from "react";
 import { Link } from "react-router";
 import { describeFailure } from "../lib/api";
 import { listMcpMarket, listMcpMarketCategories, type McpMarketCategory, type McpMarketServer } from "../lib/catalog";
+import { cn } from "../lib/cn";
+import { Alert } from "../ui/Alert";
+import { marketCardClass } from "../ui/card";
+import { CategoryPanel } from "../ui/CategoryPanel";
+import { Input } from "../ui/fields";
+import { Pagination } from "../ui/Pagination";
+import { Skeleton } from "../ui/Skeleton";
+
+const PAGE_SIZE = 30;
 
 function offlineDeploy() {
   return import.meta.env.VITE_ORBIT_OFFLINE === "1";
@@ -17,100 +27,48 @@ function formatStat(value: number) {
 function Stat({ label, value, children }: { label: string; value: number; children: ReactNode }) {
   if (value <= 0) return null;
   return (
-    <span className="inline-flex items-center gap-1 text-[12px] leading-4 text-muted-foreground" title={label}>
+    <span className="inline-flex items-center gap-1" title={label}>
       {children}
       {formatStat(value)}
     </span>
   );
 }
 
-function PlazaMark() {
-  return (
-    <svg aria-hidden="true" viewBox="0 0 60 60" className="h-[60px] w-[60px]">
-      <rect width="60" height="60" rx="8" className="fill-muted" />
-      <rect x="14" y="14" width="14" height="14" rx="3" className="fill-primary" />
-      <rect x="32" y="14" width="14" height="14" rx="3" className="fill-primary/60" />
-      <rect x="14" y="32" width="14" height="14" rx="3" className="fill-primary/80" />
-      <rect x="32" y="32" width="14" height="14" rx="3" className="fill-primary" />
-    </svg>
-  );
-}
-
 function PlazaCard({ item }: { item: McpMarketServer }) {
-  const categoryLabel = item.categoryName;
   const initial = item.name.trim().slice(0, 1) || "M";
   return (
-    <Link
-      to={`/experts/connectors/${encodeURIComponent(item.id)}`}
-      className="block rounded-xl border-2 border-transparent bg-muted px-[18px] py-[14px] text-inherit no-underline hover:border-primary"
-    >
-      <div className="flex items-start">
-        <div className="min-w-0 flex-1">
-          <div className="mb-0.5 flex items-center">
-            <h3 className="min-w-0 truncate text-[16px] font-semibold leading-7 text-foreground">{item.name}</h3>
-            <span
-              className={`ml-2 inline-flex h-5 shrink-0 items-center rounded-full bg-white px-2 text-[11px] font-medium leading-5 ${item.hosted ? "text-primary" : "text-[#329E87]"}`}
-            >
-              <svg aria-hidden="true" viewBox="0 0 14 14" className="mr-1 h-3.5 w-3.5 fill-current">
-                {item.hosted ? (
-                  <path d="M7 2.2 8.1 5H11l-2.3 1.7.9 2.8L7 7.8 4.4 9.5l.9-2.8L3 5h2.9z" />
-                ) : (
-                  <path d="M3 3.5h8v5.2H3zM4.2 9.8h5.6v1H4.2z" />
-                )}
-              </svg>
-              {item.hosted ? "Hosted" : "Local"}
-              {item.verified ? (
-                <span className="ml-1.5 inline-flex items-center border-l border-border pl-1.5 text-[#329E87]">
-                  <svg aria-hidden="true" viewBox="0 0 12 12" className="h-3 w-3 fill-current">
-                    <path d="M4.6 8.2 2.4 6l-.8.8 3 3L10.4 4l-.8-.8z" />
-                  </svg>
-                </span>
-              ) : null}
-            </span>
-          </div>
-          <div className="flex h-7 items-center gap-1 overflow-hidden">
-            {categoryLabel ? (
-              <span className="inline-block max-w-[180px] truncate rounded bg-white px-[5px] text-[12px] leading-5 text-foreground/80">{categoryLabel}</span>
-            ) : null}
-            {categoryLabel && item.categoryMore > 0 ? (
-              <span
-                aria-label={`还有 ${item.categoryMore} 个分类`}
-                className="inline-flex h-5 w-5 shrink-0 items-center justify-center rounded bg-accent text-[12px] leading-5 text-primary/70"
-              >
-                ···
-              </span>
-            ) : null}
-          </div>
-        </div>
-        <div className="ml-3.5 mt-1.5 flex h-[38px] w-[38px] shrink-0 items-center justify-center rounded-[5px] bg-white text-[16px] font-semibold text-primary">
-          {initial}
-        </div>
-      </div>
-      <p className="mb-3 h-8 overflow-hidden text-[12px] font-light leading-4 text-muted-foreground">{item.summary}</p>
-      <div className="flex items-center justify-between gap-3">
-        <span className="min-w-0 flex-1 truncate text-[12px] leading-4 text-muted-foreground">{item.author}</span>
-        <span className="inline-flex shrink-0 items-center gap-3">
+    <Link to={`/experts/connectors/${encodeURIComponent(item.id)}`} className={marketCardClass}>
+      <span className="flex items-center gap-3">
+        <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-accent text-[15px] font-semibold text-accent-foreground">{initial}</span>
+        <span className="min-w-0 flex-1">
+          <span className="flex items-center gap-1.5">
+            <span className="min-w-0 truncate text-[15px] font-semibold text-foreground">{item.name}</span>
+            {item.verified ? <BadgeCheck aria-label="已验证" className="h-4 w-4 shrink-0 text-success" /> : null}
+          </span>
+          <span className="block truncate text-xs text-muted-foreground">
+            {item.author}
+            {item.categoryName ? ` · ${item.categoryName}` : ""}
+          </span>
+        </span>
+      </span>
+      <span className="mb-3 mt-3 line-clamp-2 text-[13px] leading-5 text-muted-foreground">{item.summary}</span>
+      <span className="mt-auto flex items-center gap-2 border-t border-border pt-3 text-xs text-muted-foreground">
+        <span className={cn("shrink-0 rounded px-1.5 py-0.5", item.hosted ? "bg-accent text-accent-foreground" : "bg-success/10 text-success")}>{item.hosted ? "Hosted" : "Local"}</span>
+        <span className="ml-auto flex shrink-0 items-center gap-2.5 whitespace-nowrap">
           {item.hosted ? (
             <Stat label="托管服务调用次数" value={item.calls}>
-              <svg aria-hidden="true" viewBox="0 0 15 15" className="h-[15px] w-[15px] fill-current">
-                <path d="M3 11h2V7H3zm3.5 0h2V4h-2zM10 11h2V2h-2z" />
-              </svg>
+              <TrendingUp aria-hidden="true" className="h-3.5 w-3.5" />
             </Stat>
           ) : null}
           <Stat label="浏览" value={item.views}>
-            <svg aria-hidden="true" viewBox="0 0 16 16" className="h-4 w-4 fill-none stroke-current">
-              <path d="M1.5 8s2.4-4 6.5-4 6.5 4 6.5 4-2.4 4-6.5 4S1.5 8 1.5 8z" strokeWidth="1.2" />
-              <circle cx="8" cy="8" r="1.6" strokeWidth="1.2" />
-            </svg>
+            <Eye aria-hidden="true" className="h-3.5 w-3.5" />
           </Stat>
           <Stat label="收藏" value={item.stars}>
-            <svg aria-hidden="true" viewBox="0 0 16 16" className="h-4 w-4 fill-current">
-              <path d="m8 2.2 1.6 3.4 3.7.5-2.7 2.6.7 3.7L8 10.6l-3.3 1.8.7-3.7L2.7 6.1l3.7-.5z" />
-            </svg>
+            <Star aria-hidden="true" className="h-3.5 w-3.5" />
           </Stat>
-          <span className="text-[12px] leading-4 text-muted-foreground">{item.needsOnline ? "需要联网" : "可离线使用"}</span>
+          {item.needsOnline ? <Globe aria-label="需要联网" className="h-3.5 w-3.5" /> : null}
         </span>
-      </div>
+      </span>
     </Link>
   );
 }
@@ -118,8 +76,7 @@ function PlazaCard({ item }: { item: McpMarketServer }) {
 export function McpMarketCatalog() {
   const [keyword, setKeyword] = useState("");
   const [category, setCategory] = useState("");
-  const [hostedOn, setHostedOn] = useState(false);
-  const [localOn, setLocalOn] = useState(false);
+  const [serviceType, setServiceType] = useState<"" | "hosted" | "local">("");
   const [page, setPage] = useState(1);
   const [categories, setCategories] = useState<McpMarketCategory[]>([]);
   const [visible, setVisible] = useState<McpMarketServer[]>([]);
@@ -130,7 +87,6 @@ export function McpMarketCatalog() {
   const [error, setError] = useState("");
   const offline = offlineDeploy();
   const needsOnline = offline ? "false" : "";
-  const serviceType = hostedOn !== localOn ? (hostedOn ? "hosted" : "local") : "";
 
   useEffect(() => {
     let gone = false;
@@ -169,137 +125,87 @@ export function McpMarketCatalog() {
     };
   }, [keyword, category, serviceType, needsOnline, page]);
 
-  const filtering = keyword.trim() !== "" || category !== "" || hostedOn || localOn;
-  const pages = Math.max(1, Math.ceil(total / 30));
+  const pages = Math.max(1, Math.ceil(total / PAGE_SIZE));
   const current = Math.min(page, pages);
 
-  function toggleType(kind: "hosted" | "local") {
-    if (kind === "hosted") setHostedOn((value) => !value);
-    else setLocalOn((value) => !value);
-    setPage(1);
-  }
-
   return (
-    <section aria-label="国内 MCP 市场" className="-mx-6 mt-10 bg-white px-6 py-8 text-foreground">
-      <div className="mb-6 flex items-center">
-        <div className="mr-2 shrink-0">
-          <PlazaMark />
-        </div>
-        <div className="min-w-0 flex-1">
-          <h2 className="mb-3 text-[18px] font-semibold leading-6">
-            ModelScope
-            <span className="ml-3 text-primary">MCP 广场</span>
-          </h2>
-          <p className="text-[12px] leading-4 text-muted-foreground">聚合优质MCP资源，拓展模型智能边界</p>
-        </div>
-      </div>
-      {offline ? <p className="mb-4 text-[14px] text-foreground/80">当前是离线部署，需要联网的服务不显示。</p> : null}
-      <div className="flex items-start">
-        <aside className="sticky top-0 mr-5 hidden max-h-[calc(100vh-70px)] w-[15vw] min-w-[190px] max-w-[270px] overflow-y-auto lg:block">
-          <div className="mb-5 mt-1">
-            <span className="text-[16px] font-semibold text-foreground">MCP 服务</span>
-          </div>
-          {categories.map((item) => {
-            const active = category === item.key;
-            return (
-              <button
-                key={item.key}
-                type="button"
-                className={`mb-4 flex w-full items-center justify-between rounded-xl py-[14px] pl-5 pr-[14px] text-left ${active ? "bg-accent" : "bg-muted hover:bg-accent"}`}
-                onClick={() => {
-                  setCategory(active ? "" : item.key);
-                  setPage(1);
-                }}
-              >
-                <span className={`min-w-0 truncate text-[14px] leading-5 ${active ? "font-semibold text-primary" : "font-medium text-foreground"}`}>{item.name}</span>
-                <span className="ml-2 shrink-0 rounded-full bg-white px-[7px] text-[12px] font-medium leading-5 text-foreground/80">{item.count}</span>
-              </button>
-            );
-          })}
-        </aside>
-        <div className="min-w-0 flex-1">
-          <div className="mb-4 flex items-center">
-            <input
-              aria-label="搜索市场服务"
-              value={keyword}
-              placeholder={`搜索MCP服务（共${total}个）`}
-              className="h-9 w-full rounded-[5px] border border-muted bg-muted px-3 text-[14px] text-foreground outline-none placeholder:text-muted-foreground hover:border-primary hover:bg-white focus:border-primary focus:bg-white lg:w-[calc(33.333%-9px)]"
-              onChange={(event) => {
-                setKeyword(event.target.value);
-                setPage(1);
-              }}
-            />
-            <div className="ml-5 flex flex-1 items-center justify-end">
-              <span className="mr-2 shrink-0 text-[14px] font-medium">服务类型：</span>
-              <button
-                type="button"
-                className={`mr-2 inline-flex h-6 items-center rounded px-2 text-[14px] ${hostedOn ? "bg-accent text-primary" : "bg-muted text-muted-foreground hover:bg-accent hover:text-primary"}`}
-                onClick={() => toggleType("hosted")}
-              >
-                Hosted
-              </button>
-              <button
-                type="button"
-                className={`inline-flex h-6 items-center rounded px-2 text-[14px] ${localOn ? "bg-accent text-primary" : "bg-muted text-muted-foreground hover:bg-accent hover:text-primary"}`}
-                onClick={() => toggleType("local")}
-              >
-                Local
-              </button>
+    <section aria-label="国内 MCP 市场" className="flex min-h-0 flex-1 flex-col">
+      <div className="flex min-h-0 flex-1">
+        <CategoryPanel
+          title="MCP 服务分类"
+          value={category}
+          options={categories}
+          onChange={(key) => {
+            setCategory(key);
+            setPage(1);
+          }}
+        />
+        <div className="min-h-0 min-w-0 flex-1 overflow-auto bg-muted px-6 py-5">
+          <div className="mx-auto max-w-6xl">
+            {offline ? <Alert tone="info" className="mb-4">当前是离线部署，需要联网的服务不显示。</Alert> : null}
+            <div className="flex flex-wrap items-center gap-3">
+              <label className="relative block w-full sm:w-80">
+                <Search aria-hidden="true" className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+                <Input
+                  aria-label="搜索市场服务"
+                  value={keyword}
+                  placeholder={`搜索 MCP 服务（共 ${total} 个）`}
+                  className="pl-9"
+                  onChange={(event) => {
+                    setKeyword(event.target.value);
+                    setPage(1);
+                  }}
+                />
+              </label>
+              <div role="group" aria-label="服务类型" className="inline-flex items-center gap-2 text-sm text-muted-foreground">
+                服务类型
+                {(["hosted", "local"] as const).map((kind) => (
+                  <button
+                    key={kind}
+                    type="button"
+                    aria-pressed={serviceType === kind}
+                    className={cn("h-8 rounded-lg border px-3", serviceType === kind ? "border-primary/40 bg-accent font-medium text-accent-foreground" : "border-border bg-card hover:bg-secondary")}
+                    onClick={() => {
+                      setServiceType((value) => (value === kind ? "" : kind));
+                      setPage(1);
+                    }}
+                  >
+                    {kind === "hosted" ? "Hosted" : "Local"}
+                  </button>
+                ))}
+              </div>
             </div>
-          </div>
-          {filtering ? (
-            <div className="mb-4 flex items-center gap-2 text-[14px] text-muted-foreground">
-              <span className="whitespace-nowrap">
-                共找到 <span className="text-primary">{total}</span> 个结果
-              </span>
-              <button
-                type="button"
-                className="text-[14px] text-primary"
-                onClick={() => {
-                  setKeyword("");
-                  setCategory("");
-                  setHostedOn(false);
-                  setLocalOn(false);
-                  setPage(1);
-                }}
-              >
-                清空
-              </button>
-            </div>
-          ) : null}
-          {error ? (
-            <p className="mt-6 text-[14px] text-foreground/80">{error}</p>
-          ) : visible.length === 0 ? (
-            <p className="mt-6 text-[14px] text-foreground/80">
-              {loading ? "正在读取目录。" : offline && stored === 0 ? "离线部署不显示需要联网的服务。这份目录里的服务都要联网。" : "没有匹配的服务。"}
-            </p>
-          ) : (
-            <div className="grid grid-cols-[repeat(auto-fill,minmax(320px,1fr))] gap-5">
+            {error ? <Alert className="mt-4">{error}</Alert> : null}
+            {loading && visible.length === 0 ? (
+              <div className="mt-4 grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-3">
+                {Array.from({ length: 6 }, (_, index) => (
+                  <Skeleton key={index} className="h-[172px]" />
+                ))}
+              </div>
+            ) : null}
+            {!loading && !error && visible.length === 0 ? (
+              <p className="mt-6 text-sm text-muted-foreground">
+                {offline && stored === 0 ? "离线部署不显示需要联网的服务。这份目录里的服务都要联网。" : "没有匹配的服务。"}
+              </p>
+            ) : null}
+            <ul className="mt-4 grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-3">
               {visible.map((item) => (
-                <PlazaCard key={item.id} item={item} />
+                <li key={item.id}>
+                  <PlazaCard item={item} />
+                </li>
               ))}
+            </ul>
+            <div className="mt-8 flex items-start gap-2 text-xs leading-5 text-muted-foreground">
+              <Server aria-hidden="true" className="mt-0.5 h-3.5 w-3.5 shrink-0" />
+              <div>
+                <p>数据来源 modelscope.cn/mcp。同名只留一条，打开这一页通过接口读取已经存好的目录，只展示，不在这里连接，也不填写密钥。广场标注 {plazaTotal} 条，这里收了 {stored} 条。</p>
+                <p className="mt-1">提示：本广场内部分 MCP 由第三方提供。使用前，请务必评估其安全性并同意相关协议。因使用第三方 MCP 产生的任何风险需由您自行承担。</p>
+              </div>
             </div>
-          )}
-          {pages > 1 ? (
-            <div className="mt-10 flex flex-row-reverse items-center gap-2 text-[14px] text-foreground/80">
-              <button type="button" className="h-8 rounded bg-muted px-3 disabled:opacity-40" disabled={current >= pages} onClick={() => setPage(current + 1)}>
-                下一页
-              </button>
-              <span>
-                {page} / {pages}
-              </span>
-              <button type="button" className="h-8 rounded bg-muted px-3 disabled:opacity-40" disabled={current <= 1} onClick={() => setPage(current - 1)}>
-                上一页
-              </button>
-            </div>
-          ) : null}
+          </div>
         </div>
       </div>
-      <div className="mt-8 text-[12px] leading-5 text-muted-foreground">
-        <p>modelscope.cn/mcp</p>
-        <p>同名只留一条。打开这一页通过接口读取已经存好的目录，只展示，不在这里连接，也不填写密钥。广场标注 {plazaTotal} 条，这里收了 {stored} 条。</p>
-        <p className="mt-2">提示：本广场内部分MCP由第三方提供。使用前，请务必评估其安全性并同意相关协议。因使用第三方MCP产生的任何风险需由您自行承担。</p>
-      </div>
+      <Pagination page={current} pageSize={PAGE_SIZE} total={total} onPage={setPage} />
     </section>
   );
 }

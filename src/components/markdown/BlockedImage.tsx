@@ -13,14 +13,14 @@ export function BlockedImage({ src, alt }: { src?: string; alt?: string }) {
   }
   return (
     <span className="md-image-blocked" data-testid="blocked-image">
-      <ImageOff className="h-4 w-4 shrink-0 text-[#999]" aria-hidden />
+      <ImageOff className="h-4 w-4 shrink-0 text-muted-foreground/70" aria-hidden />
       <span className="min-w-0">
-        <span className="block text-xs text-[#666]">外部图片未自动加载{alt ? ` · ${alt}` : ""}</span>
-        <span className="block truncate font-mono text-[11px] text-[#999]" title={src}>
+        <span className="block text-xs text-muted-foreground">外部图片未自动加载{alt ? ` · ${alt}` : ""}</span>
+        <span className="block truncate font-mono text-[11px] text-muted-foreground/70" title={src}>
           {src}
         </span>
       </span>
-      <button type="button" className="shrink-0 rounded border bg-white px-2 py-0.5 text-xs hover:bg-[#f6f6f7]" onClick={() => setAllowed(true)}>
+      <button type="button" className="shrink-0 rounded border bg-card px-2 py-0.5 text-xs hover:bg-secondary" onClick={() => setAllowed(true)}>
         加载图片
       </button>
     </span>
