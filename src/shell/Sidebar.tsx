@@ -2,7 +2,7 @@ import { Clock, FolderKanban, GraduationCap, Library, PanelLeftClose, Plug, Sear
 import { useState } from "react";
 import { NavLink } from "react-router";
 import { cn } from "../lib/cn";
-import { GREYED_NAV_LABELS, PRIMARY_NAV, type NavIcon, type NavItem } from "./nav";
+import { PRIMARY_NAV, type NavIcon, type NavItem } from "./nav";
 import { TaskListSection } from "./TaskListSection";
 
 const ICONS: Record<NavIcon, LucideIcon> = {
@@ -28,6 +28,7 @@ function NavEntry({ item }: { item: NavItem }) {
     <NavLink to={item.to} end={item.end} className={link()}>
       <Icon aria-hidden="true" className="h-4 w-4" />
       {item.label}
+      {item.soon ? <span className="ml-auto rounded bg-secondary px-1.5 py-0.5 text-[11px] text-muted-foreground">即将</span> : null}
     </NavLink>
   );
 }
@@ -63,7 +64,7 @@ export function Sidebar({ onCollapse }: { onCollapse: () => void }) {
         </div>
       ) : null}
       <nav aria-label="主导航" className="shrink-0 space-y-0.5 px-3">
-        {PRIMARY_NAV.filter((item) => !GREYED_NAV_LABELS.has(item.label)).map((item) => (
+        {PRIMARY_NAV.map((item) => (
           <NavEntry key={item.to} item={item} />
         ))}
       </nav>
