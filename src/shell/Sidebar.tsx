@@ -24,43 +24,11 @@ function link() {
 
 function NavEntry({ item }: { item: NavItem }) {
   const Icon = ICONS[item.icon];
-  if (GREYED_NAV_LABELS.has(item.label)) {
-    return (
-      <span aria-disabled="true" className={cn(ITEM, "cursor-not-allowed text-muted-foreground/60")}>
-        <Icon aria-hidden="true" className="h-4 w-4" />
-        {item.label}
-        <span className="ml-auto rounded bg-secondary px-1.5 py-0.5 text-[11px] text-muted-foreground">即将</span>
-      </span>
-    );
-  }
-  if (!item.children) {
-    return (
-      <NavLink to={item.to} end={item.end} className={link()}>
-        <Icon aria-hidden="true" className="h-4 w-4" />
-        {item.label}
-      </NavLink>
-    );
-  }
   return (
-    <div className="group relative">
-      <NavLink to={item.to} end={item.end} className={link()}>
-        <Icon aria-hidden="true" className="h-4 w-4" />
-        {item.label}
-      </NavLink>
-      <div className="absolute left-full top-0 z-30 hidden pl-1 group-focus-within:block group-hover:block">
-        <div className="w-40 rounded-xl border border-border bg-card p-1.5 shadow-lg">
-          {item.children.map((child) => {
-            const ChildIcon = ICONS[child.icon];
-            return (
-              <NavLink key={child.to} to={child.to} end={child.end} className={({ isActive }) => cn(ITEM, "text-foreground/80 hover:bg-secondary", isActive && "font-medium text-accent-foreground")}>
-                <ChildIcon aria-hidden="true" className="h-4 w-4" />
-                {child.label}
-              </NavLink>
-            );
-          })}
-        </div>
-      </div>
-    </div>
+    <NavLink to={item.to} end={item.end} className={link()}>
+      <Icon aria-hidden="true" className="h-4 w-4" />
+      {item.label}
+    </NavLink>
   );
 }
 
@@ -95,7 +63,7 @@ export function Sidebar({ onCollapse }: { onCollapse: () => void }) {
         </div>
       ) : null}
       <nav aria-label="主导航" className="shrink-0 space-y-0.5 px-3">
-        {PRIMARY_NAV.map((item) => (
+        {PRIMARY_NAV.filter((item) => !GREYED_NAV_LABELS.has(item.label)).map((item) => (
           <NavEntry key={item.to} item={item} />
         ))}
       </nav>
