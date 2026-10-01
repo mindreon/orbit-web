@@ -1,13 +1,5 @@
 import { api } from "./api";
 
-export interface Persona {
-  id: string;
-  name: string;
-  instructions: string;
-  mcpConnectorIds?: string[];
-  createdAt: string;
-}
-
 export interface McpHeaderRef {
   name: string;
   env: string;
@@ -26,39 +18,28 @@ export interface McpConnector {
   createdAt: string;
 }
 
-export function listPersonas() {
-  return api<{ items: Persona[] | null }>("/v1/personas");
-}
-
-export function createPersona(body: { name: string; instructions: string }) {
-  return api<Persona>("/v1/personas", {
-    method: "POST",
-    body: JSON.stringify(body),
-  });
-}
-
 export function listMcpConnectors() {
   return api<{ items: McpConnector[] | null }>("/v1/mcp-connectors");
 }
 
 export interface Skill {
   id: string;
-  slug: string;
   handle: string;
+  slug: string;
   name: string;
   description: string;
+  descriptionEn: string;
   category: string;
   categoryName: string;
+  tags: string[];
+  license: string;
   iconUrl: string;
+  sourceUrl: string;
   downloads: number;
-  stars: number;
-  source: string;
-  version: string;
-  requiresApiKey: boolean;
-  paid: boolean;
-  score: number;
+  visits: number;
+  likes: number;
   updatedAt: string;
-  trendingRank: number;
+  source: string;
 }
 
 export interface SkillCategory {
@@ -85,7 +66,7 @@ export function listSkills(query: SkillQuery = {}) {
   if (query.page) params.set("page", String(query.page));
   params.set("pageSize", "24");
   const qs = params.toString();
-  return api<{ items: Skill[] | null; total: number; page: number; pageSize: number; syncedAt: string }>(`/v1/skills${qs ? `?${qs}` : ""}`);
+  return api<{ items: Skill[] | null; total: number; page: number; pageSize: number; installedAt: string }>(`/v1/skills${qs ? `?${qs}` : ""}`);
 }
 
 export function listSkillCategories() {
@@ -95,32 +76,6 @@ export function listSkillCategories() {
 export interface SkillTextFile {
   path: string;
   body: string;
-}
-
-export interface SkillPageMeta {
-  summary?: string;
-  summaryZh?: string;
-  subCategories?: { key: string; name: string }[];
-  safe?: boolean;
-  score?: number;
-  version?: string;
-  updatedAt?: number;
-  versionCreatedAt?: number;
-  fileIndex?: { path: string; size: number }[];
-  versions?: { version: string; changelog?: string; createdAt?: number }[];
-  evaluation?: {
-    userSummary?: string;
-    createdAt?: number;
-    score: number;
-    dimensions?: {
-      key: string;
-      label: string;
-      labelZh: string;
-      description?: string;
-      score: number;
-      summary?: string;
-    }[];
-  };
 }
 
 function skillApiPath(handle: string, slug: string) {
@@ -134,8 +89,7 @@ export function getSkill(handle: string, slug: string) {
 
 export function listSkillFiles(handle: string, slug: string) {
   const path = skillApiPath(handle, slug).replace("/v1/skills/", "/v1/skill-files/");
-  // The first open of a skill may copy the package. That is slower than a saved read.
-  return api<{ items: SkillTextFile[] | null; meta?: SkillPageMeta }>(path, { timeoutMs: 60000 });
+  return api<{ items: SkillTextFile[] | null }>(path);
 }
 
 export interface McpMarketServer {
@@ -152,6 +106,7 @@ export interface McpMarketServer {
   verified: boolean;
   hosted: boolean;
   needsOnline: boolean;
+  source: string;
 }
 
 export interface McpMarketCategory {
@@ -166,6 +121,7 @@ export interface McpMarketQuery {
   category?: string;
   serviceType?: "" | "hosted" | "local";
   needsOnline?: "" | "true" | "false";
+  source?: string;
   page?: number;
 }
 
@@ -175,10 +131,11 @@ export function listMcpMarket(query: McpMarketQuery = {}) {
   if (query.category) params.set("category", query.category);
   if (query.serviceType) params.set("serviceType", query.serviceType);
   if (query.needsOnline) params.set("needsOnline", query.needsOnline);
+  if (query.source) params.set("source", query.source);
   if (query.page) params.set("page", String(query.page));
   params.set("pageSize", "30");
   const qs = params.toString();
-  return api<{ items: McpMarketServer[] | null; total: number; stored: number; plazaTotal: number; page: number; pageSize: number }>(
+  return api<{ items: McpMarketServer[] | null; total: number; stored: number; page: number; pageSize: number }>(
     `/v1/mcp-market?${qs}`,
   );
 }
@@ -210,6 +167,85 @@ export interface McpMarketDetail extends McpMarketServer {
 
 export function getMcpMarket(id: string) {
   return api<McpMarketDetail>(`/v1/mcp-market/${encodeURIComponent(id)}`);
+}
+
+export interface AgentModel {
+  name: string;
+  supplier: string;
+  protocol: string;
+}
+
+export interface AgentRef {
+  name: string;
+  description: string;
+}
+
+export interface AgentPrompt {
+  filename: string;
+  content: string;
+}
+
+export interface Agent {
+  id: string;
+  handle: string;
+  slug: string;
+  name: string;
+  description: string;
+  framework: string;
+  license: string;
+  logoUrl: string;
+  catalogues: string[];
+  models: AgentModel[];
+  mcps: AgentRef[];
+  skills: AgentRef[];
+  systemPrompts: AgentPrompt[];
+  readme: string;
+  files: SkillTextFile[];
+  stars: number;
+  downloads: number;
+  visits: number;
+  updatedAt: string;
+  source: string;
+}
+
+export interface AgentQuery {
+  sortBy?: string;
+  catalogue?: string;
+  keyword?: string;
+  page?: number;
+}
+
+export function listAgents(query: AgentQuery = {}) {
+  const params = new URLSearchParams();
+  if (query.sortBy) params.set("sortBy", query.sortBy);
+  if (query.catalogue) params.set("catalogue", query.catalogue);
+  if (query.keyword) params.set("keyword", query.keyword);
+  if (query.page) params.set("page", String(query.page));
+  params.set("pageSize", "24");
+  const qs = params.toString();
+  return api<{ items: Agent[] | null; total: number; page: number; pageSize: number }>(`/v1/agents${qs ? `?${qs}` : ""}`);
+}
+
+export function agentPath(handle: string, slug: string) {
+  if (!slug) return "/experts/agents";
+  if (!handle) return `/experts/agents/${encodeURIComponent(slug)}`;
+  return `/experts/agents/${encodeURIComponent(handle)}/${encodeURIComponent(slug)}`;
+}
+
+export function getAgent(handle: string, slug: string) {
+  return api<Agent>(`/v1/agents/${encodeURIComponent(handle)}/${encodeURIComponent(slug)}`);
+}
+
+export function mcpMarketIconPath(id: string) {
+  return `/v1/mcp-market/${encodeURIComponent(id)}/icon`;
+}
+
+export function skillIconPath(handle: string, slug: string) {
+  return `/v1/skills/${encodeURIComponent(handle)}/${encodeURIComponent(slug)}/icon`;
+}
+
+export function agentIconPath(handle: string, slug: string) {
+  return `/v1/agents/${encodeURIComponent(handle)}/${encodeURIComponent(slug)}/icon`;
 }
 
 export function createMcpConnector(body: {

@@ -20,7 +20,7 @@ export function SegmentedTabs<T extends string>({ label, value, options, onChang
   );
 }
 
-/** 区块标题式的页签（大字号，选中的更深），像 WorkBuddy 的"推荐 / SkillHub / 套件"。 */
+/** 区块标题式的页签（大字号，选中的更深），像广场页的"全部 / ModelScope / NEXA"。 */
 export function HeadingTabs<T extends string>({ label, value, options, onChange }: { label: string; value: T; options: readonly { id: T; label: string }[]; onChange: (id: T) => void }) {
   return (
     <div role="tablist" aria-label={label} className="flex items-baseline gap-5">

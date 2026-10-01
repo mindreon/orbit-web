@@ -1,12 +1,15 @@
 import { ArrowUp } from "lucide-react";
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { useNavigate } from "react-router";
 import { PermissionChip } from "../components/tasks/PermissionChip";
 import { describeFailure } from "../lib/api";
-import { createTask, listProfiles, type Profile } from "../lib/tasks";
+import { ConfigChips } from "../components/tasks/ConfigChips";
+import { ConfigMenu } from "../components/tasks/ConfigMenu";
+import { useConfigCatalog } from "../lib/configCatalog";
+import { draftToInput, emptyDraft, isDefaultDraft, type ConfigDraft } from "../lib/taskConfig";
+import { createTask } from "../lib/tasks";
 import { useTasksStore } from "../lib/tasksStore";
 import { Alert } from "../ui/Alert";
-import { Select } from "../ui/fields";
 
 const EXAMPLES = ["梳理本周发布风险", "给这个 PR 写一份审查清单", "总结当前待审批的事项"];
 const TITLE_MAX = 30;
@@ -25,28 +28,18 @@ export function NewTaskPage() {
   const navigate = useNavigate();
   const upsert = useTasksStore((state) => state.upsert);
   const [goal, setGoal] = useState("");
-  const [profiles, setProfiles] = useState<readonly Profile[]>([]);
-  const [profile, setProfile] = useState("");
+  const catalog = useConfigCatalog();
+  const [draft, setDraft] = useState<ConfigDraft>(emptyDraft);
   const [sending, setSending] = useState(false);
   const [error, setError] = useState("");
   const empty = goal.trim() === "";
-
-  useEffect(() => {
-    let gone = false;
-    listProfiles()
-      .then((items) => !gone && setProfiles(items))
-      .catch(() => undefined);
-    return () => {
-      gone = true;
-    };
-  }, []);
 
   const submit = async () => {
     if (empty || sending) return;
     setSending(true);
     setError("");
     try {
-      const created = await createTask({ title: deriveTitle(goal), goal: goal.trim(), ...(profile ? { profile } : {}) });
+      const created = await createTask({ title: deriveTitle(goal), goal: goal.trim(), ...(isDefaultDraft(draft) ? {} : { config: draftToInput(draft) }) });
       upsert(created);
       navigate(`/tasks/${created.task_id}`);
     } catch (err) {
@@ -82,18 +75,10 @@ export function NewTaskPage() {
               }
             }}
           />
-          <div className="flex items-center gap-2 px-2 pb-2">
+          <ConfigChips draft={draft} onChange={setDraft} catalog={catalog} />
+          <div className="flex items-center gap-2 px-2 pb-2 pt-1">
+            <ConfigMenu draft={draft} onChange={setDraft} catalog={catalog} />
             <PermissionChip />
-            {profiles.length > 0 ? (
-              <Select aria-label="模式" value={profile} className="text-sm" onChange={(event) => setProfile(event.target.value)}>
-                <option value="">默认模式</option>
-                {profiles.map((item) => (
-                  <option key={item.ref} value={item.ref}>
-                    {item.ref}
-                  </option>
-                ))}
-              </Select>
-            ) : null}
             <span className="ml-auto" />
             <button
               type="button"

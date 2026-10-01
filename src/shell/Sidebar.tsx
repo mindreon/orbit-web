@@ -1,14 +1,14 @@
-import { Clock, FolderKanban, GraduationCap, Library, PanelLeftClose, Plug, Search, Settings as SettingsIcon, Sparkles, SquarePen, type LucideIcon } from "lucide-react";
+import { Bot, Clock, FolderKanban, Library, PanelLeftClose, Plug, Search, Settings as SettingsIcon, Sparkles, SquarePen, type LucideIcon } from "lucide-react";
 import { useState } from "react";
 import { NavLink } from "react-router";
 import { cn } from "../lib/cn";
-import { PRIMARY_NAV, type NavIcon, type NavItem } from "./nav";
+import { NAV_GROUPS, PRIMARY_NAV, type NavGroupId, type NavIcon, type NavItem } from "./nav";
 import { TaskListSection } from "./TaskListSection";
 
 const ICONS: Record<NavIcon, LucideIcon> = {
   "square-pen": SquarePen,
-  "graduation-cap": GraduationCap,
   sparkles: Sparkles,
+  bot: Bot,
   plug: Plug,
   "folder-kanban": FolderKanban,
   clock: Clock,
@@ -30,6 +30,19 @@ function NavEntry({ item }: { item: NavItem }) {
       {item.label}
       {item.soon ? <span className="ml-auto rounded bg-secondary px-1.5 py-0.5 text-[11px] text-muted-foreground">即将</span> : null}
     </NavLink>
+  );
+}
+
+function NavGroup({ id, label }: { id: NavGroupId; label: string }) {
+  const items = PRIMARY_NAV.filter((item) => item.group === id);
+  if (items.length === 0) return null;
+  return (
+    <>
+      <p className="mt-4 flex h-6 items-center px-3 text-[12px] font-medium text-muted-foreground">{label}</p>
+      {items.map((item) => (
+        <NavEntry key={item.to} item={item} />
+      ))}
+    </>
   );
 }
 
@@ -64,8 +77,11 @@ export function Sidebar({ onCollapse }: { onCollapse: () => void }) {
         </div>
       ) : null}
       <nav aria-label="主导航" className="shrink-0 space-y-0.5 px-3">
-        {PRIMARY_NAV.map((item) => (
+        {PRIMARY_NAV.filter((item) => !item.group).map((item) => (
           <NavEntry key={item.to} item={item} />
+        ))}
+        {NAV_GROUPS.map((group) => (
+          <NavGroup key={group.id} id={group.id} label={group.label} />
         ))}
       </nav>
       <div className="mt-3 min-h-0 flex-1 overflow-y-auto px-3 pb-3">

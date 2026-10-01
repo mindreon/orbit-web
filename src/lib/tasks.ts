@@ -1,4 +1,5 @@
 import { api } from "./api";
+import type { TaskConfigInput } from "./taskConfig";
 export type TaskStatus =
   | "CREATED" | "PLANNING" | "RUNNING" | "WAITING" | "PAUSED"
   | "PAUSED_NEEDS_REVIEW" | "TAKEN_OVER" | "COMPLETED" | "FAILED" | "CANCELLED";
@@ -68,7 +69,7 @@ export async function listTasks(): Promise<Task[]> {
   return body.items ?? [];
 }
 
-export function createTask(input: { title: string; goal: string; profile?: string }): Promise<Task> {
+export function createTask(input: { title: string; goal: string; profile?: string; config?: TaskConfigInput }): Promise<Task> {
   return api<Task>("/v1/tasks", { method: "POST", body: JSON.stringify(input) });
 }
 

@@ -1,6 +1,6 @@
 # orbit-web
 
-Orbit 的前端：任务中心（TaskWorkflow）、技能、连接器和助理配置。技术栈：Vite、React 19、React Router、Tailwind。所有数据来自 orbit-control 的 `/v1` 接口，浏览器不直连 Temporal 或模型。
+Orbit 的前端：任务中心（TaskWorkflow）、专家、技能和连接器。技术栈：Vite、React 19、React Router、Tailwind。所有数据来自 orbit-control 的 `/v1` 接口，浏览器不直连 Temporal 或模型。
 
 ## 本地运行
 

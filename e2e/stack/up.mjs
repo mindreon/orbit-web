@@ -11,6 +11,7 @@
  */
 import { spawn, execFileSync } from "node:child_process";
 import { createWriteStream, existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { gzipSync } from "node:zlib";
 import { createServer as createHttpServer } from "node:http";
 import { connect, createServer as createTcpServer } from "node:net";
 import { join, resolve } from "node:path";
@@ -193,8 +194,33 @@ const MEMBERS_FILE = join(ROOT, "control-members");
 const writeMembers = (active) => writeFileSync(MEMBERS_FILE, REPLICAS.filter((r) => active.has(r.index)).map((r) => r.url).join(","));
 writeMembers(new Set(REPLICAS.map((r) => r.index)));
 
+// A small skill text sidecar for the catalog (15 T8.4). The real one is 0.5 GB; control reads this one from
+// ORBIT_CATALOG_DIR the same way. Three skills of the shipped snapshot: one that can be used, one without a SKILL.md,
+// and one with no text at all (the e2e tests tell them apart by how control answers).
+const SKILL_FIXTURE = {
+  usable: "@0froq/nuxt",
+  noSkillMd: "@0froq/pinia",
+  noText: "@0froq/unocss",
+  mark: "e2e-skill-mark",
+};
+const CATALOG_DIR = join(ROOT, "catalog");
+mkdirSync(CATALOG_DIR, { recursive: true });
+writeFileSync(
+  join(CATALOG_DIR, "skills_text.json.gz"),
+  gzipSync(
+    [
+      { id: SKILL_FIXTURE.usable, files: [
+        { path: "SKILL.md", body: `---\nname: E2E Pirate\ndescription: Answer like a pirate (${SKILL_FIXTURE.mark}).\n---\nSay arr.` },
+        { path: "references/words.md", body: "ahoy" },
+      ] },
+      { id: SKILL_FIXTURE.noSkillMd, files: [{ path: "README.md", body: "no SKILL.md here" }] },
+    ].map((row) => JSON.stringify(row)).join("\n") + "\n",
+  ),
+);
+
 const controlEnvFor = (replica) => ({
   ...temporal,
+  ORBIT_CATALOG_DIR: CATALOG_DIR,
   PORT: String(replica.port),
   ORBIT_INTERNAL_ADDR: `127.0.0.1:${replica.internalPort}`,
   ORBIT_INTERNAL_TOKEN: TOKEN,

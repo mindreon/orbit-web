@@ -3,7 +3,8 @@ import { useParams } from "react-router";
 import { describeFailure } from "../lib/api";
 import { Alert } from "../ui/Alert";
 import { PageHeader } from "../ui/PageHeader";
-import { getMcpMarket, type McpMarketDetail, type McpMarketTool } from "../lib/catalog";
+import { getMcpMarket, mcpMarketIconPath, type McpMarketDetail, type McpMarketTool } from "../lib/catalog";
+import { CatalogAvatar } from "../components/CatalogAvatar";
 
 function formatStat(value: number) {
   if (value >= 1_000_000_000) return `${(value / 1_000_000_000).toFixed(1)}b`;
@@ -12,9 +13,22 @@ function formatStat(value: number) {
   return String(value);
 }
 
+// 快照按安全约定不含 URL，readme 里的徽章和链接已经失效。徽章行直接丢弃，
+// 行内链接 [文字](残缺地址) 降级成纯文字，剩下的正文才值得展示。
+function cleanReadmeBlock(block: string) {
+  const lines = block
+    .split("\n")
+    .filter((line) => !/^\s*(\[!\[|!\[)/.test(line))
+    .map((line) => line.replace(/\[([^\]]*)\]\([^)]*\)/g, "$1"));
+  return lines.join("\n").replace(/\n{2,}/g, "\n").trim();
+}
+
 function ReadmeBody({ text }: { text: string }) {
   if (!text.trim()) return <p className="text-[14px] leading-6 text-muted-foreground">这份快照没有服务说明。</p>;
-  const blocks = text.split(/\n{2,}/);
+  const blocks = text
+    .split(/\n{2,}/)
+    .map((block) => (block.startsWith("```") ? block : cleanReadmeBlock(block)))
+    .filter((block) => block.trim());
   return (
     <div className="space-y-3 text-[14px] font-light leading-6 text-foreground">
       {blocks.map((block, index) => {
@@ -113,9 +127,7 @@ export function McpMarketDetailPage() {
         {item ? (
           <>
             <div className="flex items-start gap-4">
-              <div className="flex h-[60px] w-[60px] shrink-0 items-center justify-center rounded-lg bg-muted text-[22px] font-semibold text-primary">
-                {initial}
-              </div>
+              <CatalogAvatar src={mcpMarketIconPath(id)} fallback={initial} className="h-[60px] w-[60px] text-[22px]" />
               <div className="min-w-0 flex-1">
                 <div className="flex flex-wrap items-center gap-2">
                   <h1 className="text-[18px] font-semibold leading-6 text-foreground">{item.name}</h1>

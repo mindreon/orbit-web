@@ -341,12 +341,14 @@ test("E14 two calls need approval in one step: a person allows the first and ref
 
   // AgentScope asks about one call at a time; the other waits its turn inside the same attempt.
   await expect(page.getByTestId("approval-item")).toHaveCount(1, { timeout: 30_000 });
-  const firstApproval = (await page.getByTestId("approval-item").innerText()).split("\n")[0];
+  // The item opens with the same heading every time; its approval id is what tells one request from the next.
+  const firstApproval = (await page.getByTestId("approval-item").innerText()).split("\n").find((line) => line.startsWith("apr_")) ?? "";
+  expect(firstApproval).not.toBe("");
   await page.getByRole("button", { name: "批准", exact: true }).click();
   // The second call asks next: a different approval replaces the first one in the inbox.
   await expect.poll(async () => {
     const items = page.getByTestId("approval-item");
-    return (await items.count()) === 1 && !(await items.innerText()).startsWith(firstApproval);
+    return (await items.count()) === 1 && !(await items.innerText()).includes(firstApproval);
   }, { timeout: 30_000 }).toBe(true);
   await expect(taskStatus(page)).toHaveAttribute("data-status", "WAITING");
   await page.getByRole("button", { name: "拒绝", exact: true }).click();
@@ -451,11 +453,13 @@ test("E19 one agent-state checkpoint is taken per batch of tool calls, before th
   const batch = await createTask(request, title, "two:left|right");
   await openTask(page, title);
   await expect(page.getByTestId("approval-item")).toHaveCount(1, { timeout: 30_000 });
-  const firstApproval = (await page.getByTestId("approval-item").innerText()).split("\n")[0];
+  // The item opens with the same heading every time; its approval id is what tells one request from the next.
+  const firstApproval = (await page.getByTestId("approval-item").innerText()).split("\n").find((line) => line.startsWith("apr_")) ?? "";
+  expect(firstApproval).not.toBe("");
   await page.getByRole("button", { name: "批准", exact: true }).click();
   await expect.poll(async () => {
     const items = page.getByTestId("approval-item");
-    return (await items.count()) === 1 && !(await items.innerText()).startsWith(firstApproval);
+    return (await items.count()) === 1 && !(await items.innerText()).includes(firstApproval);
   }, { timeout: 30_000 }).toBe(true);
   await page.getByRole("button", { name: "批准", exact: true }).click();
   await waitForStatus(request, batch, "COMPLETED", 60_000);

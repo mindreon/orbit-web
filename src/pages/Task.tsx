@@ -3,6 +3,8 @@ import { Link, useParams } from "react-router";
 import { AgentQuestion } from "../components/tasks/AgentQuestion";
 import { ApprovalInbox } from "../components/tasks/ApprovalInbox";
 import { Composer } from "../components/tasks/Composer";
+import { useConfigCatalog } from "../lib/configCatalog";
+import { useTaskConfig } from "../lib/useTaskConfig";
 import { TaskHeader } from "../components/tasks/TaskHeader";
 import { OVERVIEW, TaskPanel } from "../components/tasks/TaskPanel";
 import { Conversation } from "../components/conversation/Conversation";
@@ -23,6 +25,8 @@ export function TaskPage() {
 
 function TaskView({ taskId }: { taskId: string }) {
   const { task, plan, artifacts, events, live, stream, error } = useTaskStream(taskId);
+  const config = useTaskConfig(taskId);
+  const catalog = useConfigCatalog();
   const upsert = useTasksStore((state) => state.upsert);
   const [actionError, setActionError] = useState<string | null>(null);
   const [panelOpen, setPanelOpen] = useState(true);
@@ -110,7 +114,7 @@ function TaskView({ taskId }: { taskId: string }) {
             </p>
           ) : null}
         </Conversation>
-        <Composer onSend={message} closed={closed} />
+        <Composer onSend={message} closed={closed} config={config} catalog={catalog} />
       </main>
       {panelOpen ? (
         <TaskPanel

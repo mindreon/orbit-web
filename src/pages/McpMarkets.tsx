@@ -1,8 +1,9 @@
-import { BadgeCheck, Eye, Globe, Plus, Server, Star } from "lucide-react";
+import { BadgeCheck, Eye, Globe, Server, Star } from "lucide-react";
 import { useEffect, useMemo, useState, type ReactNode } from "react";
 import { Link } from "react-router";
 import { describeFailure } from "../lib/api";
-import { listMcpMarket, listMcpMarketCategories, type McpMarketCategory, type McpMarketServer } from "../lib/catalog";
+import { listMcpMarket, listMcpMarketCategories, mcpMarketIconPath, type McpMarketCategory, type McpMarketServer } from "../lib/catalog";
+import { CatalogAvatar } from "../components/CatalogAvatar";
 import { cn } from "../lib/cn";
 import { Alert } from "../ui/Alert";
 import { marketCardClass } from "../ui/card";
@@ -36,10 +37,9 @@ function Stat({ label, value, children }: { label: string; value: number; childr
 function PlazaCard({ item }: { item: McpMarketServer }) {
   const initial = item.name.trim().slice(0, 1) || "M";
   return (
-    <div className="relative h-full">
-      <Link to={`/experts/connectors/${encodeURIComponent(item.id)}`} className={marketCardClass}>
-        <span className="flex items-center gap-3 pr-9">
-          <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-accent text-[15px] font-semibold text-accent-foreground">{initial}</span>
+    <Link to={`/experts/connectors/${encodeURIComponent(item.id)}`} className={marketCardClass}>
+        <span className="flex items-center gap-3">
+          <CatalogAvatar src={mcpMarketIconPath(item.id)} fallback={initial} />
           <span className="min-w-0 flex-1">
             <span className="flex items-center gap-1.5">
               <span className="min-w-0 truncate text-[15px] font-semibold text-foreground">{item.name}</span>
@@ -63,15 +63,6 @@ function PlazaCard({ item }: { item: McpMarketServer }) {
           {item.needsOnline ? <Globe aria-label="需要联网" className="ml-auto h-3.5 w-3.5" /> : null}
         </span>
       </Link>
-      <Link
-        to={`/experts/connectors/new?name=${encodeURIComponent(item.name)}`}
-        aria-label={`添加 ${item.name} 为连接器`}
-        title="添加为连接器"
-        className="absolute right-3 top-3 flex h-8 w-8 items-center justify-center rounded-lg border border-border bg-card text-muted-foreground hover:bg-secondary hover:text-foreground"
-      >
-        <Plus className="h-4 w-4" />
-      </Link>
-    </div>
   );
 }
 
@@ -83,7 +74,6 @@ export function McpMarketCatalog({ keyword }: { keyword: string }) {
   const [visible, setVisible] = useState<McpMarketServer[]>([]);
   const [total, setTotal] = useState(0);
   const [stored, setStored] = useState(0);
-  const [plazaTotal, setPlazaTotal] = useState(0);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const offline = offlineDeploy();
@@ -112,7 +102,6 @@ export function McpMarketCatalog({ keyword }: { keyword: string }) {
         setVisible(body.items ?? []);
         setTotal(body.total ?? 0);
         setStored(body.stored ?? 0);
-        setPlazaTotal(body.plazaTotal ?? 0);
         setError("");
       })
       .catch((err: unknown) => {
@@ -185,7 +174,7 @@ export function McpMarketCatalog({ keyword }: { keyword: string }) {
           <div className="mt-8 flex items-start gap-2 text-xs leading-5 text-muted-foreground">
             <Server aria-hidden="true" className="mt-0.5 h-3.5 w-3.5 shrink-0" />
             <div>
-              <p>数据来源 modelscope.cn/mcp。同名只留一条，打开这一页通过接口读取已经存好的目录，只展示，不在这里连接，也不填写密钥。广场标注 {plazaTotal} 条，这里收了 {stored} 条。</p>
+              <p>数据来源 modelscope.cn/mcp。同名只留一条，打开这一页通过接口读取已经存好的目录，只展示，不在这里连接，也不填写密钥。这里收录了 {stored} 条服务。</p>
               <p className="mt-1">提示：本广场内部分 MCP 由第三方提供。使用前，请务必评估其安全性并同意相关协议。因使用第三方 MCP 产生的任何风险需由您自行承担。</p>
             </div>
           </div>

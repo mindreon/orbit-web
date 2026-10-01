@@ -1,4 +1,4 @@
-/** 技能卡片和详情页共用的展示规则。图标只允许 SkillHub 自己的图片域名。 */
+/** 技能卡片和详情页共用的展示规则。图标只允许快照来源站的图片域名。 */
 
 const ICON_COLORS = [
   { bg: "rgba(0,122,255,0.12)", fg: "#007AFF" },
@@ -8,12 +8,9 @@ const ICON_COLORS = [
 ];
 
 const ICON_HOSTS = new Set([
-  "cloudcache.tencent-cloud.com",
-  "cloudcache.tencent-cloud.cn",
-  "cloudcache.tencentcs.com",
-  "cloudcache.tencentcs.cn",
-  "skillhub.cn",
-  "api.skillhub.cn",
+  "resouces.modelscope.cn",
+  "resources.modelscope.cn",
+  "img.alicdn.com",
 ]);
 
 export function formatCount(value: number) {
@@ -23,9 +20,8 @@ export function formatCount(value: number) {
 }
 
 export function sourceLabel(source: string) {
-  if (source === "clawhub") return "ClawHub";
-  if (source === "enterprise") return "企业";
-  if (source === "community") return "SkillHub";
+  if (source === "nexa") return "NEXA";
+  if (source === "common") return "ModelScope";
   return "";
 }
 
@@ -52,7 +48,7 @@ export function skillPath(handle: string, slug: string) {
   return `/experts/skills/${encodeURIComponent(handle)}/${encodeURIComponent(slug)}`;
 }
 
-/** 和 SkillHub 详情页一样：今天、N天前、N周前、N个月前、N年前。 */
+/** 和详情页一样：今天、N天前、N周前、N个月前、N年前。 */
 export function timeAgo(ms: number) {
   if (!ms || ms <= 0) return "";
   const days = Math.floor((Date.now() - ms) / 86_400_000);

@@ -6,9 +6,11 @@ import { App } from "./App";
 import { ensureMountPoint } from "./embed/mount";
 import { ensureEmbeddedStyles } from "./embed/styles";
 import { isEmbeddedInWujie } from "./embed/wujie";
-import { ExpertsPage } from "./pages/Experts";
+import { AgentsPage } from "./pages/Agents";
+import { AgentDetailPage } from "./pages/AgentDetail";
 import { NewTaskPage } from "./pages/NewTask";
 import { ConnectorCreatePage } from "./pages/ConnectorCreate";
+import { ExpertEditorPage } from "./pages/ExpertEditor";
 import { ConnectorsPage } from "./pages/Connectors";
 import { McpMarketDetailPage } from "./pages/McpMarketDetail";
 import { SkillDetailPage } from "./pages/SkillDetail";
@@ -37,10 +39,14 @@ const routes = [
             ],
           },
           { path: "tasks", element: <Navigate to="/" replace /> },
-          { path: "assistants", element: <Navigate to="/experts" replace /> },
+          { path: "experts", element: <Navigate to="/experts/agents" replace /> },
           { path: "projects", element: <UnwiredPage title="项目" icon={FolderKanban} subtitle="多人协同，打造超级团队" action="新建项目" /> },
-          { path: "experts", element: <ExpertsPage /> },
           { path: "experts/skills", element: <SkillsPage /> },
+          { path: "experts/new", element: <ExpertEditorPage /> },
+          { path: "experts/:expertId/edit", element: <ExpertEditorPage /> },
+          { path: "experts/agents", element: <AgentsPage /> },
+          { path: "experts/agents/:handle/:slug", element: <AgentDetailPage /> },
+          { path: "experts/agents/:slug", element: <AgentDetailPage /> },
           { path: "experts/skills/:handle/:slug", element: <SkillDetailPage /> },
           { path: "experts/skills/:slug", element: <SkillDetailPage /> },
           { path: "experts/connectors", element: <ConnectorsPage /> },

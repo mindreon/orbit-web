@@ -1,7 +1,8 @@
 import { useEffect, useMemo, useState } from "react";
 import { Link } from "react-router";
 import { describeFailure } from "../lib/api";
-import { listSkillCategories, listSkills, type Skill, type SkillCategory } from "../lib/catalog";
+import { listSkillCategories, listSkills, skillIconPath, type Skill, type SkillCategory } from "../lib/catalog";
+import { CatalogAvatar } from "../components/CatalogAvatar";
 import { CatalogHeader } from "../shell/CatalogHeader";
 import { Alert } from "../ui/Alert";
 import { marketCardClass } from "../ui/card";
@@ -9,19 +10,18 @@ import { ChipRow } from "../ui/ChipRow";
 import { Pagination } from "../ui/Pagination";
 import { Skeleton } from "../ui/Skeleton";
 import { HeadingTabs, SegmentedTabs } from "../ui/Tabs";
-import { safeIcon, skillPath, tint } from "./skillFormat";
+import { skillPath } from "./skillFormat";
 
 const SORTS = [
-  { id: "score", label: "综合" },
   { id: "downloads", label: "最热" },
+  { id: "likes", label: "点赞" },
   { id: "updated_at", label: "最新" },
 ] as const;
 
 const SOURCES = [
-  { id: "", label: "推荐" },
-  { id: "community", label: "SkillHub" },
-  { id: "clawhub", label: "ClawHub" },
-  { id: "enterprise", label: "企业" },
+  { id: "", label: "全部" },
+  { id: "common", label: "ModelScope" },
+  { id: "nexa", label: "NEXA" },
 ] as const;
 
 const PAGE_SIZE = 24;
@@ -30,8 +30,8 @@ export function SkillsPage() {
   const [items, setItems] = useState<Skill[]>([]);
   const [categories, setCategories] = useState<SkillCategory[]>([]);
   const [total, setTotal] = useState(0);
-  const [syncedAt, setSyncedAt] = useState("");
-  const [sortBy, setSortBy] = useState<(typeof SORTS)[number]["id"]>("score");
+  const [installedAt, setInstalledAt] = useState("");
+  const [sortBy, setSortBy] = useState<(typeof SORTS)[number]["id"]>("downloads");
   const [category, setCategory] = useState("");
   const [source, setSource] = useState<(typeof SOURCES)[number]["id"]>("");
   const [keyword, setKeyword] = useState("");
@@ -57,7 +57,7 @@ export function SkillsPage() {
         if (gone) return;
         setItems(body.items ?? []);
         setTotal(body.total ?? 0);
-        setSyncedAt(body.syncedAt ?? "");
+        setInstalledAt(body.installedAt ?? "");
         setError("");
       })
       .catch((err: unknown) => !gone && setError(describeFailure("读取技能目录失败", err)))
@@ -124,25 +124,21 @@ export function SkillsPage() {
               ))}
             </div>
           ) : null}
-          {!loading && !error && items.length === 0 ? <p className="mt-6 text-sm text-muted-foreground">{syncedAt ? "没有匹配的技能" : "正在从 SkillHub 同步，请稍后刷新"}</p> : null}
+          {!loading && !error && items.length === 0 ? <p className="mt-6 text-sm text-muted-foreground">{installedAt ? "没有匹配的技能" : "目录快照尚未装入，请稍后刷新"}</p> : null}
           <ul className="mt-4 grid gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
             {items.map((skill) => {
-              const color = tint(skill.name);
-              const icon = safeIcon(skill.iconUrl);
               return (
                 <li key={skill.id}>
                   <Link to={skillPath(skill.handle, skill.slug)} className={marketCardClass}>
                     <span className="flex items-center gap-3">
-                      {icon ? (
-                        <img src={icon} alt="" className="h-10 w-10 shrink-0 rounded-lg object-cover" />
-                      ) : (
-                        <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg text-[15px] font-medium" style={{ background: color.bg, color: color.fg }}>
-                          {skill.name.trim().slice(0, 1) || "技"}
-                        </span>
-                      )}
+                      <CatalogAvatar src={skillIconPath(skill.handle, skill.slug)} fallback={skill.name} fallbackChar="技" />
                       <span className="min-w-0 flex-1 truncate text-[15px] font-semibold text-foreground">{skill.name}</span>
                     </span>
-                    <span className="mt-3 line-clamp-2 text-[13px] leading-5 text-muted-foreground">{skill.description}</span>
+                    <span className="mt-3 line-clamp-2 text-[13px] leading-5 text-muted-foreground">{skill.description || skill.descriptionEn}</span>
+                    <span className="mt-auto flex items-center gap-2.5 pt-2 text-xs text-muted-foreground">
+                      {skill.likes > 0 ? <span title="点赞">♥ {skill.likes}</span> : null}
+                      {skill.downloads > 0 ? <span title="下载量">{skill.downloads} 次下载</span> : null}
+                    </span>
                   </Link>
                 </li>
               );

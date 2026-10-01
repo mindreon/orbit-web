@@ -56,7 +56,7 @@ test("embedded: content only, reports route and menu, follows base navigation", 
   expect(routeReports(first)).toEqual(["/experts/skills"]);
   const menu = first.find((item) => item.event === "orbit:menu");
   const sections = menu?.args[0] as { items: { href: string }[] }[];
-  expect(sections[0].items.map((item) => item.href)).toEqual(["/", "/experts", "/experts/skills", "/experts/connectors", "/projects", "/automation", "/library"]);
+  expect(sections[0].items.map((item) => item.href)).toEqual(["/", "/experts/agents", "/experts/skills", "/experts/connectors", "/projects", "/automation", "/library"]);
 
   await page.evaluate(() => (window as unknown as { $wujie: { bus: { $emit: (e: string, ...a: unknown[]) => void } } }).$wujie.bus.$emit("orbit:navigate", "/experts/connectors"));
   await expect(page.getByRole("heading", { name: "连接器" })).toBeVisible();
