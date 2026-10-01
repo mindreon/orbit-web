@@ -91,19 +91,25 @@ async function fixtureSkill(request: import("@playwright/test").APIRequestContex
     "the fixture skill's text in the catalog",
     120_000,
   );
-  const skill = (await (await request.get(`/v1/skills/${FIXTURE_SKILL.handle}/${FIXTURE_SKILL.slug}`)).json()) as { id: string; name: string; description: string };
-  return skill;
+  // The library answers at once; the catalog's names and descriptions are copied in by control in the background.
+  return eventually(
+    async () => (await (await request.get(`/v1/skills/${FIXTURE_SKILL.handle}/${FIXTURE_SKILL.slug}`)).json()) as { id?: string; name: string; description: string },
+    (found) => typeof found.id === "string",
+    "the fixture skill in the catalog",
+    120_000,
+  ) as Promise<{ id: string; name: string; description: string }>;
 }
 
 test("E31 the skill panel, the expert editor, the list of my experts and a stale configuration, in the browser", async ({ page, request }) => {
   const skill = await fixtureSkill(request);
-  const skillOption = () => page.getByRole("menuitemcheckbox").filter({ hasText: skill.description.slice(0, 30) }).first();
+  // The list shows titles only, and several skills share one; the row carries the id it stands for.
+  const skillOption = () => page.locator(`[data-option-id="${skill.id}"]`);
 
   // ---- the skill panel of the + menu: search, choose, take off ---------------------------------------------------
   await page.goto("/");
   await page.getByTestId("config-add").click();
   await page.getByRole("menuitem", { name: "技能" }).click();
-  await page.getByLabel("搜索技能").fill(skill.name);
+  await page.getByLabel("搜索技能").fill(skill.description.slice(0, 20));
   await skillOption().click();
   await page.keyboard.press("Escape");
   await expect(page.getByTestId("config-chip").filter({ hasText: skill.name })).toHaveCount(1);
@@ -125,7 +131,7 @@ test("E31 the skill panel, the expert editor, the list of my experts and a stale
   await page.getByLabel("名称", { exact: true }).fill(expertName);
   await page.getByLabel("指令").fill("Be formal.");
   await page.getByRole("checkbox", { name: connectorName }).check();
-  await page.getByLabel("搜索技能").fill(skill.name);
+  await page.getByLabel("搜索技能").fill(skill.description.slice(0, 20));
   await skillOption().click();
   await page.getByRole("button", { name: "保存" }).click();
   await page.waitForURL(/\/experts\/agents$/);

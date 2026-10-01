@@ -9,7 +9,7 @@ import { PermissionChip } from "./PermissionChip";
 
 interface ComposerProps {
   readonly onSend: (text: string, delivery: "queue" | "interrupt") => Promise<void>;
-  /** 任务已结束，不能再发消息。 */
+  /** 任务已取消，不能再发消息。 */
   readonly closed?: boolean;
   /** 任务带着什么运行（专家、技能、连接器、模式），可以在这里中途修改。 */
   readonly config?: TaskConfigState;
@@ -33,7 +33,7 @@ export function Composer({ onSend, closed = false, config, catalog }: ComposerPr
             value={draft}
             disabled={closed}
             rows={2}
-            placeholder={closed ? "任务已结束，新建任务继续" : "向任务发送消息"}
+            placeholder={closed ? "任务已取消，新建任务继续" : "向任务发送消息"}
             className="block max-h-48 min-h-[3.5rem] w-full resize-none bg-transparent px-4 pt-3 text-sm text-foreground outline-none placeholder:text-muted-foreground disabled:opacity-60"
             onChange={(e) => setDraft(e.target.value)}
             onKeyDown={(event) => {

@@ -2,7 +2,7 @@ import type { Tone } from "../../ui/StatusBadge";
 
 export const taskStatusText: Readonly<Record<string, string>> = {
   CREATED: "已创建", PLANNING: "规划中", RUNNING: "执行中", WAITING: "等待中", PAUSED: "已暂停",
-  PAUSED_NEEDS_REVIEW: "需要复核", TAKEN_OVER: "人工接管", COMPLETED: "已完成", FAILED: "失败", CANCELLED: "已取消",
+  PAUSED_NEEDS_REVIEW: "需要复核", TAKEN_OVER: "人工接管", COMPLETED: "空闲", FAILED: "失败", CANCELLED: "已取消",
 };
 
 export const attemptStatusText: Readonly<Record<string, string>> = {
@@ -31,7 +31,7 @@ export const eventTypeText: Readonly<Record<string, string>> = {
   "tool.call_started": "工具调用开始",
   "tool.call_finished": "工具调用结束",
   "artifact.manifest_created": "成果物已生成",
-  "task.completed": "任务已完成",
+  "task.completed": "本轮已完成",
 };
 
 /** 任务、节点、尝试的状态归到同一套颜色：进行中蓝、等待黄、完成绿、失败红、其余灰。 */

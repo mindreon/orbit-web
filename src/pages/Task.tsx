@@ -84,7 +84,8 @@ function TaskView({ taskId }: { taskId: string }) {
     );
   }
 
-  const closed = task.status === "COMPLETED" || task.status === "CANCELLED" || task.status === "FAILED";
+  // 只有取消才结束任务；做完只是空闲，随时可以接着聊。
+  const closed = task.status === "CANCELLED";
   const message = (text: string, delivery: "queue" | "interrupt") => act(() => sendTaskMessage(task.task_id, text, delivery));
 
   return (
@@ -107,7 +108,7 @@ function TaskView({ taskId }: { taskId: string }) {
           {live.question ? <AgentQuestion question={live.question} onAnswer={(text) => message(text, "queue")} /> : null}
           {closed && turns.length > 0 ? (
             <p className="text-center text-xs text-muted-foreground">
-              任务已结束。
+              任务已取消。
               <Link to="/" className="ml-1 text-primary hover:underline">
                 基于此开新任务
               </Link>

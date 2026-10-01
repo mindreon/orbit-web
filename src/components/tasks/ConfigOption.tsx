@@ -1,12 +1,13 @@
 import { Check } from "lucide-react";
 
 /** 菜单里的一行：单选或多选，选中的右边打勾。 */
-export function Option({ checked, kind, label, hint, onClick }: { checked: boolean; kind: "radio" | "checkbox"; label: string; hint?: string; onClick: () => void }) {
+export function Option({ checked, kind, label, hint, id, onClick }: { checked: boolean; kind: "radio" | "checkbox"; label: string; hint?: string; /** 不显示，只给测试和调试定位这一行（比如同名的技能）。 */ id?: string; onClick: () => void }) {
   return (
     <button
       type="button"
       role={kind === "radio" ? "menuitemradio" : "menuitemcheckbox"}
       aria-checked={checked}
+      data-option-id={id}
       className="flex w-full items-start gap-2 rounded-lg px-3 py-2 text-left text-sm text-foreground hover:bg-secondary"
       onClick={onClick}
     >

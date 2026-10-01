@@ -7,7 +7,7 @@
  * worker starts, so a tool that appears here came through the whole path: control, the workflow, the activity, MCP.
  */
 import { expect, test, type APIRequestContext } from "@playwright/test";
-import { readdirSync } from "node:fs";
+import { readdirSync, readFileSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { eventually, killWorker, sql, waitForStatus } from "./tasks";
@@ -15,6 +15,7 @@ import { eventually, killWorker, sql, waitForStatus } from "./tasks";
 const INFRA = resolve(process.env.ORBIT_INFRA_DIR ?? join(process.cwd(), ".."));
 const PYTHON = join(INFRA, "orbit-runtime", ".venv", "bin", "python");
 const MCP_SERVER = join(process.cwd(), "e2e", "stack", "mock_mcp_server.py");
+const SKILLS_DIR = join(process.env.ORBIT_STACK_DIR ?? join(INFRA, ".stack"), "skills");
 const unique = (label: string) => `${label} ${Date.now()}`;
 
 type Config = { expert?: string; skills?: string[] | null; connector_ids?: string[] | null; mode?: string };
@@ -152,8 +153,12 @@ test("E26 a changed configuration applies from the next attempt, never to the ru
   expect(sql(`SELECT count(*) FROM task_events WHERE task_id = '${taskId}' AND event_type = 'attempt.started'`)).toBe("2");
   expect(await finalText(taskId)).toContain("docs_lookup");
 
-  // A closed task takes no configuration.
-  const closed = await put({ base_config_version: 2, mode: "ask" });
+  // A finished task is only idle: it still takes configuration. A cancelled one is closed and takes none.
+  const idle = await put({ base_config_version: 2, mode: "ask" });
+  expect(idle.status()).toBe(200);
+  expect((await request.post(`/v1/tasks/${taskId}/control`, { data: { action: "cancel" } })).status()).toBe(202);
+  await waitForStatus(request, taskId, "CANCELLED", 60_000);
+  const closed = await put({ base_config_version: 3, mode: "default" });
   expect(closed.status()).toBe(409);
   expect(await closed.text()).toContain("TASK_CLOSED");
 });
@@ -203,7 +208,14 @@ test("E28 skills reach the agent as readable data, an expert's defaults can be k
   await eventually(
     async () => (await (await request.get(`/v1/skill-files/${SKILL.usable}`)).json()) as { items?: unknown[] },
     (body) => (body.items ?? []).length === 2,
-    "the fixture skill's text in the catalog",
+    "the fixture skill's text in the library",
+    120_000,
+  );
+  // The library answers at once; the catalog rows a skill is chosen by are copied in by control in the background.
+  await eventually(
+    async () => (await request.get(`/v1/skills/${SKILL.usable}`)).status(),
+    (status) => status === 200,
+    "the fixture skill in the catalog",
     120_000,
   );
 
@@ -231,6 +243,19 @@ test("E28 skills reach the agent as readable data, an expert's defaults can be k
   expect(await promptOf(request, { expert: bringing.ref })).toContain("E2E Pirate");
   expect(await promptOf(request, { expert: bringing.ref, skills: [] })).not.toContain("E2E Pirate");
   expect(await promptOf(request, { expert: bringing.ref, skills: null })).toContain("E2E Pirate");
+
+  // Updating a skill is changing its files: nothing to import, and the next task has the new text.
+  const file = join(SKILLS_DIR, SKILL.usable, "SKILL.md");
+  const original = readFileSync(file, "utf8");
+  try {
+    writeFileSync(file, original.replace(SKILL.mark, "e2e-skill-mark-v2"));
+    const updated = await promptOf(request, { skills: [SKILL.usable] });
+    expect(updated).toContain("e2e-skill-mark-v2");
+    expect(updated).not.toContain(`(${SKILL.mark})`);
+    // The worker read it from the mounted library: control's own copy of the text (none here) was never asked.
+  } finally {
+    writeFileSync(file, original);
+  }
 
   // The staged files exist for one attempt only.
   const left = () => readdirSync(tmpdir()).filter((name) => name.startsWith("orbit-skills-"));

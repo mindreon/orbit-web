@@ -17,7 +17,9 @@ interface TaskHeaderProps {
 export function TaskHeader({ task, onControl, panelOpen, onOpenPanel }: TaskHeaderProps) {
   const [confirming, setConfirming] = useState(false);
   const paused = task.status === "PAUSED";
-  const closed = task.status === "COMPLETED" || task.status === "CANCELLED" || task.status === "FAILED";
+  // 任务是一场对话：做完只是空闲，还能继续聊；只有取消才算结束。
+  const cancelled = task.status === "CANCELLED";
+  const idle = task.status === "COMPLETED";
   return (
     <header className="flex h-14 shrink-0 items-center gap-3 border-b border-border bg-card px-6">
       <h2 title={task.task_id} className="min-w-0 truncate text-base font-semibold text-foreground">
@@ -28,11 +30,13 @@ export function TaskHeader({ task, onControl, panelOpen, onOpenPanel }: TaskHead
       </StatusBadge>
       <span className="hidden text-xs text-muted-foreground md:inline">plan v{task.plan_version}</span>
       <div className="ml-auto flex shrink-0 items-center gap-2">
-        {closed ? null : (
+        {cancelled ? null : (
           <>
-            <Button size="sm" onClick={() => onControl(paused ? "resume" : "pause")}>
-              {paused ? "继续" : "暂停"}
-            </Button>
+            {idle ? null : (
+              <Button size="sm" onClick={() => onControl(paused ? "resume" : "pause")}>
+                {paused ? "继续" : "暂停"}
+              </Button>
+            )}
             <Button size="sm" variant="danger" onClick={() => setConfirming(true)}>
               取消
             </Button>
