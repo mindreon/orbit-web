@@ -18,7 +18,7 @@ const cancelTask = async (page: Page) => {
   await page.getByRole("dialog").getByRole("button", { name: "确认取消任务" }).click();
 };
 
-test("E1 an agent plans two nodes, they run to completion and the artifact downloads", async ({ page, request }) => {
+test("E1 an agent plans two nodes, they run to completion and what was said is not an artifact", async ({ page, request }) => {
   const title = unique("E1");
   // The mock agent explores, then commits the plan through TaskCreate / TaskUpdate.
   const taskId = await createTask(request, title, "plan:Draft report|Review report");
@@ -36,13 +36,10 @@ test("E1 an agent plans two nodes, they run to completion and the artifact downl
   // Every plan change came from the agent's attempt, each under its own idempotent command.
   expect(sql(`SELECT count(*) FROM task_events WHERE task_id = '${taskId}' AND event_type = 'plan.version_committed'`)).toBe(String(plan.plan_version - 1));
 
-  const artifact = page.getByRole("button", { name: "result.txt" }).first();
-  await expect(artifact).toBeVisible();
-  const manifests = (await (await request.get(`/v1/tasks/${taskId}/artifacts`)).json()).items as Array<{ manifest_id: string; entries: Array<{ name: string }> }>;
-  const url = (await (await request.get(`/v1/artifacts/${manifests[0].manifest_id}/url?name=result.txt`)).json()).url as string;
-  const download = await request.get(url);
-  expect(download.status()).toBe(200);
-  expect((await download.text()).length).toBeGreaterThan(0);
+  // What the agent said is conversation, not an artifact: nothing in this task wrote a file in a sandbox.
+  await expect(page.getByRole("button", { name: "result.txt" })).toHaveCount(0);
+  const manifests = (await (await request.get(`/v1/tasks/${taskId}/artifacts`)).json()).items as Array<{ entries: unknown[] }>;
+  expect(manifests.flatMap((manifest) => manifest.entries)).toEqual([]);
 });
 
 test("E2 an approval survives a worker restart and the tool runs once", async ({ page, request }) => {
@@ -544,7 +541,7 @@ test("E22 an attempt that meets its completion contract, artifacts and a command
   const title = unique("E22");
   const taskId = await createTask(request, title, `slow:e22-${Date.now()}`);
   await addNodes(request, taskId, [{
-    type: "agent_turn", title: "Report", goal: "write the report", workspace_access: "write",
+    type: "agent_turn", title: "Report", goal: "file:result.txt|the report", workspace_access: "write",
     completion_contract: {
       required_artifacts: [{ name: "result.txt", media_type: "text/plain" }],
       verifications: [{ kind: "command", spec: { command: "test -d .", timeout_s: 60 } }],
