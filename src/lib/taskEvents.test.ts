@@ -216,7 +216,7 @@ describe("ephemeral streamed text and the truncation mark", () => {
       event("agent.token_delta", { attempt_id: "a2", text: "X" }, { after_seq: 1 }),
       event("agent.token_delta", { attempt_id: "a1", text: "lo" }, { after_seq: 1 }),
     ]);
-    expect(state.live).toEqual({ a1: "Hello", a2: "X" });
+    expect(state.live).toEqual({ a1: [{ id: "", text: "Hello" }], a2: [{ id: "", text: "X" }] });
   });
 
   it("marks attempts that were streaming when the stream dropped as truncated", () => {
@@ -226,12 +226,12 @@ describe("ephemeral streamed text and the truncation mark", () => {
 
   it("returns the same state when nothing is streaming", () => {
     expect(markStreamGap(emptyLiveState)).toBe(emptyLiveState);
-    const empty = { ...emptyLiveState, live: { a1: "" } };
+    const empty = { ...emptyLiveState, live: { a1: [{ id: "", text: "" }] } };
     expect(markStreamGap(empty)).toBe(empty);
   });
 
   it("keeps earlier truncation marks and adds new ones", () => {
-    const state = markStreamGap({ ...emptyLiveState, live: { a2: "text" }, truncated: { a1: true } });
+    const state = markStreamGap({ ...emptyLiveState, live: { a2: [{ id: "", text: "text" }] }, truncated: { a1: true } });
     expect(state.truncated).toEqual({ a1: true, a2: true });
   });
 

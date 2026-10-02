@@ -85,12 +85,13 @@ export function sendTaskMessage(id: string, text: string, delivery: "queue" | "i
   return api<Record<string, unknown>>(`/v1/tasks/${encodeURIComponent(id)}/messages`, { method: "POST", body: JSON.stringify({ text, delivery }) });
 }
 
-export function controlTask(id: string, action: "pause" | "resume" | "cancel" | "takeover" | "handback") {
+export function controlTask(id: string, action: "pause" | "resume" | "stop" | "cancel" | "takeover" | "handback") {
   return api<Record<string, unknown>>(`/v1/tasks/${encodeURIComponent(id)}/control`, { method: "POST", body: JSON.stringify({ action }) });
 }
 
-export function decideTaskApproval(id: string, approvalId: string, decision: "approve" | "reject") {
-  return api<Record<string, unknown>>(`/v1/tasks/${encodeURIComponent(id)}/approvals/${encodeURIComponent(approvalId)}`, { method: "POST", body: JSON.stringify({ decision }) });
+/** `always`: with approve, also allow what the approval offered for the rest of the task. */
+export function decideTaskApproval(id: string, approvalId: string, decision: "approve" | "reject", always = false) {
+  return api<Record<string, unknown>>(`/v1/tasks/${encodeURIComponent(id)}/approvals/${encodeURIComponent(approvalId)}`, { method: "POST", body: JSON.stringify({ decision, always }) });
 }
 
 export type StreamState = "connected" | "reconnecting";

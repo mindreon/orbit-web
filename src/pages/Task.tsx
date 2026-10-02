@@ -10,6 +10,7 @@ import { OVERVIEW, TaskPanel } from "../components/tasks/TaskPanel";
 import { Conversation } from "../components/conversation/Conversation";
 import { describeFailure } from "../lib/api";
 import { fileKey, flattenArtifacts, type ArtifactFile } from "../lib/artifacts";
+import { approvalInfos } from "../lib/approvals";
 import { buildTimeline } from "../lib/conversation";
 import { controlTask, decideTaskApproval, sendTaskMessage } from "../lib/tasks";
 import { useTasksStore } from "../lib/tasksStore";
@@ -40,6 +41,7 @@ function TaskView({ taskId }: { taskId: string }) {
 
   const files = useMemo(() => flattenArtifacts(artifacts), [artifacts]);
   const turns = useMemo(() => (task ? buildTimeline(task, events, live) : []), [task, events, live]);
+  const approvals = useMemo(() => approvalInfos(events), [events]);
 
   const act = useCallback(async (run: () => Promise<unknown>) => {
     try {
@@ -91,7 +93,7 @@ function TaskView({ taskId }: { taskId: string }) {
   return (
     <div className="flex min-h-0 flex-1">
       <main className="flex min-h-0 min-w-0 flex-1 flex-col bg-card">
-        <TaskHeader task={task} onControl={(action) => void act(() => controlTask(task.task_id, action))} panelOpen={panelOpen} onOpenPanel={() => setPanelOpen(true)} />
+        <TaskHeader task={task} onCancel={() => void act(() => controlTask(task.task_id, "cancel"))} panelOpen={panelOpen} onOpenPanel={() => setPanelOpen(true)} />
         {failure ? <Alert className="mx-6 mt-3">{failure}</Alert> : null}
         {reconnecting ? <Alert tone="warning" className="mx-6 mt-3">实时事件连接已断开，正在重连…</Alert> : null}
         <Conversation
@@ -104,8 +106,9 @@ function TaskView({ taskId }: { taskId: string }) {
             setPanelOpen(true);
           }}
         >
-          <ApprovalInbox approvals={task.pending_approvals ?? []} onDecide={(id, decision) => void act(() => decideTaskApproval(task.task_id, id, decision))} />
+          <ApprovalInbox approvals={task.pending_approvals ?? []} infos={approvals} onDecide={(id, decision, always) => void act(() => decideTaskApproval(task.task_id, id, decision, always))} />
           {live.question ? <AgentQuestion question={live.question} onAnswer={(text) => message(text, "queue")} /> : null}
+          {task.status === "PAUSED" ? <p className="text-center text-xs text-muted-foreground">已停止，点击右下角的 ▶ 继续。</p> : null}
           {closed && turns.length > 0 ? (
             <p className="text-center text-xs text-muted-foreground">
               任务已取消。
@@ -115,7 +118,7 @@ function TaskView({ taskId }: { taskId: string }) {
             </p>
           ) : null}
         </Conversation>
-        <Composer onSend={message} closed={closed} config={config} catalog={catalog} />
+        <Composer onSend={message} onControl={(action) => void act(() => controlTask(task.task_id, action))} status={task.status} closed={closed} config={config} catalog={catalog} />
       </main>
       {panelOpen ? (
         <TaskPanel

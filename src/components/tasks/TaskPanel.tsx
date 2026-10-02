@@ -1,5 +1,5 @@
 import { LayoutList, PanelRightClose, X } from "lucide-react";
-import { fileKey, type ArtifactFile } from "../../lib/artifacts";
+import { fileKey, latestByName, type ArtifactFile } from "../../lib/artifacts";
 import { cn } from "../../lib/cn";
 import type { AttemptView } from "../../lib/taskEvents";
 import type { Plan, TaskEvent } from "../../lib/tasks";
@@ -64,7 +64,7 @@ export function TaskPanel({ plan, attempts, events, files, openFiles, active, on
         <div className="min-h-0 flex-1 overflow-y-auto bg-muted p-4">
           <PlanGraph plan={plan} />
           <AttemptTimeline attempts={attempts} />
-          <FileList files={files} onOpen={onOpenFile} />
+          <FileList files={latestByName(files)} onOpen={onOpenFile} />
           <details className="mt-6 rounded-lg border border-border bg-card">
             <summary className="cursor-pointer px-3 py-2 text-sm font-semibold text-foreground">事件日志（{events.filter((event) => event.seq > 0).length}）</summary>
             <EventLog events={events} />

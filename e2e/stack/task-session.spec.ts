@@ -73,7 +73,7 @@ test("E34 in the browser a finished task can be talked to again, and a cancelled
   const box = page.getByPlaceholder("向任务发送消息");
   await expect(box).toBeEnabled();
   await expect(page.getByText("任务已结束")).toHaveCount(0);
-  await expect(page.getByRole("button", { name: "取消", exact: true })).toBeVisible();
+  await expect(page.getByRole("button", { name: "更多操作" })).toBeVisible();
   await box.fill("history:");
   await box.press("Enter");
   await expect(page.getByTestId("task-status")).toHaveAttribute("data-status", "RUNNING", { timeout: 30_000 });
@@ -82,7 +82,8 @@ test("E34 in the browser a finished task can be talked to again, and a cancelled
   expect(attempts(taskId)).toBe(2);
 
   // Cancelling is the one way to end it, and the page says so.
-  await page.getByRole("button", { name: "取消", exact: true }).click();
+  await page.getByRole("button", { name: "更多操作" }).click();
+  await page.getByRole("menuitem", { name: "取消任务" }).click();
   await page.getByRole("dialog").getByRole("button", { name: "确认取消任务" }).click();
   await expect(page.getByTestId("task-status")).toHaveAttribute("data-status", "CANCELLED", { timeout: 30_000 });
   await expect(page.getByPlaceholder("任务已取消，新建任务继续")).toBeDisabled();

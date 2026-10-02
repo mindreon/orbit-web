@@ -77,7 +77,7 @@ describe("task requests", () => {
     await controlTask("t1", "pause");
     await decideTaskApproval("t1", "ap/1", "approve");
     expect(apiMock).toHaveBeenNthCalledWith(1, "/v1/tasks/t1/control", { method: "POST", body: JSON.stringify({ action: "pause" }) });
-    expect(apiMock).toHaveBeenNthCalledWith(2, "/v1/tasks/t1/approvals/ap%2F1", { method: "POST", body: JSON.stringify({ decision: "approve" }) });
+    expect(apiMock).toHaveBeenNthCalledWith(2, "/v1/tasks/t1/approvals/ap%2F1", { method: "POST", body: JSON.stringify({ decision: "approve", always: false }) });
   });
 
   it("does not swallow a failed request", async () => {

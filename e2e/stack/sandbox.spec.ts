@@ -1,5 +1,5 @@
 /**
- * Acceptance E35-E41 (15 M10): the sandbox is a resource the agent calls, not the place it runs.
+ * Acceptance E35-E41, E47 (15 M10): the sandbox is a resource the agent calls, not the place it runs.
  *
  * The agent has Bash, Read, Write and Edit on the task's workspace. The workspace is taken when a tool first needs it,
  * kept for the attempt, and saved at its end, so the next attempt of the task finds the files again. A file the agent
@@ -154,4 +154,27 @@ test("E41 a workspace taken away in the middle of an attempt is taken again, and
   expect(reply).toContain("wrote");
   expect(await artifactNames(request, taskId)).toEqual(["after.md"]);
   expect(sql(`SELECT count(*) FROM task_events WHERE task_id = '${taskId}' AND event_type = 'attempt.started'`)).toBe("1");
+});
+
+test("E47 a reply's artifacts are the files it added or changed, not everything the workspace holds", async ({ request }) => {
+  const taskId = await start(request, unique("E47"), "file:one.md|first");
+  await waitForStatus(request, taskId, "COMPLETED", 90_000);
+  const lastEntries = async () => ((await manifests(request, taskId)).filter((m) => m.entries.length > 0).at(-1)?.entries ?? []).map((e) => e.name);
+
+  // A reply that only looked (a read-only command) leaves nothing new: no artifacts of its own.
+  const before = (await manifests(request, taskId)).flatMap((m) => m.entries).length;
+  await say(request, taskId, "sh:ls");
+  expect(await restedAfter(request, taskId, 2)).toContain("one.md");
+  expect((await manifests(request, taskId)).flatMap((m) => m.entries).length).toBe(before);
+
+  // A reply that wrote one file has that file, and not the one that was already there.
+  await say(request, taskId, "file:two.md|second");
+  await restedAfter(request, taskId, 3);
+  expect(await lastEntries()).toEqual(["two.md"]);
+
+  // A file written again with other content is a change, and shows.
+  await say(request, taskId, "file:one.md|changed");
+  await restedAfter(request, taskId, 4);
+  expect(await lastEntries()).toEqual(["one.md"]);
+  expect(await download(request, taskId, "one.md")).toBe("changed");
 });

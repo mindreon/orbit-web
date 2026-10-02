@@ -14,7 +14,8 @@ const SEP = "\u001f";
 const unique = (label: string) => `${label} ${Date.now()}`;
 /** 取消任务要在确认弹窗里再点一次。 */
 const cancelTask = async (page: Page) => {
-  await page.getByRole("button", { name: "取消", exact: true }).click();
+  await page.getByRole("button", { name: "更多操作" }).click();
+  await page.getByRole("menuitem", { name: "取消任务" }).click();
   await page.getByRole("dialog").getByRole("button", { name: "确认取消任务" }).click();
 };
 
@@ -58,7 +59,7 @@ test("E2 an approval survives a worker restart and the tool runs once", async ({
   const fresh = await page.context().newPage();
   await openTask(fresh, title);
   await expect(fresh.getByTestId("approval-item")).toHaveCount(1);
-  await fresh.getByRole("button", { name: "批准" }).click();
+  await fresh.getByRole("button", { name: "允许一次" }).click();
 
   await waitForStatus(request, taskId, "COMPLETED");
   await expect(taskStatus(fresh)).toHaveAttribute("data-status", "COMPLETED");
@@ -105,7 +106,7 @@ test("E4 an interrupt ends the running attempt and a new one takes the message",
   await expect(attemptRows(page).first()).toHaveAttribute("data-status", "running", { timeout: 30_000 });
 
   await page.getByPlaceholder("向任务发送消息").fill("change course");
-  await page.getByRole("button", { name: "打断" }).click();
+  await page.getByPlaceholder("向任务发送消息").press("Control+Enter");
 
   await expect(attemptRows(page)).toHaveCount(2, { timeout: 30_000 });
   await expect(attemptRows(page).nth(0)).toHaveAttribute("data-status", "cancelled");
@@ -122,14 +123,14 @@ test("E5 pause holds the next attempt, resume continues, cancel ends every child
   await openTask(page, paused);
   await expect(attemptRows(page).first()).toHaveAttribute("data-status", "running", { timeout: 30_000 });
 
-  await page.getByRole("button", { name: "暂停", exact: true }).click();
+  expect((await request.post(`/v1/tasks/${pausedId}/control`, { data: { action: "pause" } })).status()).toBe(202);
   await expect(taskStatus(page)).toHaveAttribute("data-status", "PAUSED");
   await expect(attemptRows(page).first()).toHaveAttribute("data-status", "completed", { timeout: 30_000 });
   await page.waitForTimeout(4_000);
   await expect(attemptRows(page)).toHaveCount(1);
   await expect(taskStatus(page)).toHaveAttribute("data-status", "PAUSED");
 
-  await page.getByRole("button", { name: "继续", exact: true }).click();
+  await page.getByTestId("composer-action").click();
   await expect(taskStatus(page)).toHaveAttribute("data-status", "COMPLETED", { timeout: 60_000 });
   await expect(attemptRows(page)).toHaveCount(2);
 
@@ -217,7 +218,7 @@ test("E8 a tool whose outcome is unknown is not repeated until a person approves
   expect(toolRuns(first)).toBe(1);
   expect(toolRuns(second)).toBe(1);
 
-  await page.getByRole("button", { name: "批准" }).click();
+  await page.getByRole("button", { name: "允许一次" }).click();
   await expect(taskStatus(page)).toHaveAttribute("data-status", "COMPLETED", { timeout: 120_000 });
 
   // The first call came back from the ledger; only the unknown one ran again, once, with approval.
@@ -235,7 +236,7 @@ test("E9 an interrupt that lands inside a tool ends the call as interrupted and 
   await eventually(async () => toolRuns(text), (runs) => runs === 1, "the tool call to start", 60_000);
 
   await page.getByPlaceholder("向任务发送消息").fill("stop that");
-  await page.getByRole("button", { name: "打断" }).click();
+  await page.getByPlaceholder("向任务发送消息").press("Control+Enter");
 
   await expect(attemptRows(page).nth(0)).toHaveAttribute("data-status", "cancelled", { timeout: 30_000 });
   // The cancelled call's ledger row stays `started`; the new attempt has its own calls and finishes the task.
@@ -338,15 +339,13 @@ test("E14 two calls need approval in one step: a person allows the first and ref
 
   // AgentScope asks about one call at a time; the other waits its turn inside the same attempt.
   await expect(page.getByTestId("approval-item")).toHaveCount(1, { timeout: 30_000 });
-  // The item opens with the same heading every time; its approval id is what tells one request from the next.
-  const firstApproval = (await page.getByTestId("approval-item").innerText()).split("\n").find((line) => line.startsWith("apr_")) ?? "";
-  expect(firstApproval).not.toBe("");
-  await page.getByRole("button", { name: "批准", exact: true }).click();
-  // The second call asks next: a different approval replaces the first one in the inbox.
-  await expect.poll(async () => {
-    const items = page.getByTestId("approval-item");
-    return (await items.count()) === 1 && !(await items.innerText()).includes(firstApproval);
-  }, { timeout: 30_000 }).toBe(true);
+  // The card says what it is about, which is what tells one request from the next.
+  const first = (await page.getByTestId("approval-item").innerText()).includes("left") ? "left" : "right";
+  const second = first === "left" ? "right" : "left";
+  await page.getByRole("button", { name: "允许一次", exact: true }).click();
+  // The other call asks next: a different approval replaces the first one in the inbox.
+  await expect(page.getByTestId("approval-item")).toContainText(second, { timeout: 30_000 });
+  await expect(page.getByTestId("approval-item")).toHaveCount(1);
   await expect(taskStatus(page)).toHaveAttribute("data-status", "WAITING");
   await page.getByRole("button", { name: "拒绝", exact: true }).click();
 
@@ -379,7 +378,7 @@ test("E16 a spent exploration budget is extended by a person and the agent goes 
   // The second call is refused; the agent asks for more budget and a person is asked to allow it.
   await expect(page.getByTestId("approval-item")).toHaveCount(1, { timeout: 60_000 });
   expect(toolRuns(second)).toBe(0);
-  await page.getByRole("button", { name: "批准", exact: true }).click();
+  await page.getByRole("button", { name: "允许一次", exact: true }).click();
 
   await expect(taskStatus(page)).toHaveAttribute("data-status", "COMPLETED", { timeout: 90_000 });
   expect(toolRuns(first)).toBe(1);
@@ -450,15 +449,12 @@ test("E19 one agent-state checkpoint is taken per batch of tool calls, before th
   const batch = await createTask(request, title, "two:left|right");
   await openTask(page, title);
   await expect(page.getByTestId("approval-item")).toHaveCount(1, { timeout: 30_000 });
-  // The item opens with the same heading every time; its approval id is what tells one request from the next.
-  const firstApproval = (await page.getByTestId("approval-item").innerText()).split("\n").find((line) => line.startsWith("apr_")) ?? "";
-  expect(firstApproval).not.toBe("");
-  await page.getByRole("button", { name: "批准", exact: true }).click();
-  await expect.poll(async () => {
-    const items = page.getByTestId("approval-item");
-    return (await items.count()) === 1 && !(await items.innerText()).includes(firstApproval);
-  }, { timeout: 30_000 }).toBe(true);
-  await page.getByRole("button", { name: "批准", exact: true }).click();
+  // The card says what it is about, which is what tells one request from the next.
+  const first = (await page.getByTestId("approval-item").innerText()).includes("left") ? "left" : "right";
+  await page.getByRole("button", { name: "允许一次", exact: true }).click();
+  await expect(page.getByTestId("approval-item")).toContainText(first === "left" ? "right" : "left", { timeout: 30_000 });
+  await expect(page.getByTestId("approval-item")).toHaveCount(1);
+  await page.getByRole("button", { name: "允许一次", exact: true }).click();
   await waitForStatus(request, batch, "COMPLETED", 60_000);
   expect(sql(`SELECT count(*) FROM checkpoints WHERE task_id = '${batch}' AND kind = 'agent_state' AND seq < 1000000000`)).toBe("1");
 });

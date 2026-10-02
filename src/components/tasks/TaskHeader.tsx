@@ -1,4 +1,4 @@
-import { PanelRight } from "lucide-react";
+import { MoreHorizontal, PanelRight } from "lucide-react";
 import { useState } from "react";
 import type { Task } from "../../lib/tasks";
 import { Button } from "../../ui/Button";
@@ -8,18 +8,17 @@ import { isLive, statusTone, taskStatusText } from "./statusText";
 
 interface TaskHeaderProps {
   readonly task: Task;
-  readonly onControl: (action: "pause" | "resume" | "cancel") => void;
+  readonly onCancel: () => void;
   /** 详情面板收起时才显示「展开」按钮。 */
   readonly panelOpen: boolean;
   readonly onOpenPanel: () => void;
 }
 
-export function TaskHeader({ task, onControl, panelOpen, onOpenPanel }: TaskHeaderProps) {
+export function TaskHeader({ task, onCancel, panelOpen, onOpenPanel }: TaskHeaderProps) {
   const [confirming, setConfirming] = useState(false);
-  const paused = task.status === "PAUSED";
+  const [menuOpen, setMenuOpen] = useState(false);
   // 任务是一场对话：做完只是空闲，还能继续聊；只有取消才算结束。
   const cancelled = task.status === "CANCELLED";
-  const idle = task.status === "COMPLETED";
   return (
     <header className="flex h-14 shrink-0 items-center gap-3 border-b border-border bg-card px-6">
       <h2 title={task.task_id} className="min-w-0 truncate text-base font-semibold text-foreground">
@@ -31,16 +30,36 @@ export function TaskHeader({ task, onControl, panelOpen, onOpenPanel }: TaskHead
       <span className="hidden text-xs text-muted-foreground md:inline">plan v{task.plan_version}</span>
       <div className="ml-auto flex shrink-0 items-center gap-2">
         {cancelled ? null : (
-          <>
-            {idle ? null : (
-              <Button size="sm" onClick={() => onControl(paused ? "resume" : "pause")}>
-                {paused ? "继续" : "暂停"}
-              </Button>
-            )}
-            <Button size="sm" variant="danger" onClick={() => setConfirming(true)}>
-              取消
-            </Button>
-          </>
+          <div className="relative">
+            <button
+              type="button"
+              aria-label="更多操作"
+              aria-haspopup="menu"
+              aria-expanded={menuOpen}
+              className="flex h-8 w-8 items-center justify-center rounded-lg text-muted-foreground hover:bg-secondary"
+              onClick={() => setMenuOpen((open) => !open)}
+            >
+              <MoreHorizontal className="h-4 w-4" />
+            </button>
+            {menuOpen ? (
+              <>
+                <div className="fixed inset-0 z-10" onClick={() => setMenuOpen(false)} />
+                <div role="menu" className="absolute right-0 top-9 z-20 min-w-36 rounded-lg border border-border bg-card p-1 shadow-md">
+                  <button
+                    type="button"
+                    role="menuitem"
+                    className="flex w-full items-center rounded-md px-3 py-2 text-left text-sm text-destructive hover:bg-destructive/10"
+                    onClick={() => {
+                      setMenuOpen(false);
+                      setConfirming(true);
+                    }}
+                  >
+                    取消任务
+                  </button>
+                </div>
+              </>
+            ) : null}
+          </div>
         )}
         {panelOpen ? null : (
           <button type="button" aria-label="展开详情" className="flex h-8 w-8 items-center justify-center rounded-lg text-muted-foreground hover:bg-secondary" onClick={onOpenPanel}>
@@ -57,7 +76,7 @@ export function TaskHeader({ task, onControl, panelOpen, onOpenPanel }: TaskHead
               variant="danger"
               onClick={() => {
                 setConfirming(false);
-                onControl("cancel");
+                onCancel();
               }}
             >
               确认取消任务

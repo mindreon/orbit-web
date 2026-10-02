@@ -1,4 +1,5 @@
 import type { AttemptStatus, TaskLiveState } from "./taskEvents";
+import { joinSplits, splitThinking } from "./thinking";
 import type { Task, TaskEvent } from "./tasks";
 
 export type StepState = "running" | "success" | "error" | "denied" | "interrupted";
@@ -25,8 +26,10 @@ export interface AgentTurn {
   readonly attemptNo: number;
   readonly status: AttemptStatus;
   readonly steps: readonly Step[];
-  /** 最终回复；还没有时是正在流出的文字。 */
+  /** 最终回复；还没有时是正在流出的文字。模型写进回复里的推理已经拆出去，不在这里。 */
   readonly text: string;
+  /** 模型写进回复里的推理，折叠显示。 */
+  readonly thinking: string;
   readonly streaming: boolean;
   readonly truncated: boolean;
   readonly resumed: number;
@@ -62,6 +65,7 @@ function fold(turns: readonly Turn[], event: TaskEvent): readonly Turn[] {
           status: "running",
           steps: [],
           text: "",
+          thinking: "",
           streaming: false,
           truncated: false,
           resumed: 0,
@@ -98,14 +102,17 @@ export function buildTimeline(task: Task, events: readonly TaskEvent[], live: Ta
   return withGoal.map((turn) => {
     if (turn.kind !== "agent") return turn;
     const attempt = live.attempts.find((item) => item.attemptId === turn.id);
-    const streamed = live.live[turn.id] ?? "";
-    const text = attempt?.finalText ?? streamed;
+    const blocks = live.live[turn.id] ?? [];
+    // 每一轮模型输出单独判断：前一轮说的话不会被后一轮的推理标签带走。
+    const { thinking, answer } =
+      attempt?.finalText !== undefined ? joinSplits([splitThinking(attempt.finalText)]) : joinSplits(blocks.map((block) => splitThinking(block.text)));
     return {
       ...turn,
       status: attempt?.status ?? turn.status,
       resumed: attempt?.resumed ?? 0,
-      text,
-      streaming: attempt?.finalText === undefined && streamed !== "",
+      text: answer,
+      thinking,
+      streaming: attempt?.finalText === undefined && blocks.some((block) => block.text !== ""),
       truncated: Boolean(live.truncated[turn.id]),
     };
   });

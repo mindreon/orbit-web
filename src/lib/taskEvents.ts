@@ -17,11 +17,17 @@ export interface AgentQuestion {
   readonly text: string;
 }
 
+/** The text one model round has streamed so far. */
+export interface LiveBlock {
+  readonly id: string;
+  readonly text: string;
+}
+
 export interface TaskLiveState {
   readonly attempts: readonly AttemptView[];
   readonly question: AgentQuestion | null;
-  /** Streamed text per attempt that has not produced its final message yet. */
-  readonly live: Readonly<Record<string, string>>;
+  /** Streamed text per attempt that has not produced its final message yet, one block per model round. */
+  readonly live: Readonly<Record<string, readonly LiveBlock[]>>;
   /** Attempts whose live text may miss chunks because the stream dropped while they were writing. */
   readonly truncated: Readonly<Record<string, true>>;
   /** The highest `entity.version` applied per `kind:id`. Only events with a version above it are applied (09 §1). */
@@ -45,6 +51,12 @@ const without = <T extends Record<string, unknown>>(record: T, key: string): T =
   const { [key]: _removed, ...rest } = record;
   return rest as T;
 };
+
+/** A delta continues the block it belongs to; the first delta of another block starts a new one. */
+function appendDelta(blocks: readonly LiveBlock[], id: string, text: string): readonly LiveBlock[] {
+  const last = blocks[blocks.length - 1];
+  return last !== undefined && last.id === id ? [...blocks.slice(0, -1), { id, text: last.text + text }] : [...blocks, { id, text }];
+}
 
 const finishedStatus = (outcome: string): AttemptStatus =>
   outcome === "completed" ? "completed" : outcome === "cancelled" ? "cancelled" : "failed";
@@ -84,7 +96,7 @@ function applyChange(state: TaskLiveState, event: TaskEvent): TaskLiveState {
         truncated: without(state.truncated, attemptId),
       };
     case "agent.token_delta":
-      return { ...state, live: { ...state.live, [attemptId]: (state.live[attemptId] ?? "") + field(payload, "text") } };
+      return { ...state, live: { ...state.live, [attemptId]: appendDelta(state.live[attemptId] ?? [], field(payload, "block_id"), field(payload, "text")) } };
     case "message.agent_final":
       return {
         ...state,
@@ -115,7 +127,7 @@ export function applyEvent(state: TaskLiveState, event: TaskEvent): TaskLiveStat
 
 /** The stream dropped: text streamed so far may be missing chunks until the attempt's final message arrives. */
 export function markStreamGap(state: TaskLiveState): TaskLiveState {
-  const streaming = Object.keys(state.live).filter((id) => state.live[id] !== "");
+  const streaming = Object.keys(state.live).filter((id) => state.live[id].some((block) => block.text !== ""));
   if (streaming.length === 0) return state;
   return { ...state, truncated: { ...state.truncated, ...Object.fromEntries(streaming.map((id) => [id, true as const])) } };
 }

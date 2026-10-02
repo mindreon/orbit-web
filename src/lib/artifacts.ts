@@ -29,6 +29,13 @@ export function flattenArtifacts(manifests: readonly ArtifactManifest[]): readon
   );
 }
 
+/** 同名文件在任务里被改过几次，面板里只留最新的一个；对话里每条回复仍然带着它自己那一版。 */
+export function latestByName(files: readonly ArtifactFile[]): readonly ArtifactFile[] {
+  const last = new Map<string, ArtifactFile>();
+  for (const file of files) last.set(file.name, file);
+  return files.filter((file) => last.get(file.name) === file);
+}
+
 const extension = (name: string) => name.slice(name.lastIndexOf(".") + 1).toLowerCase();
 
 /** 决定怎么预览：图片直接显示，HTML 放沙箱，文本和 Markdown 渲染，PDF 和其他文件只给下载。 */

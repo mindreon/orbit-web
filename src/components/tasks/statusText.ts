@@ -7,12 +7,13 @@ export const taskStatusText: Readonly<Record<string, string>> = {
 
 export const attemptStatusText: Readonly<Record<string, string>> = {
   running: "运行中", parked_approval: "等待审批", parked_input: "等待回复",
-  completed: "已完成", failed: "失败", cancelled: "已打断",
+  completed: "已完成", failed: "失败", cancelled: "已停止",
 };
 
 export const nodeStatusText: Readonly<Record<string, string>> = {
   PENDING: "待执行", READY: "就绪", RUNNING: "执行中", WAITING: "等待中", BLOCKED: "已阻塞",
-  COMPLETED: "已完成", FAILED: "失败", CANCELLED: "已取消", SKIPPED: "已跳过",
+  AWAITING_APPROVAL: "等待审批", AWAITING_INPUT: "等待回复", VERIFYING: "校验中", RETRY_PENDING: "待重试",
+  CANCELLING: "取消中", COMPLETED: "已完成", FAILED: "失败", CANCELLED: "已取消", SKIPPED: "已跳过",
 };
 
 export const nodeTypeText: Readonly<Record<string, string>> = { agent_turn: "Agent 回合" };
