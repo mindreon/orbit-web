@@ -36,10 +36,10 @@ function CopyButton({ text }: { text: string }) {
   );
 }
 
-/** 模型写进回复里的推理：默认折起，不和回复正文混在一起。 */
-function Thinking({ text }: { text: string }) {
+/** 模型的推理（独立字段流出的，或写进回复里的）：默认折起，不和回复正文混在一起；正文开始前跟着流式展开。 */
+function Thinking({ text, open }: { text: string; open: boolean }) {
   return (
-    <details data-testid="thinking" className="group rounded-lg border border-border bg-muted/60 text-sm">
+    <details data-testid="thinking" open={open} className="group rounded-lg border border-border bg-muted/60 text-sm">
       <summary className="flex cursor-pointer list-none items-center gap-2 px-3 py-2 text-muted-foreground hover:text-foreground [&::-webkit-details-marker]:hidden">
         <ChevronRight aria-hidden="true" className="h-4 w-4 transition-transform group-open:rotate-90" />
         思考过程
@@ -57,7 +57,7 @@ export function AgentMessage({ turn, profile, files, onOpenFile, onOpenAllFiles 
     <div data-testid="agent-message" data-status={turn.status} className="space-y-3">
       <StepList steps={turn.steps} active={turn.status === "running"} />
       {thinking ? <p className="text-sm text-muted-foreground">正在思考…</p> : null}
-      {turn.thinking !== "" ? <Thinking text={turn.thinking} /> : null}
+      {turn.thinking !== "" ? <Thinking text={turn.thinking} open={turn.status === "running" && turn.text === ""} /> : null}
       {turn.text !== "" ? (
         turn.streaming ? (
           <article data-testid="live-output">

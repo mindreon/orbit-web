@@ -219,6 +219,35 @@ describe("ephemeral streamed text and the truncation mark", () => {
     expect(state.live).toEqual({ a1: [{ id: "", text: "Hello" }], a2: [{ id: "", text: "X" }] });
   });
 
+  it("streams thinking deltas per block, beside the live text", () => {
+    const state = fold([
+      event("agent.thinking_delta", { attempt_id: "a1", block_id: "t1", text: "先查" }, { after_seq: 1 }),
+      event("agent.thinking_delta", { attempt_id: "a1", block_id: "t1", text: "账本" }, { after_seq: 1 }),
+      event("agent.thinking_delta", { attempt_id: "a1", block_id: "t2", text: "再看报表" }, { after_seq: 1 }),
+      event("agent.token_delta", { attempt_id: "a1", block_id: "b1", text: "答" }, { after_seq: 1 }),
+    ]);
+    expect(state.thinking).toEqual({ a1: [{ id: "t1", text: "先查账本" }, { id: "t2", text: "再看报表" }] });
+    expect(state.live).toEqual({ a1: [{ id: "b1", text: "答" }] });
+  });
+
+  it("keeps the thinking after the final message arrives, so the panel survives the answer", () => {
+    const state = fold([
+      started("a1", 1),
+      event("agent.thinking_delta", { attempt_id: "a1", block_id: "t1", text: "想" }, { after_seq: 1 }),
+      event("message.agent_final", { attempt_id: "a1", text: "答" }, { seq: 2, entity: ["attempt", "a1", 0] }),
+    ]);
+    expect(state.attempts[0]?.finalText).toBe("答");
+    expect(state.thinking).toEqual({ a1: [{ id: "t1", text: "想" }] });
+    expect(state.live).toEqual({});
+  });
+
+  it("marks a thinking-only attempt as truncated when the stream drops", () => {
+    const streaming = fold([event("agent.thinking_delta", { attempt_id: "a1", block_id: "t1", text: "想" }, { after_seq: 1 })]);
+    expect(markStreamGap(streaming).truncated).toEqual({ a1: true });
+    const empty = { ...emptyLiveState, thinking: { a1: [{ id: "t1", text: "" }] } };
+    expect(markStreamGap(empty)).toBe(empty);
+  });
+
   it("marks attempts that were streaming when the stream dropped as truncated", () => {
     const streaming = fold([event("agent.token_delta", { attempt_id: "a1", text: "Hel" }, { after_seq: 1 })]);
     expect(markStreamGap(streaming).truncated).toEqual({ a1: true });

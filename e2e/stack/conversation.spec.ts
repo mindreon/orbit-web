@@ -1,5 +1,5 @@
 /**
- * Acceptance E42-E46, E48 (15 M10): what the conversation shows.
+ * Acceptance E42-E46, E48, E49 (15 M10): what the conversation shows.
  *
  * E42: a model that leaks its reasoning into the reply and closes it with a `</think>` tag nobody opened. The reasoning
  * is folded into a collapsed panel; the rest of the reply stays as it was.
@@ -174,4 +174,21 @@ test("E48 the artifacts panel lists a file once, as it is now, while each reply 
   // Two replies, each with its own card; the panel has the file once.
   await expect(page.getByTestId("agent-message").getByRole("button", { name: /^note\.md/ })).toHaveCount(2);
   await expect(page.getByLabel("成果物").getByText("note.md")).toHaveCount(1);
+});
+
+test("E49 reasoning that arrives in the model's own field is folded away too", async ({ page, request }) => {
+  const title = unique("E49");
+  // The mock streams `reason:` before the `|` as thinking-block deltas, not as text with a tag.
+  const created = await request.post("/v1/tasks", { data: { title, goal: "reason:先把总数和脚数对上|算完了：鸡 23 只，兔 12 只。" }, timeout: 120_000 });
+  expect(created.status()).toBe(201);
+  const taskId = (await created.json()).task_id as string;
+  await openTask(page, title);
+  await waitForStatus(request, taskId, "COMPLETED", 90_000);
+
+  const message = page.getByTestId("agent-message");
+  await expect(message).toContainText("鸡 23 只");
+  const panel = message.getByTestId("thinking");
+  await expect(panel).toHaveCount(1);
+  expect(await panel.textContent()).toContain("先把总数和脚数对上");
+  await expect(message.getByTestId("final-output")).not.toContainText("先把总数和脚数对上");
 });

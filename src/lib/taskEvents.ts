@@ -28,13 +28,15 @@ export interface TaskLiveState {
   readonly question: AgentQuestion | null;
   /** Streamed text per attempt that has not produced its final message yet, one block per model round. */
   readonly live: Readonly<Record<string, readonly LiveBlock[]>>;
+  /** Streamed thinking per attempt (the model's reasoning field), one block per model round; ephemeral like `live`. */
+  readonly thinking: Readonly<Record<string, readonly LiveBlock[]>>;
   /** Attempts whose live text may miss chunks because the stream dropped while they were writing. */
   readonly truncated: Readonly<Record<string, true>>;
   /** The highest `entity.version` applied per `kind:id`. Only events with a version above it are applied (09 §1). */
   readonly versions: Readonly<Record<string, number>>;
 }
 
-export const emptyLiveState: TaskLiveState = { attempts: [], question: null, live: {}, truncated: {}, versions: {} };
+export const emptyLiveState: TaskLiveState = { attempts: [], question: null, live: {}, thinking: {}, truncated: {}, versions: {} };
 
 const field = (payload: Record<string, unknown>, key: string): string => {
   const value = payload[key];
@@ -97,6 +99,8 @@ function applyChange(state: TaskLiveState, event: TaskEvent): TaskLiveState {
       };
     case "agent.token_delta":
       return { ...state, live: { ...state.live, [attemptId]: appendDelta(state.live[attemptId] ?? [], field(payload, "block_id"), field(payload, "text")) } };
+    case "agent.thinking_delta":
+      return { ...state, thinking: { ...state.thinking, [attemptId]: appendDelta(state.thinking[attemptId] ?? [], field(payload, "block_id"), field(payload, "text")) } };
     case "message.agent_final":
       return {
         ...state,
@@ -125,9 +129,12 @@ export function applyEvent(state: TaskLiveState, event: TaskEvent): TaskLiveStat
   return { ...next, versions: { ...next.versions, [key]: version } };
 }
 
-/** The stream dropped: text streamed so far may be missing chunks until the attempt's final message arrives. */
+/** The stream dropped: text or thinking streamed so far may be missing chunks until the attempt's final message arrives. */
 export function markStreamGap(state: TaskLiveState): TaskLiveState {
-  const streaming = Object.keys(state.live).filter((id) => state.live[id].some((block) => block.text !== ""));
+  const streaming = [...new Set([
+    ...Object.keys(state.live).filter((id) => state.live[id].some((block) => block.text !== "")),
+    ...Object.keys(state.thinking).filter((id) => state.thinking[id].some((block) => block.text !== "")),
+  ])];
   if (streaming.length === 0) return state;
   return { ...state, truncated: { ...state.truncated, ...Object.fromEntries(streaming.map((id) => [id, true as const])) } };
 }

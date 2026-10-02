@@ -104,8 +104,13 @@ export function buildTimeline(task: Task, events: readonly TaskEvent[], live: Ta
     const attempt = live.attempts.find((item) => item.attemptId === turn.id);
     const blocks = live.live[turn.id] ?? [];
     // 每一轮模型输出单独判断：前一轮说的话不会被后一轮的推理标签带走。
-    const { thinking, answer } =
+    const { thinking: tagged, answer } =
       attempt?.finalText !== undefined ? joinSplits([splitThinking(attempt.finalText)]) : joinSplits(blocks.map((block) => splitThinking(block.text)));
+    // 模型从独立推理字段流出的（reasoning_content → agent.thinking_delta）排在前面；混进回复正文里的 <think> 段按轮接在后面。
+    const streamed = live.thinking[turn.id] ?? [];
+    const thinking = [streamed.map((block) => block.text).filter((text) => text !== "").join("\n\n"), tagged]
+      .filter((text) => text !== "")
+      .join("\n\n");
     return {
       ...turn,
       status: attempt?.status ?? turn.status,
