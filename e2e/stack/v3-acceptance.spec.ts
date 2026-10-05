@@ -6,7 +6,7 @@ import { expect, test, type APIRequestContext, type Page } from "@playwright/tes
 import {
   type Policy,
   addNodes, attemptIds, attemptRows, createTask, eventRows, eventually, followTask, getPlan, getTask, killControl, killWorker, networkOutage, openTask,
-  planNodes, registerProfile, setTenantPolicy, release, rollBack, setControlReplica, registerSop, runningAttemptWorkflows, sql, taskStatus, toolRuns, waitForStatus, workflowVersion,
+  planNodes, planSteps, sopSteps, startsByNode, registerProfile, setTenantPolicy, release, rollBack, setControlReplica, registerSop, runningAttemptWorkflows, sql, taskStatus, toolRuns, waitForStatus, workflowVersion,
 } from "./tasks";
 
 // The mock streams each part of a `stream:` goal as it is; a part ends in a space so the worker's secret redactor releases it.
@@ -25,7 +25,10 @@ test("E1 an agent plans two nodes, they run to completion and what was said is n
   const taskId = await createTask(request, title, "plan:Draft report|Review report");
 
   await openTask(page, title);
-  await expect(page.getByText(/plan v[2-9]/)).toBeVisible();
+  // The plan version is developer information: not in the header, inside the collapsed 「开发者信息」 disclosure.
+  await expect(page.locator("main header")).not.toContainText(/plan v\d/);
+  await page.getByTestId("developer-info").getByText("开发者信息").click();
+  await expect(page.getByTestId("developer-info").getByText(/plan v[2-9]/)).toBeVisible();
   await expect(taskStatus(page)).toHaveAttribute("data-status", "COMPLETED", { timeout: 60_000 });
   await expect(planNodes(page)).toHaveCount(3);
   for (const node of await planNodes(page).all()) await expect(node).toHaveAttribute("data-status", "COMPLETED");
@@ -147,7 +150,7 @@ test("E5 pause holds the next attempt, resume continues, cancel ends every child
   for (const row of await attemptRows(page).all()) await expect(row).not.toHaveAttribute("data-status", "running");
 });
 
-test("E6 a worker killed in the second SOP step resumes without rerunning the first", async ({ page, request }) => {
+test("E6 a worker killed in the second SOP step resumes that step's attempt without rerunning the first step", async ({ page, request }) => {
   const title = unique("E6");
   const sop = await registerSop(request, "release", 1, ["draft", "review", "publish"]);
   // A version is immutable: the same steps again are accepted, different steps are a conflict.
@@ -157,22 +160,35 @@ test("E6 a worker killed in the second SOP step resumes without rerunning the fi
   await addNodes(request, taskId, [{ type: "sop_stage", title: "Release", sop }]);
   await openTask(page, title);
 
-  // Step 1 is checkpointed; step 2 is now running (the mock holds each step for 1.5s). Kill the worker there.
+  // The SOP is compiled into one node per step, each with its own attempts (not one attempt running every step).
+  const steps = await eventually(() => sopSteps(request, taskId), (nodes) => nodes.length === 3, "the SOP to be compiled into three step nodes");
+  expect(steps.map((node) => node.sop_step?.subject)).toEqual(["draft", "review", "publish"]);
+  expect(new Set(steps.map((node) => node.node_id)).size).toBe(3);
+  await expect(planSteps(page)).toHaveCount(3, { timeout: 30_000 });
+
+  // Step 1 is done and step 2 has an attempt running (each mock turn takes 1.5s). Kill the worker there.
   await eventually(
-    async () => Number(sql(`SELECT count(*) FROM checkpoints WHERE task_id = '${taskId}' AND kind = 'sop_run_state'`)),
-    (count) => count >= 1,
-    "the first SOP step to be checkpointed",
-    60_000,
+    async () => ({ plan: await sopSteps(request, taskId), started: startsByNode(taskId) }),
+    ({ plan, started }) => plan[0].status === "COMPLETED" && started[plan[1].node_id] === 1 && plan[1].status !== "COMPLETED",
+    "step 1 to be completed and step 2 to be running",
+    90_000,
   );
   await killWorker(request);
 
   await expect(taskStatus(page)).toHaveAttribute("data-status", "COMPLETED", { timeout: 120_000 });
-  const sopAttempt = attemptRows(page).last();
-  await expect(sopAttempt).toContainText("已恢复 1 次");
-  await expect(sopAttempt).toHaveAttribute("data-attempt-no", "1");
-  await expect(planNodes(page).last()).toHaveAttribute("data-status", "COMPLETED");
-  // Each step wrote its checkpoint exactly once: step 1 was not run again.
-  expect(sql(`SELECT string_agg(seq::text || 'x' || n::text, ',' ORDER BY seq) FROM (SELECT seq, count(*) n FROM checkpoints WHERE task_id = '${taskId}' AND kind = 'sop_run_state' GROUP BY seq) t`)).toBe("11x1,21x1,31x1");
+  for (const node of await planNodes(page).all()) await expect(node).toHaveAttribute("data-status", "COMPLETED");
+  for (const step of await planSteps(page).all()) await expect(step).toHaveAttribute("data-status", "COMPLETED");
+
+  // The attempt of step 2 was picked up again, not replaced: still attempt 1, resumed once. No step ran twice.
+  const done = await sopSteps(request, taskId);
+  expect(startsByNode(taskId)).toMatchObject(Object.fromEntries(done.map((node) => [node.node_id, 1])));
+  expect(sql(`SELECT count(*) FROM task_events WHERE task_id = '${taskId}' AND event_type = 'attempt.resumed'`)).toBe("1");
+  expect(sql(`SELECT body->'payload'->>'node_id' FROM task_events WHERE task_id = '${taskId}' AND event_type = 'attempt.started' AND body->'payload'->>'attempt_no' <> '1'`)).toBe("");
+  const resumed = attemptRows(page).filter({ hasText: "已恢复 1 次" });
+  await expect(resumed).toHaveCount(1);
+  await expect(resumed).toHaveAttribute("data-attempt-no", "1");
+  // The SOP node's group reads as finished: all three steps.
+  await expect(page.getByTestId("sop-progress")).toContainText("已完成 3/3 步");
 });
 
 test("E7 a dropped stream and a reload lose no durable event, and streamed text is finished or marked truncated", async ({ page, request }) => {
@@ -399,7 +415,8 @@ test("E17 a tool the profile denies is refused before it can run", async ({ page
   expect(sql(`SELECT string_agg(body->'payload'->>'state', ',') FROM task_events WHERE task_id = '${taskId}' AND event_type = 'tool.call_finished'`)).toBe("denied");
 });
 
-test("E18 a refused SOP step is tried again with the verdict and the SOP still completes; too many refusals fail it", async ({ page, request }) => {
+test("E18 a refused SOP step retries its node with the verdict; a step out of tries blocks the node and asks for a review", async ({ page, request }) => {
+  test.setTimeout(300_000);
   const stamp = Date.now();
   const flaky = await registerSop(request, `flaky${stamp}`, 1, ["draft", "flaky-1", "publish"]);
   const title = unique("E18");
@@ -407,34 +424,60 @@ test("E18 a refused SOP step is tried again with the verdict and the SOP still c
   await addNodes(request, taskId, [{ type: "sop_stage", title: "Release", sop: flaky }]);
   await openTask(page, title);
 
-  await expect(taskStatus(page)).toHaveAttribute("data-status", "COMPLETED", { timeout: 120_000 });
-  // Step 2 took two tries (its first was refused); steps 1 and 3 one each, all inside one attempt.
-  expect(sql(`SELECT string_agg(seq::text, ',' ORDER BY seq) FROM checkpoints WHERE task_id = '${taskId}' AND kind = 'sop_run_state'`)).toBe("11,21,22,31");
-  await expect(attemptRows(page).last()).toHaveAttribute("data-attempt-no", "1");
+  // The verifier refuses step 2's first attempt; the node waits out the backoff (5s) and is tried again with the reason.
+  await expect(taskStatus(page)).toHaveAttribute("data-status", "COMPLETED", { timeout: 180_000 });
+  const steps = await sopSteps(request, taskId);
+  expect(steps.map((node) => node.attempt_count)).toEqual([1, 2, 1]);
+  expect(steps.map((node) => node.status)).toEqual(["COMPLETED", "COMPLETED", "COMPLETED"]);
+  expect(startsByNode(taskId)[steps[1].node_id]).toBe(2);
+  // The reason of the refusal is what the node waited on, and it is on the page.
+  expect(sql(`SELECT count(*) FROM task_events WHERE task_id = '${taskId}' AND event_type = 'node.status_changed' AND body->'payload'->>'node_id' = '${steps[1].node_id}' AND body->'payload'->>'to_status' = 'RETRY_PENDING' AND body->'payload'->>'reason' LIKE '%flaky-1 was refused on attempt 1%'`)).toBe("1");
+  await expect(planNodes(page).filter({ has: page.getByTestId("sop-progress") })).toHaveAttribute("data-status", "COMPLETED");
+  await expect(page.getByTestId("sop-progress")).toContainText("已完成 3/3 步");
+  await expect(attemptRows(page).filter({ hasText: "第 2 次执行" })).toHaveCount(1);
 
-  // A step refused more often than it is allowed to be fails the SOP, and with it the attempt.
+  // A step refused on every try (3 by default; backoff 5s, then 30s) blocks its node, and the task asks for a review.
   const hopeless = await registerSop(request, `hopeless${stamp}`, 1, ["flaky-5"]);
-  const failing = await createTask(request, unique("E18 fail"), "start");
+  const failTitle = unique("E18 fail");
+  const failing = await createTask(request, failTitle, "start");
   await addNodes(request, failing, [{ type: "sop_stage", title: "Doomed", sop: hopeless }]);
-  await eventually(
-    async () => sql(`SELECT count(*) FROM task_events WHERE task_id = '${failing}' AND event_type = 'attempt.finished' AND body->'payload'->>'outcome' = 'failed'`),
-    (count) => Number(count) >= 1,
-    "the doomed SOP attempt to fail",
-    120_000,
-  );
-  expect(sql(`SELECT count(*) FROM checkpoints WHERE task_id = '${failing}' AND kind = 'sop_run_state' AND seq < 20`)).toBe("3");
+  await openTask(page, failTitle);
+  await expect(taskStatus(page)).toHaveAttribute("data-status", "PAUSED_NEEDS_REVIEW", { timeout: 200_000 });
+  const [doomed] = await sopSteps(request, failing);
+  expect(doomed.status).toBe("BLOCKED");
+  expect(startsByNode(failing)[doomed.node_id]).toBe(3);
+  expect(sql(`SELECT count(*) FROM task_events WHERE task_id = '${failing}' AND event_type = 'attempt.finished' AND body->'payload'->>'outcome' = 'failed'`)).toBe("3");
+  await expect(page.getByTestId("review-notice")).toBeVisible();
+  await expect(page.getByTestId("review-resume")).toBeVisible();
+  await expect(planSteps(page).first()).toHaveAttribute("data-status", "BLOCKED");
+  await expect(planNodes(page).filter({ has: page.getByTestId("sop-progress") })).toHaveAttribute("data-status", "BLOCKED");
 
   // A step names its own budget of tries: two refusals end it, though the default would allow a third.
   const strict = await registerSop(request, `strict${stamp}`, 1, [{ subject: "flaky-2", description: "must be right first or second time", max_attempts: 2 }]);
   const capped = await createTask(request, unique("E18 cap"), "start");
   await addNodes(request, capped, [{ type: "sop_stage", title: "Capped", sop: strict }]);
-  await eventually(
-    async () => sql(`SELECT count(*) FROM task_events WHERE task_id = '${capped}' AND event_type = 'attempt.finished' AND body->'payload'->>'outcome' = 'failed'`),
-    (count) => Number(count) >= 1,
-    "the capped SOP attempt to fail",
-    120_000,
-  );
-  expect(sql(`SELECT string_agg(seq::text, ',' ORDER BY seq) FROM checkpoints WHERE task_id = '${capped}' AND kind = 'sop_run_state'`)).toBe("11,12");
+  await waitForStatus(request, capped, "PAUSED_NEEDS_REVIEW", 150_000);
+  const [limited] = await sopSteps(request, capped);
+  expect(limited.status).toBe("BLOCKED");
+  expect(startsByNode(capped)[limited.node_id]).toBe(2);
+});
+
+test("E56 a plain approval node in the plan waits for a person: the card shows its summary, approving completes it", async ({ page, request }) => {
+  const title = unique("E56");
+  const taskId = await createTask(request, title, "start");
+  await addNodes(request, taskId, [{ type: "approval", title: "Ship it", summary: `Ship the migration ${title}?` }]);
+  await openTask(page, title);
+
+  const card = page.getByTestId("approval-item");
+  await expect(card).toHaveCount(1, { timeout: 60_000 });
+  await expect(card).toHaveAttribute("data-kind", "node_approval");
+  await expect(card).toContainText(`Ship the migration ${title}?`);
+  // Nothing else in the plan can proceed until it is decided, and the task is waiting on a person.
+  expect((await getPlan(request, taskId)).nodes.find((node) => node.type === "approval")?.status).toMatch(/AWAITING_APPROVAL|WAITING|PENDING/);
+  await card.getByTestId("approval-approve").click();
+  await expect(page.getByTestId("approval-item")).toHaveCount(0, { timeout: 30_000 });
+  await expect(taskStatus(page)).toHaveAttribute("data-status", "COMPLETED", { timeout: 60_000 });
+  expect((await getPlan(request, taskId)).nodes.find((node) => node.type === "approval")?.status).toBe("COMPLETED");
 });
 
 test("E19 one agent-state checkpoint is taken per batch of tool calls, before the batch starts and never inside it (A27)", async ({ page, request }) => {

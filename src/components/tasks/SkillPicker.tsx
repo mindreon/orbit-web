@@ -26,7 +26,7 @@ export function SkillPicker({ chosen, onToggle }: { chosen: readonly string[]; o
   return (
     <>
       <Input aria-label="搜索技能" value={keyword} placeholder="搜索技能" className="mb-1" onChange={(event) => setKeyword(event.target.value)} />
-      {error ? <p className="px-2 py-1 text-[13px] text-destructive">{error}</p> : null}
+      {error ? <p className="px-2 py-1 text-small text-danger-700">{error}</p> : null}
       {results.map((skill) => (
         <Option key={skill.id} kind="checkbox" checked={chosen.includes(skill.id)} label={skill.name} id={skill.id} onClick={() => onToggle(skill)} />
       ))}

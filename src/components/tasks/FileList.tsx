@@ -8,17 +8,19 @@ export function FileList({ files, onOpen }: { readonly files: readonly ArtifactF
   return (
     <Section title="成果物" label="成果物">
       {files.length === 0 ? <SectionEmpty>暂无成果物</SectionEmpty> : null}
-      <ul className="mt-2 space-y-1">
-        {files.map((file) => (
-          <li key={`${file.manifestId}/${file.name}`}>
-            <button type="button" className="flex w-full items-center gap-2 rounded-lg px-2 py-1.5 text-left hover:bg-secondary" onClick={() => onOpen(file)}>
-              <FileIcon file={file} size="sm" />
-              <span className="min-w-0 flex-1 truncate text-sm text-foreground">{file.name}</span>
-              <span className="shrink-0 text-xs text-muted-foreground">{formatSize(file.size)}</span>
-            </button>
-          </li>
-        ))}
-      </ul>
+      {files.length > 0 ? (
+        <ul className="mt-2 flex flex-col gap-0.5 rounded-card bg-card p-1">
+          {files.map((file) => (
+            <li key={`${file.manifestId}/${file.name}`}>
+              <button type="button" className="flex w-full items-center gap-2 rounded-control px-2 py-1.5 text-left hover:bg-gray-100" onClick={() => onOpen(file)}>
+                <FileIcon file={file} size="sm" />
+                <span className="min-w-0 flex-1 truncate text-body text-foreground">{file.name}</span>
+                <span className="shrink-0 text-caption text-muted-foreground">{formatSize(file.size)}</span>
+              </button>
+            </li>
+          ))}
+        </ul>
+      ) : null}
     </Section>
   );
 }

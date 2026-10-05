@@ -9,7 +9,9 @@ const RELAY_ADMIN = "http://127.0.0.1:18183";
 const PG_CONTAINER = "orbit-stack-pg";
 const CROCKFORD = "0123456789ABCDEFGHJKMNPQRSTVWXYZ";
 
-export type Node = { node_id: string; type: string; title: string; status: string; attempt_count: number; frozen: boolean; current_attempt_id?: string };
+/** What a node is inside a compiled SOP (contract v3 `sop_step`). */
+export type SopStepInfo = { sop: string; role: "sop" | "step" | "approval_before" | "approval_after"; total: number; step_id: string; index: number; subject: string };
+export type Node = { node_id: string; type: string; title: string; status: string; attempt_count: number; frozen: boolean; current_attempt_id?: string; parent_node_id?: string | null; sop_step?: SopStepInfo | null };
 export type PlanView = { plan_version: number; nodes: Node[] };
 export type TaskView = { task_id: string; status: string; plan_version: number; pending_approvals: string[] | null };
 
@@ -73,7 +75,7 @@ export type CompletionContract = {
   verifications?: Array<{ kind: "command" | "schema" | "human" | "sop_verifier"; spec?: Record<string, unknown> }>;
 };
 
-type NodeDraft = ({ type: "agent_turn"; title: string; goal: string } | { type: "sop_stage"; title: string; sop: string }) & {
+type NodeDraft = ({ type: "agent_turn"; title: string; goal: string } | { type: "sop_stage"; title: string; sop: string } | { type: "approval"; title: string; summary: string }) & {
   workspace_access?: "write" | "read" | "none";
   completion_contract?: CompletionContract;
 };
@@ -92,7 +94,7 @@ export async function addNodes(request: APIRequestContext, taskId: string, draft
       title: draft.title,
       owner_profile: "default@1",
       depends_on: [index === 0 ? plan.nodes[0].node_id : `tmp:${index}`],
-      spec: draft.type === "sop_stage" ? { sop: draft.sop } : { goal: draft.goal },
+      spec: draft.type === "sop_stage" ? { sop: draft.sop } : draft.type === "approval" ? { summary: draft.summary, risk: "medium" } : { goal: draft.goal },
       ...(draft.workspace_access ? { workspace_access: draft.workspace_access } : {}),
       ...(draft.completion_contract ? { completion_contract: draft.completion_contract } : {}),
     },
@@ -153,6 +155,20 @@ export async function openTask(page: Page, title: string): Promise<void> {
 export const taskStatus = (page: Page) => page.getByTestId("task-status");
 export const attemptRows = (page: Page) => page.getByTestId("attempt-row");
 export const planNodes = (page: Page) => page.getByTestId("plan-node");
+/** The nodes a SOP was compiled into, listed under the SOP node in the plan. */
+export const planSteps = (page: Page) => page.getByTestId("plan-step");
+
+/** The compiled SOP steps of a task (not its approvals), in plan order, as the API reports them. */
+export const sopSteps = async (request: APIRequestContext, taskId: string): Promise<Node[]> => (await getPlan(request, taskId)).nodes.filter((node) => node.sop_step?.role === "step");
+
+/** How many times each node of the task was started, by node id (durable events, so it counts attempts that crashed too). */
+export const startsByNode = (taskId: string): Record<string, number> =>
+  Object.fromEntries(
+    sql(`SELECT body->'payload'->>'node_id' || '=' || count(*) FROM task_events WHERE task_id = '${taskId}' AND event_type = 'attempt.started' GROUP BY body->'payload'->>'node_id'`)
+      .split("\n")
+      .filter(Boolean)
+      .map((row) => [row.split("=")[0], Number(row.split("=")[1])]),
+  );
 export const eventRows = (page: Page) => page.getByTestId("event-row");
 
 export type StreamedEvent = { seq: number; type: string; payload: Record<string, unknown> };

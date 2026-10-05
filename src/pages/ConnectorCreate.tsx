@@ -6,6 +6,9 @@ import { useNavigate, useSearchParams } from "react-router";
 import { describeFailure } from "../lib/api";
 import { createMcpConnector, type McpHeaderRef } from "../lib/catalog";
 
+/** 表单里的单行输入：和 ui/fields 的 Input 一个外观。 */
+const INPUT = "mt-1 h-9 w-full rounded-control border border-input bg-card px-3 text-body outline-none hover:border-gray-400 focus:border-primary-500";
+
 type Transport = "stdio" | "streamable_http" | "sse";
 type FillMode = "form" | "json";
 
@@ -165,13 +168,13 @@ export function ConnectorCreatePage() {
   return (
     <div className="flex min-h-0 flex-1 flex-col bg-card text-foreground">
       <PageHeader title="自定义创建" back={{ to: "/experts/connectors", label: "连接器" }} />
-      <div className="min-h-0 flex-1 overflow-auto bg-muted px-6 py-5">
-      <p className="max-w-[760px] text-[14px] leading-6 text-muted-foreground">
+      <div className="min-h-0 flex-1 overflow-auto bg-muted px-4 py-5 sm:px-6">
+      <p className="max-w-[760px] text-body leading-6 text-muted-foreground">
         登记一个 MCP 连接器。本地命令由任务在运行时启动，远程地址由任务在运行时连接。这个页面只保存名字和连接方式，不会在这里运行，也不填写密钥。
       </p>
       <form
         aria-label="自定义创建"
-        className="mt-4 max-w-[760px] rounded-lg border border-border bg-card p-5"
+        className="mt-4 max-w-[760px] rounded-card bg-card p-4 shadow-sm sm:p-5"
         onSubmit={(event) => {
           event.preventDefault();
           if (transport === "sse") {
@@ -232,10 +235,10 @@ export function ConnectorCreatePage() {
       >
         <div className="flex flex-wrap items-end justify-between gap-3">
           <div>
-            <h2 className="text-[16px] font-semibold leading-6">服务配置</h2>
-            <p className="mt-1 text-[12px] leading-5 text-muted-foreground">服务配置支持 Stdio 和 Streamable HTTP。环境变量只写名字，值留空。</p>
+            <h2 className="text-title font-semibold leading-6">服务配置</h2>
+            <p className="mt-1 text-caption leading-5 text-muted-foreground">服务配置支持 Stdio 和 Streamable HTTP。环境变量只写名字，值留空。</p>
           </div>
-          <div className="inline-flex rounded-lg bg-muted p-1" role="tablist" aria-label="填写方式">
+          <div className="inline-flex rounded-control bg-secondary p-1" role="tablist" aria-label="填写方式">
             {(
               [
                 ["form", "表单"],
@@ -247,7 +250,7 @@ export function ConnectorCreatePage() {
                 type="button"
                 role="tab"
                 aria-selected={fillMode === value}
-                className={`h-8 rounded-md px-3 text-[13px] font-medium ${fillMode === value ? "bg-card text-primary shadow-sm" : "text-muted-foreground"}`}
+                className={`h-8 rounded-control px-3 text-small font-medium ${fillMode === value ? "bg-card text-primary-700 shadow-sm" : "text-muted-foreground"}`}
                 onClick={() => {
                   setFillMode(value);
                   setFormError("");
@@ -259,8 +262,8 @@ export function ConnectorCreatePage() {
           </div>
         </div>
         <fieldset className="mt-4">
-          <legend className="text-[14px] font-medium">服务配置</legend>
-          <div className="mt-2 inline-flex rounded-lg bg-muted p-1">
+          <legend className="text-body font-medium">服务配置</legend>
+          <div className="mt-2 inline-flex rounded-control bg-secondary p-1">
             {(
               [
                 ["stdio", "Stdio"],
@@ -270,7 +273,7 @@ export function ConnectorCreatePage() {
             ).map(([value, label]) => (
               <label
                 key={value}
-                className={`inline-flex h-8 cursor-pointer items-center rounded-md px-3 text-[13px] font-medium ${transport === value ? "bg-card text-primary shadow-sm" : "text-muted-foreground"}`}
+                className={`inline-flex h-8 cursor-pointer items-center rounded-control px-3 text-small font-medium ${transport === value ? "bg-card text-primary-700 shadow-sm" : "text-muted-foreground"}`}
               >
                 <input
                   type="radio"
@@ -289,109 +292,109 @@ export function ConnectorCreatePage() {
           </div>
         </fieldset>
         {transport === "sse" ? (
-          <p className="mt-4 text-[14px] leading-6 text-foreground/80">SSE 配置这里不保存。请改用 Streamable HTTP。</p>
+          <p className="mt-4 text-body leading-6 text-gray-700">SSE 配置这里不保存。请改用 Streamable HTTP。</p>
         ) : fillMode === "json" ? (
-          <label className="mt-4 block text-[14px]">
+          <label className="mt-4 block text-body">
             服务配置
             <textarea
               aria-label="服务配置 JSON"
               value={serverConfig}
               placeholder={placeholder}
               spellCheck={false}
-              className="mt-2 h-56 w-full resize-none rounded-lg border border-border bg-muted p-3 font-mono text-[12px] leading-5 text-foreground outline-none"
+              className="mt-2 h-56 w-full resize-none rounded-control border border-input bg-muted p-3 font-mono text-small leading-5 text-foreground outline-none focus:border-primary-500"
               onChange={(event) => setServerConfig(event.target.value)}
             />
           </label>
         ) : (
           <>
-            <label className="mt-4 block text-[14px]">
+            <label className="mt-4 block text-body">
               名称
               <input
                 aria-label="连接器名称"
                 value={name}
                 placeholder="MCP Server 名称，如 fetch、time 等"
-                className="mt-1 h-9 w-full rounded-lg border border-border px-3 text-[14px] outline-none"
+                className={INPUT}
                 onChange={(event) => setName(event.target.value)}
               />
             </label>
             {transport === "stdio" ? (
               <>
-                <label className="mt-3 block text-[14px]">
+                <label className="mt-3 block text-body">
                   启动命令
                   <input
                     aria-label="启动命令"
                     value={command}
-                    className="mt-1 h-9 w-full rounded-lg border border-border px-3 text-[14px] outline-none"
+                    className={INPUT}
                     onChange={(event) => setCommand(event.target.value)}
                   />
                 </label>
-                <label className="mt-3 block text-[14px]">
+                <label className="mt-3 block text-body">
                   参数
                   <input
                     aria-label="启动参数"
                     value={args}
                     placeholder="用空格分开"
-                    className="mt-1 h-9 w-full rounded-lg border border-border px-3 text-[14px] outline-none"
+                    className={INPUT}
                     onChange={(event) => setArgs(event.target.value)}
                   />
                 </label>
-                <label className="mt-3 block text-[14px]">
+                <label className="mt-3 block text-body">
                   环境变量配置
                   <input
                     aria-label="环境变量名"
                     value={envRefs}
                     placeholder="例如 DOCS_TOKEN"
-                    className="mt-1 h-9 w-full rounded-lg border border-border px-3 text-[14px] outline-none"
+                    className={INPUT}
                     onChange={(event) => setEnvRefs(event.target.value)}
                   />
                 </label>
-                <p className="mt-1 text-[12px] leading-5 text-muted-foreground">只写变量名字。值放在运行任务的环境里，不要在这里填写密钥。</p>
+                <p className="mt-1 text-caption leading-5 text-muted-foreground">只写变量名字。值放在运行任务的环境里，不要在这里填写密钥。</p>
               </>
             ) : (
               <>
-                <label className="mt-3 block text-[14px]">
+                <label className="mt-3 block text-body">
                   URL 链接
                   <input
                     aria-label="远程 MCP 地址"
                     value={url}
                     placeholder="MCP Server StreamableHTTP 链接"
-                    className="mt-1 h-9 w-full rounded-lg border border-border px-3 text-[14px] outline-none"
+                    className={INPUT}
                     onChange={(event) => setUrl(event.target.value)}
                   />
                 </label>
-                <label className="mt-3 block text-[14px]">
+                <label className="mt-3 block text-body">
                   参数配置
                   <input
                     aria-label="请求头"
                     value={headerRefs}
                     placeholder="Authorization:DOCS_TOKEN"
-                    className="mt-1 h-9 w-full rounded-lg border border-border px-3 text-[14px] outline-none"
+                    className={INPUT}
                     onChange={(event) => setHeaderRefs(event.target.value)}
                   />
                 </label>
-                <p className="mt-1 text-[12px] leading-5 text-muted-foreground">冒号左边是头名字，右边是环境变量名。不要填写密钥。</p>
+                <p className="mt-1 text-caption leading-5 text-muted-foreground">冒号左边是头名字，右边是环境变量名。不要填写密钥。</p>
               </>
             )}
           </>
         )}
         {transport !== "sse" && fillMode === "json" ? (
-          <label className="mt-3 block text-[14px]">
+          <label className="mt-3 block text-body">
             名称
             <input
               aria-label="连接器名称"
               value={name}
               placeholder="留空时使用 JSON 里的服务名"
-              className="mt-1 h-9 w-full rounded-lg border border-border px-3 text-[14px] outline-none"
+              className={INPUT}
               onChange={(event) => setName(event.target.value)}
             />
           </label>
         ) : null}
-        <label className="mt-4 inline-flex items-center gap-2 text-[14px]">
+        <label className="mt-4 inline-flex items-center gap-2 text-body">
           <input type="checkbox" checked={defaultOpen} onChange={(event) => setDefaultOpen(event.target.checked)} />
           新建任务时默认连接
         </label>
         {formError ? <Alert className="mt-3">{formError}</Alert> : null}
-        <div className="sticky bottom-0 -mx-5 -mb-5 mt-5 flex items-center gap-3 rounded-b-lg border-t border-border bg-card px-5 py-3">
+        <div className="sticky bottom-0 -mx-4 -mb-4 mt-5 flex items-center gap-3 rounded-b-card bg-secondary px-4 py-3 sm:-mx-5 sm:-mb-5 sm:px-5">
           <Button type="submit" variant="primary" disabled={saving}>
             {saving ? "正在保存" : "添加连接器"}
           </Button>

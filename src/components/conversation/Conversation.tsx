@@ -6,7 +6,8 @@ import { UserMessage } from "./UserMessage";
 
 interface ConversationProps {
   readonly turns: readonly Turn[];
-  readonly profile: string;
+  /** 回复脚注里的专家名（已经是显示名，不是 id@版本）。 */
+  readonly expertName: string;
   readonly files: readonly ArtifactFile[];
   readonly onOpenFile: (file: ArtifactFile) => void;
   readonly onOpenAllFiles: () => void;
@@ -17,10 +18,15 @@ interface ConversationProps {
 const NEAR_BOTTOM_PX = 120;
 
 /** 对话滚动区。新内容到达时，如果你本来就在底部附近就跟到底部；你往上翻看历史时不打扰。 */
-export function Conversation({ turns, profile, files, onOpenFile, onOpenAllFiles, children }: ConversationProps) {
+export function Conversation({ turns, expertName, files, onOpenFile, onOpenAllFiles, children }: ConversationProps) {
   const scroller = useRef<HTMLDivElement>(null);
   const stick = useRef(true);
   const lastAgentIndex = turns.reduce((last, turn, index) => (turn.kind === "agent" ? index : last), -1);
+  // 尝试的产物只挂在它的最后一段回复下：同一次尝试被切成多段时，卡片不重复。
+  const lastIndexOfAttempt: Record<string, number> = {};
+  turns.forEach((turn, index) => {
+    if (turn.kind === "agent") lastIndexOfAttempt[turn.attemptId] = index;
+  });
   const size = turns.reduce((sum, turn) => sum + (turn.kind === "agent" ? turn.text.length + turn.steps.length : turn.text.length), 0);
 
   useEffect(() => {
@@ -37,14 +43,19 @@ export function Conversation({ turns, profile, files, onOpenFile, onOpenAllFiles
         stick.current = el.scrollHeight - el.scrollTop - el.clientHeight < NEAR_BOTTOM_PX;
       }}
     >
-      <div className="mx-auto max-w-3xl space-y-6 px-6 py-6">
-        {turns.map((turn, index) => {
-          if (turn.kind === "user") return <UserMessage key={turn.id} turn={turn} />;
-          // 产物属于产出它的那次尝试；没有尝试归属的产物放在最后一条回复下面。
-          const own = files.filter((file) => file.attemptId === turn.id || (file.attemptId === "" && index === lastAgentIndex));
-          return <AgentMessage key={turn.id} turn={turn} profile={profile} files={own} onOpenFile={onOpenFile} onOpenAllFiles={onOpenAllFiles} />;
-        })}
-        {children}
+      {/* 一行大约 40 个汉字：用户气泡、回复、产物卡片都在这一列里，眼睛不用来回找 */}
+      <div className="px-4 py-6 sm:px-6">
+        <div data-testid="conversation-column" className="mx-auto max-w-reading space-y-6 text-body">
+          {turns.map((turn, index) => {
+            if (turn.kind === "user") return <UserMessage key={turn.id} turn={turn} />;
+            // 产物属于产出它的那次尝试的最后一段；没有尝试归属的产物放在最后一条回复下面。
+            const own = files.filter(
+              (file) => (file.attemptId !== "" && file.attemptId === turn.attemptId && index === lastIndexOfAttempt[turn.attemptId]) || (file.attemptId === "" && index === lastAgentIndex),
+            );
+            return <AgentMessage key={turn.id} turn={turn} expertName={expertName} files={own} onOpenFile={onOpenFile} onOpenAllFiles={onOpenAllFiles} />;
+          })}
+          {children}
+        </div>
       </div>
     </div>
   );

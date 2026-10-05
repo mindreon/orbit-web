@@ -277,8 +277,8 @@ const runtimeEnv = {
         // slow_echo (mock only) holds a side-effecting call open and logs every real run, so A12/A27/A32 can be driven.
         ORBIT_MOCK_TOOL_DELAY_MS: "4000",
         ORBIT_MOCK_TOOL_LOG: join(ROOT, "tool-runs.log"),
-        // Long enough that E6 can kill the worker inside step 2 however slow the machine is.
-        ORBIT_MOCK_SOP_STEP_DELAY_MS: "4000",
+        // Each model call reports 10 tokens in and 10 out, so E52 can spend a small token budget.
+        ORBIT_MOCK_TOKENS_PER_CALL: "10",
       }),
   ORBIT_HEARTBEAT_THROTTLE_S: "1",
   ORBIT_EVENT_INGEST_URL: `${REPLICAS[1].internalUrl}/internal/events`,

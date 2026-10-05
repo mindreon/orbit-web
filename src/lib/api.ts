@@ -28,8 +28,33 @@ export function isCallerAbort(error: unknown) {
   return error instanceof DOMException && error.name === "AbortError";
 }
 
+/**
+ * 控制面拒绝一次任务操作时，响应体里的 `code` 就是运行时校验器给的类型（见 orbit-control 的 refusal.go）。
+ * 这里是它们的中文说法；没收录的码照常显示后端给的原文。
+ */
+export const refusalText: Readonly<Record<string, string>> = {
+  FROZEN_NODE: "这个步骤已经完成并冻结，不能再改动。",
+  INVALID_TRANSITION: "任务现在的状态不允许这个操作，请刷新后再试。",
+  STALE_ATTEMPT: "这次执行已经过期，请刷新后再试。",
+  STALE: "页面上的内容已经过期，请刷新后再试。",
+  VERSION_CONFLICT: "计划刚被别处改动，请刷新后再试。",
+  TASK_CLOSED: "任务已经结束，不能再操作。",
+  CONFIG_VERSION_CONFLICT: "任务的配置刚被改过，请刷新后再试。",
+  UNKNOWN_APPROVAL: "找不到这个审批，它可能已经处理过。",
+  APPROVAL_ALREADY_DECIDED: "这个审批已经处理过了。",
+  UNKNOWN_PROFILE: "这个专家不在你的空间里，请换一个。",
+  UNKNOWN_NODE: "找不到这个步骤。",
+  NODE_RUNNING: "这个步骤正在执行：先接管任务，再手动完成。",
+  SCHEMA_INVALID: "提交的内容格式不对。",
+  POLICY_DENIED: "被策略拒绝，这个操作不被允许。",
+  POLICY_VIOLATION: "违反了策略的限制。",
+  NOT_ALLOWED: "这个操作不被允许。",
+};
+
 export function describeFailure(action: string, error: unknown) {
   if (error instanceof ApiError && error.kind === "http") {
+    const refusal = refusalText[error.code];
+    if (refusal) return `${action}：${refusal}`;
     const status = error.status != null ? `（HTTP ${error.status}）` : "";
     const server = error.serverMessage;
     return server ? `${action}：后端返回错误${status}：${server}` : `${action}：后端返回错误${status}。`;

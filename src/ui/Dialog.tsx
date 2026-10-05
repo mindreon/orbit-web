@@ -13,16 +13,16 @@ export function Dialog({ title, onClose, children }: { title: string; onClose: (
   }, [onClose]);
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4" onMouseDown={(event) => event.target === event.currentTarget && onClose()}>
-      <div role="dialog" aria-modal="true" aria-labelledby={titleId} className="w-full max-w-md rounded-lg border border-border bg-card shadow-xl">
-        <div className="flex h-12 items-center justify-between border-b border-border px-4">
-          <h2 id={titleId} className="text-[15px] font-semibold text-foreground">
+      <div role="dialog" aria-modal="true" aria-labelledby={titleId} className="w-full max-w-md rounded-card bg-card shadow-xl">
+        <div className="flex h-14 items-center justify-between px-5">
+          <h2 id={titleId} className="text-title font-semibold text-foreground">
             {title}
           </h2>
-          <button type="button" aria-label="关闭" className="flex h-8 w-8 items-center justify-center rounded-lg text-muted-foreground hover:bg-secondary" onClick={onClose}>
+          <button type="button" aria-label="关闭" className="flex h-8 w-8 items-center justify-center rounded-control text-muted-foreground hover:bg-secondary" onClick={onClose}>
             <X className="h-4 w-4" />
           </button>
         </div>
-        <div className="p-4">{children}</div>
+        <div className="px-5 pb-5">{children}</div>
       </div>
     </div>
   );

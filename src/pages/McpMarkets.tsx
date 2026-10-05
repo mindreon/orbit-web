@@ -1,7 +1,8 @@
 import { BadgeCheck, Eye, Globe, Server, Star } from "lucide-react";
 import { useEffect, useMemo, useState, type ReactNode } from "react";
 import { Link } from "react-router";
-import { describeFailure } from "../lib/api";
+import { describeFailure, isCallerAbort } from "../lib/api";
+import { useDebouncedValue } from "../lib/useDebouncedValue";
 import { listMcpMarket, listMcpMarketCategories, mcpMarketIconPath, type McpMarketCategory, type McpMarketServer } from "../lib/catalog";
 import { CatalogAvatar } from "../components/CatalogAvatar";
 import { cn } from "../lib/cn";
@@ -42,18 +43,18 @@ function PlazaCard({ item }: { item: McpMarketServer }) {
           <CatalogAvatar src={mcpMarketIconPath(item.id)} fallback={initial} />
           <span className="min-w-0 flex-1">
             <span className="flex items-center gap-1.5">
-              <span className="min-w-0 truncate text-[15px] font-semibold text-foreground">{item.name}</span>
-              {item.verified ? <BadgeCheck aria-label="已验证" className="h-4 w-4 shrink-0 text-success" /> : null}
+              <span className="min-w-0 truncate text-body font-semibold text-foreground">{item.name}</span>
+              {item.verified ? <BadgeCheck aria-label="已验证" className="h-4 w-4 shrink-0 text-success-700" /> : null}
             </span>
-            <span className="block truncate text-xs text-muted-foreground">
+            <span className="block truncate text-caption text-muted-foreground">
               {item.author}
               {item.categoryName ? ` · ${item.categoryName}` : ""}
             </span>
           </span>
         </span>
-        <span className="mt-3 line-clamp-2 text-[13px] leading-5 text-muted-foreground">{item.summary}</span>
-        <span className="mt-auto flex items-center gap-2.5 pt-2 text-xs text-muted-foreground">
-          <span className={cn("shrink-0 rounded px-1.5 py-0.5", item.hosted ? "bg-accent text-accent-foreground" : "bg-success/10 text-success")}>{item.hosted ? "Hosted" : "Local"}</span>
+        <span className="mt-3 line-clamp-2 text-small leading-5 text-muted-foreground">{item.summary}</span>
+        <span className="mt-auto flex items-center gap-2.5 pt-2 text-caption text-muted-foreground">
+          <span className={cn("shrink-0 rounded-control px-1.5 py-0.5", item.hosted ? "bg-accent text-accent-foreground" : "bg-success-100 text-success-700")}>{item.hosted ? "Hosted" : "Local"}</span>
           <Stat label="浏览" value={item.views}>
             <Eye aria-hidden="true" className="h-3.5 w-3.5" />
           </Stat>
@@ -67,6 +68,8 @@ function PlazaCard({ item }: { item: McpMarketServer }) {
 }
 
 export function McpMarketCatalog({ keyword }: { keyword: string }) {
+  // 目录查询等输入停下来再发；「我的连接器」的本地过滤仍然用即时 keyword。
+  const debouncedKeyword = useDebouncedValue(keyword);
   const [category, setCategory] = useState("");
   const [serviceType, setServiceType] = useState<"" | "hosted" | "local">("");
   const [page, setPage] = useState(1);
@@ -94,36 +97,34 @@ export function McpMarketCatalog({ keyword }: { keyword: string }) {
   }, [needsOnline]);
 
   useEffect(() => {
-    let gone = false;
+    // 换筛选或卸载时 abort 上一次请求；请求作废是正常流程，不算失败。
+    const controller = new AbortController();
     setLoading(true);
-    listMcpMarket({ keyword: keyword.trim(), category, serviceType, needsOnline, page })
+    listMcpMarket({ keyword: debouncedKeyword.trim(), category, serviceType, needsOnline, page }, controller.signal)
       .then((body) => {
-        if (gone) return;
         setVisible(body.items ?? []);
         setTotal(body.total ?? 0);
         setStored(body.stored ?? 0);
         setError("");
       })
       .catch((err: unknown) => {
-        if (!gone) setError(describeFailure("读取市场目录失败", err));
+        if (!isCallerAbort(err)) setError(describeFailure("读取市场目录失败", err));
       })
       .finally(() => {
-        if (!gone) setLoading(false);
+        if (!controller.signal.aborted) setLoading(false);
       });
-    return () => {
-      gone = true;
-    };
-  }, [keyword, category, serviceType, needsOnline, page]);
+    return () => controller.abort();
+  }, [debouncedKeyword, category, serviceType, needsOnline, page]);
 
   const pages = Math.max(1, Math.ceil(total / PAGE_SIZE));
   const current = Math.min(page, pages);
 
-  const chips = useMemo(() => [{ key: "", label: "全部" }, ...categories.map((item) => ({ key: item.key, label: `${item.name} ${item.count}` }))], [categories]);
+  const chips = useMemo(() => [{ key: "", label: "全部" }, ...categories.map((item) => ({ key: item.key, label: item.name, count: item.count }))], [categories]);
   const reset = () => setPage(1);
 
   return (
     <section aria-label="国内 MCP 市场" className="flex min-h-0 flex-1 flex-col">
-      <div className="min-h-0 flex-1 overflow-auto px-6 py-5">
+      <div className="min-h-0 flex-1 overflow-auto px-4 py-5 sm:px-6">
         <div className="mx-auto max-w-6xl">
           {offline ? <Alert tone="info" className="mb-4">当前是离线部署，需要联网的服务不显示。</Alert> : null}
           <ChipRow
@@ -135,14 +136,14 @@ export function McpMarketCatalog({ keyword }: { keyword: string }) {
               reset();
             }}
           />
-          <div role="group" aria-label="服务类型" className="mt-3 flex items-center gap-2 text-sm text-muted-foreground">
+          <div role="group" aria-label="服务类型" className="mt-3 flex items-center gap-2 text-body text-muted-foreground">
             服务类型
             {(["hosted", "local"] as const).map((kind) => (
               <button
                 key={kind}
                 type="button"
                 aria-pressed={serviceType === kind}
-                className={cn("h-7 rounded-lg border px-3", serviceType === kind ? "border-primary/40 bg-accent font-medium text-accent-foreground" : "border-border bg-card hover:bg-secondary")}
+                className={cn("h-7 rounded-control px-3", serviceType === kind ? "bg-primary-100 font-medium text-primary-700" : "bg-card text-gray-700 hover:bg-gray-100")}
                 onClick={() => {
                   setServiceType((value) => (value === kind ? "" : kind));
                   reset();
@@ -151,7 +152,7 @@ export function McpMarketCatalog({ keyword }: { keyword: string }) {
                 {kind === "hosted" ? "Hosted" : "Local"}
               </button>
             ))}
-            <span className="ml-auto text-xs">共 {total} 个</span>
+            <span className="ml-auto text-caption">共 {total} 个</span>
           </div>
           {error ? <Alert className="mt-4">{error}</Alert> : null}
           {loading && visible.length === 0 ? (
@@ -162,7 +163,7 @@ export function McpMarketCatalog({ keyword }: { keyword: string }) {
             </div>
           ) : null}
           {!loading && !error && visible.length === 0 ? (
-            <p className="mt-6 text-sm text-muted-foreground">{offline && stored === 0 ? "离线部署不显示需要联网的服务。这份目录里的服务都要联网。" : "没有匹配的服务。"}</p>
+            <p className="mt-6 text-body text-muted-foreground">{offline && stored === 0 ? "离线部署不显示需要联网的服务。这份目录里的服务都要联网。" : "没有匹配的服务。"}</p>
           ) : null}
           <ul className="mt-4 grid gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
             {visible.map((item) => (
@@ -171,7 +172,7 @@ export function McpMarketCatalog({ keyword }: { keyword: string }) {
               </li>
             ))}
           </ul>
-          <div className="mt-8 flex items-start gap-2 text-xs leading-5 text-muted-foreground">
+          <div className="mt-8 flex items-start gap-2 text-caption leading-5 text-muted-foreground">
             <Server aria-hidden="true" className="mt-0.5 h-3.5 w-3.5 shrink-0" />
             <div>
               <p>数据来源 modelscope.cn/mcp。同名只留一条，打开这一页通过接口读取已经存好的目录，只展示，不在这里连接，也不填写密钥。这里收录了 {stored} 条服务。</p>

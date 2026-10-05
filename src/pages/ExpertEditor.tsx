@@ -64,9 +64,9 @@ export function ExpertEditorPage() {
   return (
     <div className="flex min-h-0 flex-1 flex-col bg-card">
       <PageHeader title={expertId ? "编辑专家" : "创建专家"} back={{ to: "/experts/agents", label: "专家" }} />
-      <div className="min-h-0 flex-1 overflow-auto px-6 py-5">
+      <div className="min-h-0 flex-1 overflow-auto bg-muted px-4 py-5 sm:px-6">
         <form
-          className="mx-auto flex max-w-[720px] flex-col gap-4"
+          className="mx-auto flex max-w-[720px] flex-col gap-5 rounded-card bg-card p-4 shadow-sm sm:p-5"
           onSubmit={(event) => {
             event.preventDefault();
             void save();
@@ -81,18 +81,18 @@ export function ExpertEditorPage() {
           <Field label="模型（可选）">
             <Input aria-label="模型" value={model} placeholder="留空使用默认模型" onChange={(event) => setModel(event.target.value)} />
           </Field>
-          <fieldset className="rounded-lg border border-border p-3">
-            <legend className="px-1 text-sm text-muted-foreground">默认连接器</legend>
-            {connectors.length === 0 ? <p className="text-sm text-muted-foreground">还没有连接器。</p> : null}
+          <fieldset>
+            <legend className="mb-1 p-0 text-small font-medium text-gray-700">默认连接器</legend>
+            {connectors.length === 0 ? <p className="text-body text-muted-foreground">还没有连接器。</p> : null}
             {connectors.map((connector) => (
-              <label key={connector.id} className="flex items-center gap-2 py-1 text-sm">
+              <label key={connector.id} className="flex items-center gap-2 py-1 text-body">
                 <input type="checkbox" checked={connectorIds.includes(connector.id)} onChange={() => toggle(connectorIds, setConnectorIds, connector.id)} />
                 {connector.name}
               </label>
             ))}
           </fieldset>
-          <fieldset className="rounded-lg border border-border p-3">
-            <legend className="px-1 text-sm text-muted-foreground">默认技能（已选 {skillIds.length}）</legend>
+          <fieldset>
+            <legend className="mb-1 p-0 text-small font-medium text-gray-700">默认技能（已选 {skillIds.length}）</legend>
             <SkillPicker chosen={skillIds} onToggle={(skill) => toggle(skillIds, setSkillIds, skill.id)} />
           </fieldset>
           {error ? <Alert>{error}</Alert> : null}

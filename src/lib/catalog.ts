@@ -57,7 +57,7 @@ export interface SkillQuery {
   page?: number;
 }
 
-export function listSkills(query: SkillQuery = {}) {
+export function listSkills(query: SkillQuery = {}, signal?: AbortSignal) {
   const params = new URLSearchParams();
   if (query.sortBy) params.set("sortBy", query.sortBy);
   if (query.category) params.set("category", query.category);
@@ -66,7 +66,7 @@ export function listSkills(query: SkillQuery = {}) {
   if (query.page) params.set("page", String(query.page));
   params.set("pageSize", "24");
   const qs = params.toString();
-  return api<{ items: Skill[] | null; total: number; page: number; pageSize: number; installedAt: string }>(`/v1/skills${qs ? `?${qs}` : ""}`);
+  return api<{ items: Skill[] | null; total: number; page: number; pageSize: number; installedAt: string }>(`/v1/skills${qs ? `?${qs}` : ""}`, { signal });
 }
 
 export function listSkillCategories() {
@@ -125,7 +125,7 @@ export interface McpMarketQuery {
   page?: number;
 }
 
-export function listMcpMarket(query: McpMarketQuery = {}) {
+export function listMcpMarket(query: McpMarketQuery = {}, signal?: AbortSignal) {
   const params = new URLSearchParams();
   if (query.keyword) params.set("keyword", query.keyword);
   if (query.category) params.set("category", query.category);
@@ -137,6 +137,7 @@ export function listMcpMarket(query: McpMarketQuery = {}) {
   const qs = params.toString();
   return api<{ items: McpMarketServer[] | null; total: number; stored: number; page: number; pageSize: number }>(
     `/v1/mcp-market?${qs}`,
+    { signal },
   );
 }
 

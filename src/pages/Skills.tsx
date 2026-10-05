@@ -1,6 +1,8 @@
 import { useEffect, useMemo, useState } from "react";
 import { Link } from "react-router";
-import { describeFailure } from "../lib/api";
+import { describeFailure, isCallerAbort } from "../lib/api";
+import { expertSummary } from "../lib/display";
+import { useDebouncedValue } from "../lib/useDebouncedValue";
 import { listSkillCategories, listSkills, skillIconPath, type Skill, type SkillCategory } from "../lib/catalog";
 import { CatalogAvatar } from "../components/CatalogAvatar";
 import { CatalogHeader } from "../shell/CatalogHeader";
@@ -38,6 +40,8 @@ export function SkillsPage() {
   const [page, setPage] = useState(1);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
+  // 输入停下来才发请求；8 万条目录经不起每键一次查询。
+  const debouncedKeyword = useDebouncedValue(keyword);
 
   useEffect(() => {
     let gone = false;
@@ -50,28 +54,30 @@ export function SkillsPage() {
   }, []);
 
   useEffect(() => {
-    let gone = false;
+    // 换筛选或卸载时 abort 上一次请求；请求作废是正常流程，不算失败。
+    const controller = new AbortController();
     setLoading(true);
-    listSkills({ sortBy, category, source, keyword: keyword.trim(), page })
+    listSkills({ sortBy, category, source, keyword: debouncedKeyword.trim(), page }, controller.signal)
       .then((body) => {
-        if (gone) return;
         setItems(body.items ?? []);
         setTotal(body.total ?? 0);
         setInstalledAt(body.installedAt ?? "");
         setError("");
       })
-      .catch((err: unknown) => !gone && setError(describeFailure("读取技能目录失败", err)))
-      .finally(() => !gone && setLoading(false));
-    return () => {
-      gone = true;
-    };
-  }, [sortBy, category, source, keyword, page]);
+      .catch((err: unknown) => {
+        if (!isCallerAbort(err)) setError(describeFailure("读取技能目录失败", err));
+      })
+      .finally(() => {
+        if (!controller.signal.aborted) setLoading(false);
+      });
+    return () => controller.abort();
+  }, [sortBy, category, source, debouncedKeyword, page]);
 
   const chips = useMemo(() => [{ key: "", label: "全部" }, ...categories.map((item) => ({ key: item.key, label: item.name }))], [categories]);
   const reset = () => setPage(1);
 
   return (
-    <div className="flex min-h-0 flex-1 flex-col bg-card">
+    <div className="flex min-h-0 flex-1 flex-col bg-muted">
       <CatalogHeader
         title="技能"
         search={{
@@ -83,7 +89,7 @@ export function SkillsPage() {
           },
         }}
       />
-      <div className="min-h-0 flex-1 overflow-auto px-6 py-5">
+      <div className="min-h-0 flex-1 overflow-auto px-4 py-5 sm:px-6">
         <div className="mx-auto max-w-6xl">
           <div className="flex flex-wrap items-center justify-between gap-3">
             <HeadingTabs
@@ -124,7 +130,7 @@ export function SkillsPage() {
               ))}
             </div>
           ) : null}
-          {!loading && !error && items.length === 0 ? <p className="mt-6 text-sm text-muted-foreground">{installedAt ? "没有匹配的技能" : "目录快照尚未装入，请稍后刷新"}</p> : null}
+          {!loading && !error && items.length === 0 ? <p className="mt-6 text-body text-muted-foreground">{installedAt ? "没有匹配的技能" : "目录快照尚未装入，请稍后刷新"}</p> : null}
           <ul className="mt-4 grid gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
             {items.map((skill) => {
               return (
@@ -132,10 +138,10 @@ export function SkillsPage() {
                   <Link to={skillPath(skill.handle, skill.slug)} className={marketCardClass}>
                     <span className="flex items-center gap-3">
                       <CatalogAvatar src={skillIconPath(skill.handle, skill.slug)} fallback={skill.name} fallbackChar="技" />
-                      <span className="min-w-0 flex-1 truncate text-[15px] font-semibold text-foreground">{skill.name}</span>
+                      <span className="min-w-0 flex-1 truncate text-body font-semibold text-foreground">{skill.name}</span>
                     </span>
-                    <span className="mt-3 line-clamp-2 text-[13px] leading-5 text-muted-foreground">{skill.description || skill.descriptionEn}</span>
-                    <span className="mt-auto flex items-center gap-2.5 pt-2 text-xs text-muted-foreground">
+                    <span className="mt-3 line-clamp-2 text-small leading-5 text-muted-foreground">{expertSummary(skill.description || skill.descriptionEn)}</span>
+                    <span className="mt-auto flex items-center gap-2.5 pt-2 text-caption text-muted-foreground">
                       {skill.likes > 0 ? <span title="点赞">♥ {skill.likes}</span> : null}
                       {skill.downloads > 0 ? <span title="下载量">{skill.downloads} 次下载</span> : null}
                     </span>

@@ -5,7 +5,7 @@ export function CatalogAvatar({
   src,
   fallback,
   fallbackChar = "·",
-  className = "h-10 w-10 text-[15px]",
+  className = "h-10 w-10 text-body",
   style,
 }: {
   src: string;
@@ -17,7 +17,7 @@ export function CatalogAvatar({
 }) {
   const [failed, setFailed] = useState(false);
   return (
-    <span className={`relative flex shrink-0 items-center justify-center overflow-hidden rounded-lg bg-accent font-semibold text-accent-foreground ${className}`} style={style}>
+    <span className={`relative flex shrink-0 items-center justify-center overflow-hidden rounded-control bg-accent font-semibold text-accent-foreground ${className}`} style={style}>
       {fallback.trim().slice(0, 1) || fallbackChar}
       {!failed ? (
         <img

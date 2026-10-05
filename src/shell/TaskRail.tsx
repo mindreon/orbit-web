@@ -11,9 +11,9 @@ export function TasksLayout() {
   if (!isEmbeddedInWujie()) return <Outlet />;
   return (
     <div className="flex min-h-0 flex-1">
-      <aside aria-label="任务栏" className="flex w-60 shrink-0 flex-col border-r border-border bg-muted/50">
+      <aside aria-label="任务栏" className="flex w-60 shrink-0 flex-col bg-muted">
         <div className="p-3">
-          <Link to="/" className="flex h-9 items-center gap-2 rounded-lg bg-primary px-3 text-sm font-medium text-primary-foreground hover:bg-primary/90">
+          <Link to="/" className="flex h-9 items-center gap-2 rounded-control bg-primary px-3 text-body font-medium text-primary-foreground hover:bg-primary-hover">
             <SquarePen aria-hidden="true" className="h-4 w-4" />
             新建任务
           </Link>

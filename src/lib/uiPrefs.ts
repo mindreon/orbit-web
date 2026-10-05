@@ -1,4 +1,4 @@
-/** 通用设置里会立刻作用到界面上的几项。刷新后回到默认。 */
+/** 通用设置里会立刻作用到界面上的几项。写进 localStorage，刷新后保持。 */
 
 export type FontSize = "小" | "默认" | "大";
 export type TipSound = "灵动" | "晴朗" | "沉稳" | "无音效";
@@ -21,8 +21,26 @@ type Prefs = {
   customPrompt: string;
 };
 
+const DEFAULTS: Prefs = { fontSize: "默认", compact: false, tipSound: "灵动", linkOpen: "按需（默认）", clientNotice: true, theme: "浅色", tone: "默认", welcome: true, fileChanges: true, customPrompt: "" };
+
+const STORAGE_KEY = "orbit.uiPrefs";
+
+function load(): Prefs {
+  try {
+    const raw = localStorage.getItem(STORAGE_KEY);
+    if (!raw) return DEFAULTS;
+    const saved = JSON.parse(raw) as Partial<Prefs>;
+    // 只接受枚举值合法的键，坏数据回默认。
+    const fontSize = FONT_ORDER.includes(saved.fontSize as FontSize) ? (saved.fontSize as FontSize) : DEFAULTS.fontSize;
+    const theme = saved.theme === "深色" ? "深色" : saved.theme === "浅色" ? "浅色" : DEFAULTS.theme;
+    return { ...DEFAULTS, ...saved, fontSize, theme };
+  } catch {
+    return DEFAULTS;
+  }
+}
+
 const listeners = new Set<() => void>();
-let prefs: Prefs = { fontSize: "默认", compact: false, tipSound: "灵动", linkOpen: "按需（默认）", clientNotice: true, theme: "浅色", tone: "默认", welcome: true, fileChanges: true, customPrompt: "" };
+let prefs: Prefs = load();
 
 export function getUiPrefs() {
   return prefs;
@@ -30,6 +48,11 @@ export function getUiPrefs() {
 
 export function setUiPrefs(patch: Partial<Prefs>) {
   prefs = { ...prefs, ...patch };
+  try {
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(prefs));
+  } catch {
+    // 隐私模式等存不进去就算了，本次会话内仍然生效。
+  }
   listeners.forEach((listener) => listener());
 }
 

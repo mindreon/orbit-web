@@ -47,3 +47,4 @@ next-env.d.ts
 /acceptance-report
 /playwright-report-stack
 /test-results-stack
+/e2e-artifacts

@@ -6,9 +6,9 @@ export function Pagination({ page, pageSize, total, onPage }: { page: number; pa
   const pages = Math.max(1, Math.ceil(total / pageSize));
   const from = (page - 1) * pageSize + 1;
   const to = Math.min(page * pageSize, total);
-  const arrow = "flex h-8 w-8 items-center justify-center rounded-lg border border-border hover:bg-secondary disabled:opacity-40";
+  const arrow = "flex h-8 w-8 items-center justify-center rounded-control bg-secondary hover:bg-gray-200 disabled:opacity-40";
   return (
-    <footer className="flex h-14 shrink-0 items-center justify-between border-t border-border bg-card px-6 text-sm text-muted-foreground">
+    <footer className="flex h-14 shrink-0 items-center justify-between bg-card px-4 text-body sm:px-6 text-muted-foreground">
       <span>
         第 {from}-{to} 条 / 总共 {total} 条
       </span>

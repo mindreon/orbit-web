@@ -8,14 +8,14 @@ export function Option({ checked, kind, label, hint, id, onClick }: { checked: b
       role={kind === "radio" ? "menuitemradio" : "menuitemcheckbox"}
       aria-checked={checked}
       data-option-id={id}
-      className="flex w-full items-start gap-2 rounded-lg px-3 py-2 text-left text-sm text-foreground hover:bg-secondary"
+      className="flex w-full items-start gap-2 rounded-control px-3 py-2 text-left text-body text-foreground hover:bg-secondary"
       onClick={onClick}
     >
       <span className="min-w-0 flex-1">
         <span className="block truncate">{label}</span>
-        {hint ? <span className="mt-0.5 line-clamp-2 block text-xs text-muted-foreground">{hint}</span> : null}
+        {hint ? <span className="mt-0.5 line-clamp-2 block text-caption text-muted-foreground">{hint}</span> : null}
       </span>
-      {checked ? <Check aria-hidden="true" className="mt-0.5 h-4 w-4 shrink-0 text-primary" /> : null}
+      {checked ? <Check aria-hidden="true" className="mt-0.5 h-4 w-4 shrink-0 text-primary-700" /> : null}
     </button>
   );
 }

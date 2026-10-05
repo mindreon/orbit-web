@@ -1,0 +1,20 @@
+import { describe, expect, it } from "vitest";
+import { approvalInfos } from "./approvals";
+import type { TaskEvent } from "./tasks";
+
+const requested = (payload: Record<string, unknown>): TaskEvent => ({ seq: 1, event_id: "e1", task_id: "t", type: "approval.requested", source: "workflow", payload, occurred_at: "2026-10-05T00:00:00Z" });
+
+describe("approvalInfos", () => {
+  it("tells a profile switch from a tool call, and names its node and target", () => {
+    const infos = approvalInfos([
+      requested({ approval_id: "apr_1", node_id: "n_1", subject: { kind: "profile_switch", summary: "Switch node n_1 to coder@2: needs a coder", detail: "coder@2", risk: "medium" } }),
+      requested({ approval_id: "apr_2", subject: { kind: "tool_call", summary: "Bash", detail: "ls", allow_rule: { tool_name: "Bash", rule_content: "ls:*" } } }),
+    ]);
+    expect(infos.apr_1).toMatchObject({ kind: "profile_switch", nodeId: "n_1", detail: "coder@2", rule: null });
+    expect(infos.apr_2).toMatchObject({ kind: "tool_call", nodeId: "", tool: "Bash", rule: { tool: "Bash", content: "ls:*" } });
+  });
+
+  it("reads an event without a kind", () => {
+    expect(approvalInfos([requested({ approval_id: "apr_3", subject: { summary: "x" } })]).apr_3?.kind).toBe("");
+  });
+});

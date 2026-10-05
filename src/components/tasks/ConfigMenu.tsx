@@ -1,6 +1,7 @@
 import { Bot, ChevronRight, Link2, Paperclip, Plus, Sparkles, Wrench } from "lucide-react";
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import { Link } from "react-router";
+import { expertSummary } from "../../lib/display";
 import { effectiveConnectors, effectiveSkills, type ConfigCatalog } from "../../lib/configCatalog";
 import { cn } from "../../lib/cn";
 import { MODE_OPTIONS, type ConfigDraft, type ConfigMode } from "../../lib/taskConfig";
@@ -21,10 +22,17 @@ interface ConfigMenuProps {
   readonly onChange: (next: ConfigDraft) => void;
   readonly catalog: ConfigCatalog;
   readonly disabled?: boolean;
+  /** 提供后「添加文件」可用：打开调用方的文件选择框。 */
+  readonly onAddFile?: () => void;
 }
 
-/** 输入框左下角的「+」：添加文件（尚未开放）、模式、专家、技能、连接器。技能和连接器可以多选，专家单选。 */
-export function ConfigMenu({ draft, onChange, catalog, disabled = false }: ConfigMenuProps) {
+/** 输入框左下角的「+」：添加文件、模式、专家、技能、连接器。选中任意一项菜单就收起，加号转回原样。 */
+export function ConfigMenu({ draft, onChange, catalog, disabled = false, onAddFile }: ConfigMenuProps) {
+  // 选中即关闭：包一层，所有面板的修改都走这里。
+  const choose = (next: ConfigDraft) => {
+    onChange(next);
+    setOpen(false);
+  };
   const [open, setOpen] = useState(false);
   const [panel, setPanel] = useState<Panel>("mode");
   const box = useRef<HTMLDivElement>(null);
@@ -50,26 +58,45 @@ export function ConfigMenu({ draft, onChange, catalog, disabled = false }: Confi
         aria-haspopup="menu"
         aria-expanded={open}
         disabled={disabled}
-        className="flex h-9 w-9 items-center justify-center rounded-full border border-border text-muted-foreground hover:bg-secondary hover:text-foreground disabled:opacity-50"
+        className={cn(
+          "flex h-9 w-9 items-center justify-center rounded-full transition-colors disabled:opacity-50",
+          open ? "bg-primary-100 text-primary-700" : "bg-secondary text-gray-600 hover:bg-gray-200 hover:text-foreground",
+        )}
         onClick={() => setOpen((value) => !value)}
       >
-        <Plus aria-hidden="true" className="h-4 w-4" />
+        <Plus aria-hidden="true" className={cn("h-4 w-4 transition-transform duration-200", open && "rotate-45")} />
       </button>
       {open ? (
-        <div className="absolute bottom-full left-0 z-30 mb-2 flex">
-          <div role="menu" aria-label="添加" className="w-44 rounded-2xl border border-border bg-card p-2 shadow-lg">
-            <button type="button" role="menuitem" disabled title="即将开放" className="flex h-10 w-full items-center gap-2 rounded-lg px-3 text-sm text-muted-foreground opacity-60">
-              <Paperclip aria-hidden="true" className="h-4 w-4" />
-              添加文件
-            </button>
-            <div className="my-1 border-t border-border" />
+        <div className="menu-in absolute bottom-full left-0 z-30 mb-2 flex items-end max-sm:flex-col max-sm:items-start max-sm:gap-1">
+          <div role="menu" aria-label="添加" className="w-44 rounded-card bg-card p-2 shadow-lg ring-1 ring-border">
+            {onAddFile ? (
+              <button
+                type="button"
+                role="menuitem"
+                className="flex h-10 w-full items-center gap-2 rounded-control px-3 text-body text-foreground hover:bg-secondary"
+                onClick={() => {
+                  setOpen(false);
+                  onAddFile();
+                }}
+              >
+                <Paperclip aria-hidden="true" className="h-4 w-4" />
+                添加文件
+              </button>
+            ) : (
+              <button type="button" role="menuitem" disabled title="即将开放" className="flex h-10 w-full items-center gap-2 rounded-control px-3 text-body text-muted-foreground opacity-60">
+                <Paperclip aria-hidden="true" className="h-4 w-4" />
+                添加文件
+              </button>
+            )}
             {ITEMS.map((item) => (
               <button
                 key={item.id}
                 type="button"
                 role="menuitem"
                 aria-expanded={panel === item.id}
-                className={cn("flex h-10 w-full items-center gap-2 rounded-lg px-3 text-sm text-foreground hover:bg-secondary", panel === item.id && "bg-secondary")}
+                className={cn("flex h-10 w-full items-center gap-2 rounded-control px-3 text-body text-foreground hover:bg-secondary", panel === item.id && "bg-secondary")}
+                onMouseEnter={() => setPanel(item.id)}
+                onFocus={() => setPanel(item.id)}
                 onClick={() => setPanel(item.id)}
               >
                 {item.icon}
@@ -78,12 +105,12 @@ export function ConfigMenu({ draft, onChange, catalog, disabled = false }: Confi
               </button>
             ))}
           </div>
-          <div className="ml-1 max-h-80 w-72 overflow-y-auto rounded-2xl border border-border bg-card p-2 shadow-lg" aria-label={ITEMS.find((item) => item.id === panel)?.label}>
-            {catalog.error ? <p className="px-2 py-1 text-[13px] text-destructive">{catalog.error}</p> : null}
-            {panel === "mode" ? <ModePanel draft={draft} onChange={onChange} /> : null}
-            {panel === "expert" ? <ExpertPanel draft={draft} onChange={onChange} catalog={catalog} /> : null}
-            {panel === "skills" ? <SkillsPanel draft={draft} onChange={onChange} catalog={catalog} /> : null}
-            {panel === "connectors" ? <ConnectorsPanel draft={draft} onChange={onChange} catalog={catalog} /> : null}
+          <div className="max-h-80 w-72 max-w-[calc(100vw-2rem)] overflow-y-auto sm:ml-1 rounded-card bg-card p-2 shadow-lg ring-1 ring-border" aria-label={ITEMS.find((item) => item.id === panel)?.label}>
+            {catalog.error ? <p className="px-2 py-1 text-small text-danger-700">{catalog.error}</p> : null}
+            {panel === "mode" ? <ModePanel draft={draft} onChange={choose} /> : null}
+            {panel === "expert" ? <ExpertPanel draft={draft} onChange={choose} catalog={catalog} /> : null}
+            {panel === "skills" ? <SkillsPanel draft={draft} onChange={choose} catalog={catalog} /> : null}
+            {panel === "connectors" ? <ConnectorsPanel draft={draft} onChange={choose} catalog={catalog} /> : null}
           </div>
         </div>
       ) : null}
@@ -106,10 +133,10 @@ function ExpertPanel({ draft, onChange, catalog }: Pick<ConfigMenuProps, "draft"
     <>
       <Option kind="radio" checked={draft.expert === ""} label="默认智能体" hint="不指定专家" onClick={() => onChange({ ...draft, expert: "" })} />
       {catalog.experts.map((expert) => (
-        <Option key={expert.ref} kind="radio" checked={draft.expert === expert.ref} label={expert.name} hint={expert.instructions || expert.ref} onClick={() => onChange({ ...draft, expert: expert.ref })} />
+        <Option key={expert.ref} kind="radio" checked={draft.expert === expert.ref} label={expert.name} hint={expertSummary(expert.instructions) || "没有指令"} onClick={() => onChange({ ...draft, expert: expert.ref })} />
       ))}
-      {!catalog.loading && catalog.experts.length === 0 ? <p className="px-3 py-2 text-xs text-muted-foreground">还没有自己的专家。</p> : null}
-      <Link to="/experts/new" className="mt-1 block rounded-lg px-3 py-2 text-sm text-primary hover:bg-secondary">
+      {!catalog.loading && catalog.experts.length === 0 ? <p className="px-3 py-2 text-caption text-muted-foreground">还没有自己的专家。</p> : null}
+      <Link to="/experts/new" className="mt-1 block rounded-control px-3 py-2 text-body text-primary-700 hover:bg-secondary">
         创建专家
       </Link>
     </>
@@ -124,8 +151,8 @@ function ConnectorsPanel({ draft, onChange, catalog }: Pick<ConfigMenuProps, "dr
       {catalog.connectors.map((connector) => (
         <Option key={connector.id} kind="checkbox" checked={chosen.includes(connector.id)} label={connector.name} hint={connector.transport === "streamable_http" ? connector.url : connector.command} onClick={() => toggle(connector.id)} />
       ))}
-      {!catalog.loading && catalog.connectors.length === 0 ? <p className="px-3 py-2 text-xs text-muted-foreground">还没有连接器。</p> : null}
-      <Link to="/experts/connectors/new" className="mt-1 block rounded-lg px-3 py-2 text-sm text-primary hover:bg-secondary">
+      {!catalog.loading && catalog.connectors.length === 0 ? <p className="px-3 py-2 text-caption text-muted-foreground">还没有连接器。</p> : null}
+      <Link to="/experts/connectors/new" className="mt-1 block rounded-control px-3 py-2 text-body text-primary-700 hover:bg-secondary">
         添加连接器
       </Link>
     </>

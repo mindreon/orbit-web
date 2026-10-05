@@ -10,6 +10,19 @@ export const attemptStatusText: Readonly<Record<string, string>> = {
   completed: "已完成", failed: "失败", cancelled: "已停止",
 };
 
+/** 失败原因的分类（contract v3 的 failure_class）。没收录的显示原值。 */
+export const failureClassText: Readonly<Record<string, string>> = {
+  transient: "临时故障", model: "模型出错", tool: "工具出错", policy: "被策略拒绝",
+  budget: "预算用尽", verification: "校验未通过", lost: "执行中断",
+};
+
+/** 计划变更被拒绝的原因码（plan.change_rejected 的 code）。 */
+export const planRejectionText: Readonly<Record<string, string>> = {
+  VERSION_CONFLICT: "计划刚被改动", FROZEN_NODE: "涉及已冻结的步骤", TYPE_NOT_ALLOWED: "步骤类型不允许", POLICY_DENIED: "被策略拒绝",
+  BUDGET_EXCEEDED: "超出预算", CYCLE: "依赖成环", DEPTH_EXCEEDED: "层级太深", TOO_MANY_OPS: "计划太大", VISIBILITY: "没有权限",
+  SCHEMA_INVALID: "格式不对", STALE_ATTEMPT: "执行已过期",
+};
+
 export const nodeStatusText: Readonly<Record<string, string>> = {
   PENDING: "待执行", READY: "就绪", RUNNING: "执行中", WAITING: "等待中", BLOCKED: "已阻塞",
   AWAITING_APPROVAL: "等待审批", AWAITING_INPUT: "等待回复", VERIFYING: "校验中", RETRY_PENDING: "待重试",
@@ -33,6 +46,10 @@ export const eventTypeText: Readonly<Record<string, string>> = {
   "tool.call_finished": "工具调用结束",
   "artifact.manifest_created": "成果物已生成",
   "task.completed": "本轮已完成",
+  "budget.exhausted": "预算用尽",
+  "budget.granted": "已追加预算",
+  "usage.recorded": "用量记录",
+  "profile.switched": "专家已切换",
 };
 
 /** 任务、节点、尝试的状态归到同一套颜色：进行中蓝、等待黄、完成绿、失败红、其余灰。 */

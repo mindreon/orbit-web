@@ -3,7 +3,7 @@ import type { InputHTMLAttributes, SelectHTMLAttributes, TextareaHTMLAttributes 
 import { cn } from "../lib/cn";
 
 const FIELD =
-  "w-full rounded-lg border border-border bg-card px-3 text-sm text-foreground outline-none placeholder:text-muted-foreground hover:border-primary/50 focus:border-primary disabled:opacity-50";
+  "w-full rounded-control border border-input bg-card px-3 text-body text-foreground outline-none placeholder:text-muted-foreground hover:border-gray-400 focus:border-primary-500 focus:ring-2 focus:ring-primary-100 disabled:opacity-50";
 
 export function Input({ className, ...rest }: InputHTMLAttributes<HTMLInputElement>) {
   return <input className={cn(FIELD, "h-9", className)} {...rest} />;
@@ -27,10 +27,10 @@ export function Select({ className, children, ...rest }: SelectHTMLAttributes<HT
 
 export function Field({ label, error, children }: { label: string; error?: string; children: React.ReactNode }) {
   return (
-    <label className="block text-sm">
-      <span className="mb-1 block text-foreground/80">{label}</span>
+    <label className="block text-body">
+      <span className="mb-1 block text-small font-medium text-gray-700">{label}</span>
       {children}
-      {error ? <span className="mt-1 block text-[13px] text-destructive">{error}</span> : null}
+      {error ? <span className="mt-1 block text-small text-danger-700">{error}</span> : null}
     </label>
   );
 }

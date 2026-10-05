@@ -11,9 +11,16 @@
  *
  * E45: approvals that follow one another each show up, one at a time, and are gone once answered (a decided approval that
  * stayed in the list, or a new one that never got in, left the person with nothing to click).
+ *
+ * E50: an interrupt while an approval is pending cancels it: the card says so and has no buttons, and the attempt that takes
+ * over carries on the same conversation.
+ *
+ * E51: a node that keeps failing is retried, then blocked, and the task asks for a person: the page says why and "继续" puts
+ * the node back in play. The mock model fails every request of a conversation that started with `fail:`; the retry backoff
+ * (5 s, 30 s) is a constant of the workflow, so this one takes about a minute.
  */
 import { expect, test } from "@playwright/test";
-import { attemptRows, createTask, eventually, openTask, sql, taskStatus, waitForStatus } from "./tasks";
+import { attemptIds, attemptRows, createTask, eventually, getTask, openTask, planNodes, sql, taskStatus, waitForStatus } from "./tasks";
 
 const unique = (label: string) => `${label} ${Date.now()}`;
 
@@ -191,4 +198,72 @@ test("E49 reasoning that arrives in the model's own field is folded away too", a
   await expect(panel).toHaveCount(1);
   expect(await panel.textContent()).toContain("先把总数和脚数对上");
   await expect(message.getByTestId("final-output")).not.toContainText("先把总数和脚数对上");
+});
+
+test("E50 an interrupt while an approval is pending cancels it, and the next attempt remembers the conversation", async ({ page, request }) => {
+  const title = unique("E50");
+  const taskId = await createTask(request, title, "echo:once");
+  await openTask(page, title);
+
+  const pending = page.locator('[data-testid="approval-item"][data-state="pending"]');
+  await expect(pending).toBeVisible({ timeout: 60_000 });
+  expect((await getTask(request, taskId)).pending_approvals).toHaveLength(1);
+
+  await page.getByPlaceholder("向任务发送消息").fill("history:");
+  await page.getByPlaceholder("向任务发送消息").press("Control+Enter");
+
+  // The same card, now settled: it says cancelled and offers nothing to click.
+  const cancelled = page.locator('[data-testid="approval-item"][data-state="cancelled"]');
+  await expect(cancelled).toContainText("已取消", { timeout: 30_000 });
+  await expect(cancelled.getByRole("button")).toHaveCount(0);
+  // The backend's record: the approval's end is a durable CANCELLED decision, and the cancelled one is not pending.
+  const cancelledId = sql(`SELECT body->'payload'->>'approval_id' FROM task_events WHERE task_id = '${taskId}' AND event_type = 'approval.decided' AND body->'payload'->>'status' = 'CANCELLED'`);
+  expect((await getTask(request, taskId)).pending_approvals ?? []).not.toContain(cancelledId);
+  expect(sql(`SELECT count(*) FROM task_events WHERE task_id = '${taskId}' AND event_type = 'approval.decided' AND body->'payload'->>'status' = 'CANCELLED'`)).toBe("1");
+
+  // The replacement attempt carries on the session and receives only the new message, so it asks for nothing again.
+  await expect(pending).toHaveCount(0);
+  // The replacement attempt answers with everything the user said: it carried on the session of the cancelled one.
+  await waitForStatus(request, taskId, "COMPLETED", 90_000);
+  const answer = page.getByTestId("final-output").last();
+  await expect(answer).toContainText("history=echo:once", { timeout: 30_000 });
+  await expect(answer).toContainText("history:");
+  expect(attemptIds(taskId).length).toBe(2);
+});
+
+test("E51 a node that keeps failing is retried and then blocked; the page says why and continue puts it back in play", async ({ page, request }) => {
+  test.setTimeout(240_000);
+  const title = unique("E51");
+  const taskId = await createTask(request, title, "fail:the model is down");
+  await openTask(page, title);
+
+  // First failure: the node waits to be retried and the plan says why.
+  const node = planNodes(page).first();
+  await expect(node).toHaveAttribute("data-status", "RETRY_PENDING", { timeout: 60_000 });
+  await expect(node.getByTestId("plan-node-reason")).toContainText("模型服务暂时出错");
+
+  // Retries are used up: blocked, and the task waits for a person.
+  await expect(taskStatus(page)).toHaveAttribute("data-status", "PAUSED_NEEDS_REVIEW", { timeout: 150_000 });
+  await expect(node).toHaveAttribute("data-status", "BLOCKED");
+  const notice = page.getByTestId("review-notice");
+  await expect(notice).toBeVisible();
+  await expect(notice.getByTestId("review-reason")).toContainText("3 of 3 attempts failed");
+  await expect(notice.getByTestId("review-reason")).toContainText("模型服务暂时出错");
+  await expect(node.getByTestId("plan-node-reason")).toContainText("retries are used up");
+  // Each failed attempt says what kind of failure it was.
+  await expect(page.getByTestId("attempt-failure")).toHaveCount(3);
+  await expect(page.getByTestId("attempt-failure").first()).toContainText("模型出错");
+  await expect(attemptRows(page)).toHaveCount(3);
+
+  expect((await getTask(request, taskId)).status).toBe("PAUSED_NEEDS_REVIEW");
+  const toStatus = (status: string) => Number(sql(`SELECT count(*) FROM task_events WHERE task_id = '${taskId}' AND event_type = 'node.status_changed' AND body->'payload'->>'to_status' = '${status}' AND body->'payload'->>'reason' <> ''`));
+  expect(toStatus("RETRY_PENDING")).toBe(2);
+  expect(toStatus("BLOCKED")).toBe(1);
+
+  // Continue: the blocked node is back in play and the task runs again.
+  await notice.getByRole("button", { name: "继续" }).click();
+  await expect(taskStatus(page)).toHaveAttribute("data-status", "RUNNING", { timeout: 30_000 });
+  await expect(page.getByTestId("review-notice")).toHaveCount(0);
+  await expect(node).not.toHaveAttribute("data-status", "BLOCKED");
+  expect((await request.post(`/v1/tasks/${taskId}/control`, { data: { action: "cancel" } })).status()).toBe(202);
 });

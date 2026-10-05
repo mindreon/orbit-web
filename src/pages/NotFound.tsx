@@ -9,14 +9,14 @@ function ErrorScreen({ code, message }: { code: string; message: string }) {
       <span className="flex h-20 w-20 items-center justify-center rounded-full bg-secondary text-muted-foreground">
         <AlertTriangle aria-hidden="true" className="h-9 w-9" strokeWidth={1.5} />
       </span>
-      <p className="mt-5 text-4xl font-bold text-foreground/80">{code}</p>
-      <p className="mt-2 text-sm text-muted-foreground">{message}</p>
+      <p className="mt-5 text-display font-semibold text-gray-700">{code}</p>
+      <p className="mt-2 text-body text-muted-foreground">{message}</p>
       <div className="mt-6 flex items-center gap-3">
         <Button onClick={() => navigate(-1)}>
           <Undo2 aria-hidden="true" className="h-4 w-4" />
           返回
         </Button>
-        <Link to="/" className="inline-flex h-9 items-center gap-1.5 rounded-lg bg-primary px-4 text-sm font-medium text-primary-foreground hover:bg-primary/90">
+        <Link to="/" className="inline-flex h-9 items-center gap-1.5 rounded-control bg-primary px-4 text-body font-medium text-primary-foreground hover:bg-primary-hover">
           <Home aria-hidden="true" className="h-4 w-4" />
           首页
         </Link>

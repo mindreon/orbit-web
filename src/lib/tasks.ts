@@ -1,5 +1,6 @@
 import { api } from "./api";
 import type { TaskConfigInput } from "./taskConfig";
+import type { BudgetAmounts } from "./taskEvents";
 export type TaskStatus =
   | "CREATED" | "PLANNING" | "RUNNING" | "WAITING" | "PAUSED"
   | "PAUSED_NEEDS_REVIEW" | "TAKEN_OVER" | "COMPLETED" | "FAILED" | "CANCELLED";
@@ -46,6 +47,17 @@ export type ArtifactManifest = {
 
 export type Profile = { profile_id: string; version: number; ref: string; spec: Record<string, unknown>; created_at: string };
 
+/** What a node is inside a compiled SOP (contract v3 `sop_step`). */
+export type SopStepInfo = {
+  /** The SOP ref, `name@version`. */
+  sop: string;
+  role: "sop" | "step" | "approval_before" | "approval_after";
+  total: number;
+  step_id: string;
+  index: number;
+  subject: string;
+};
+
 export type Plan = {
   plan_version: number;
   hash: string;
@@ -60,9 +72,16 @@ export type Plan = {
     frozen: boolean;
     current_attempt_id?: string;
     attempt_count: number;
+    /** The SOP node this node was compiled from; absent for ordinary nodes. */
+    parent_node_id?: string | null;
+    sop_step?: SopStepInfo | null;
   }>;
   edges: Array<{ from: string; to: string }>;
+  /** Completed nodes compacted out of the live plan (older plans and tasks have none). */
+  archived?: PlanArchive | null;
 };
+
+export type PlanArchive = { count: number; hash: string; recent_titles?: string[] };
 
 export async function listTasks(): Promise<Task[]> {
   const body = await api<{ items: Task[] }>("/v1/tasks");
@@ -87,6 +106,29 @@ export function sendTaskMessage(id: string, text: string, delivery: "queue" | "i
 
 export function controlTask(id: string, action: "pause" | "resume" | "stop" | "cancel" | "takeover" | "handback") {
   return api<Record<string, unknown>>(`/v1/tasks/${encodeURIComponent(id)}/control`, { method: "POST", body: JSON.stringify({ action }) });
+}
+
+/** 追加预算：`delta` 里写了的项加到任务的上限上。 */
+export function grantTaskBudget(id: string, delta: BudgetAmounts) {
+  return api<Record<string, unknown>>(`/v1/tasks/${encodeURIComponent(id)}/budget`, { method: "POST", body: JSON.stringify({ delta }) });
+}
+
+/** 接管后由人手动完成一个节点；`reason` 记在节点的状态事件里。 */
+export function completeTaskNode(id: string, nodeId: string, reason: string) {
+  return api<Record<string, unknown>>(`/v1/tasks/${encodeURIComponent(id)}/nodes/${encodeURIComponent(nodeId)}/complete`, { method: "POST", body: JSON.stringify({ reason }) });
+}
+
+/** The workflow's answer when control passes it on; control may answer only `{accepted:true}`, so both fields can be missing. */
+export type ProfileSwitchResult = { effective_attempt_no?: number; needs_approval?: boolean; approval_id?: string | null };
+
+/** 把一个节点从下一次执行起换成另一位专家（`toProfile` 是专家的版本引用）。不在任务专家范围内的要先经审批。 */
+export function switchNodeProfile(id: string, nodeId: string, toProfile: string, reason: string) {
+  return api<ProfileSwitchResult>(`/v1/tasks/${encodeURIComponent(id)}/profile`, { method: "POST", body: JSON.stringify({ node_id: nodeId, to_profile: toProfile, reason }) });
+}
+
+/** 删除任务。后端是软删除：进行中的任务会先收到取消，列表立即不再显示。 */
+export function deleteTask(id: string): Promise<void> {
+  return api<void>(`/v1/tasks/${encodeURIComponent(id)}`, { method: "DELETE" });
 }
 
 /** `always`: with approve, also allow what the approval offered for the rest of the task. */

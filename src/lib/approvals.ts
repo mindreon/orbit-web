@@ -2,6 +2,10 @@ import type { TaskEvent } from "./tasks";
 
 /** 一条审批要你确认什么，取自它的 `approval.requested` 事件。 */
 export interface ApprovalInfo {
+  /** What the approval is for (`ApprovalSubject.kind`): tool_call, profile_switch, plan_change, ...; empty in older events. */
+  readonly kind: string;
+  /** The node it concerns, when the event names one (a profile switch does). */
+  readonly nodeId: string;
   readonly tool: string;
   /** 调用带的参数：命令、路径。 */
   readonly detail: string;
@@ -18,6 +22,8 @@ export function approvalInfos(events: readonly TaskEvent[]): Readonly<Record<str
     const subject = (event.payload.subject ?? {}) as Record<string, unknown>;
     const rule = subject.allow_rule as Record<string, unknown> | null | undefined;
     infos[text(event.payload.approval_id)] = {
+      kind: text(subject.kind),
+      nodeId: text(event.payload.node_id),
       tool: text(subject.summary),
       detail: text(subject.detail),
       rule: rule ? { tool: text(rule.tool_name), content: typeof rule.rule_content === "string" ? rule.rule_content : null } : null,

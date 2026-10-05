@@ -46,9 +46,9 @@ export function ArtifactPreview({ file }: { file: ArtifactFile }) {
 
   return (
     <div className="flex min-h-0 flex-1 flex-col" data-testid="artifact-preview">
-      <div className="flex h-12 shrink-0 items-center gap-2 border-b border-border px-4">
-        <p className="min-w-0 flex-1 truncate text-sm font-medium text-foreground">{file.name}</p>
-        <span className="text-xs text-muted-foreground">{formatSize(file.size)}</span>
+      <div className="flex h-12 shrink-0 items-center gap-2 px-4">
+        <p className="min-w-0 flex-1 truncate text-body font-medium text-foreground">{file.name}</p>
+        <span className="text-caption text-muted-foreground">{formatSize(file.size)}</span>
         <Button size="sm" variant="ghost" aria-label="下载" onClick={download}>
           <Download className="h-4 w-4" />
         </Button>
@@ -84,11 +84,11 @@ function Body({ kind, loaded, file, onDownload }: { kind: ReturnType<typeof file
     );
   }
   if (kind === "text" && loaded.text !== null) {
-    return <pre className="whitespace-pre-wrap break-words bg-card p-5 font-mono text-xs text-foreground">{loaded.text}</pre>;
+    return <pre className="whitespace-pre-wrap break-words bg-card p-5 font-mono text-caption text-foreground">{loaded.text}</pre>;
   }
   return (
     <div className="flex flex-col items-center gap-3 p-10 text-center">
-      <p className="text-sm text-muted-foreground">这种文件不能在这里预览，或者文件太大。</p>
+      <p className="text-body text-muted-foreground">这种文件不能在这里预览，或者文件太大。</p>
       <Button variant="primary" onClick={onDownload}>
         <Download aria-hidden="true" className="h-4 w-4" />
         下载

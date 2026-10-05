@@ -1,5 +1,6 @@
 import { lazy, Suspense, useEffect, useMemo, useState } from "react";
 import { ChevronRight, File, Folder, FolderOpen } from "lucide-react";
+import { stripFrontmatter } from "../lib/display";
 
 // Markdown pulls Mermaid's loader. Keep that off the entry chunk; the browser
 // loads it when a markdown file is shown. SkillDetail renders the overview
@@ -52,18 +53,18 @@ export function FileBrowser({
   }, [entries]);
 
   if (entries.length === 0) {
-    return <p className="flex h-[240px] items-center justify-center text-sm text-muted-foreground">{emptyText}</p>;
+    return <p className="flex h-[240px] items-center justify-center text-body text-muted-foreground">{emptyText}</p>;
   }
   if (mode === "preview" && selected) {
     return (
-      <div className="flex h-[70vh] flex-col overflow-hidden rounded border border-border">
+      <div className="flex h-[70vh] flex-col overflow-hidden rounded-card bg-muted">
         <FilePreview path={selected} body={bodies.get(fileKey(selected))} onBack={() => setMode("tree")} />
       </div>
     );
   }
   return (
-    <div className="flex h-[70vh] flex-col overflow-hidden rounded border border-border">
-      <div className="shrink-0 border-b border-border px-4 py-2 text-sm text-muted-foreground">共 {entries.length} 个文件</div>
+    <div className="flex h-[70vh] flex-col overflow-hidden rounded-card bg-muted">
+      <div className="shrink-0 bg-secondary px-4 py-2 text-small font-medium text-muted-foreground">共 {entries.length} 个文件</div>
       <div role="tree" className="flex-1 overflow-auto p-2">
         {tree.map((node) => (
           <TreeRow
@@ -91,13 +92,9 @@ export function FileBrowser({
   );
 }
 
-export function stripFrontmatter(text: string) {
-  return text.replace(/^\s*---\s*\n[\s\S]*?\n---\s*\n?/, "").trimStart();
-}
-
 export function RenderedMarkdown({ text }: { text: string }) {
   return (
-    <Suspense fallback={<p className="text-sm text-muted-foreground">正在排版</p>}>
+    <Suspense fallback={<p className="text-body text-muted-foreground">正在排版</p>}>
       <Markdown text={text} />
     </Suspense>
   );
@@ -175,14 +172,14 @@ function TreeRow({
         role="treeitem"
         aria-selected={active || undefined}
         aria-expanded={isDir ? expanded : undefined}
-        className={`flex cursor-pointer select-none items-center gap-2 rounded py-1.5 pr-3 text-sm hover:bg-secondary ${active ? "bg-secondary" : ""}`}
+        className={`flex cursor-pointer select-none items-center gap-2 rounded-control py-1.5 pr-3 text-body hover:bg-secondary ${active ? "bg-secondary" : ""}`}
         style={{ paddingLeft: 8 + 12 * depth }}
         onClick={() => (isDir ? onToggle(node.path) : onSelect(node.path))}
       >
         {isDir ? (
           <>
             <ChevronRight className={`h-3.5 w-3.5 shrink-0 text-muted-foreground transition-transform ${expanded ? "rotate-90" : ""}`} />
-            {expanded ? <FolderOpen className="h-4 w-4 shrink-0 text-primary" /> : <Folder className="h-4 w-4 shrink-0 text-primary" />}
+            {expanded ? <FolderOpen className="h-4 w-4 shrink-0 text-primary-700" /> : <Folder className="h-4 w-4 shrink-0 text-primary-700" />}
             <span className="flex-1 truncate" title={node.name}>
               {node.name}
             </span>
@@ -194,7 +191,7 @@ function TreeRow({
             <span className="flex-1 truncate" title={node.name}>
               {node.name}
             </span>
-            <span className="shrink-0 text-xs text-muted-foreground">{formatFileSize(node.size)}</span>
+            <span className="shrink-0 text-caption text-muted-foreground">{formatFileSize(node.size)}</span>
           </>
         )}
       </div>
@@ -212,23 +209,23 @@ function FilePreview({ path, body, onBack }: { path: string; body?: string; onBa
   const text = body ? (kind === "markdown" ? stripFrontmatter(body) : body) : "";
   return (
     <div className="flex h-full flex-col">
-      <div className="sticky top-0 z-10 flex items-center gap-2 border-b border-border bg-card px-4 py-2">
-        <button type="button" onClick={onBack} className="flex shrink-0 cursor-pointer items-center gap-1 text-sm">
+      <div className="sticky top-0 z-10 flex items-center gap-2 bg-secondary px-4 py-2">
+        <button type="button" onClick={onBack} className="flex shrink-0 cursor-pointer items-center gap-1 text-body">
           返回文件树
         </button>
-        <span className="mx-4 flex-1 truncate text-sm text-muted-foreground" title={path}>
+        <span className="mx-4 flex-1 truncate text-body text-muted-foreground" title={path}>
           {path}
         </span>
       </div>
       <div className="flex-1 overflow-auto">
         {!text ? (
-          <p className="flex h-full min-h-[240px] items-center justify-center text-sm text-muted-foreground">暂不支持预览此类型文件</p>
+          <p className="flex h-full min-h-[240px] items-center justify-center text-body text-muted-foreground">暂不支持预览此类型文件</p>
         ) : kind === "markdown" ? (
           <div className="p-4">
             <RenderedMarkdown text={text} />
           </div>
         ) : (
-          <pre className="m-4 overflow-auto rounded border border-border bg-muted p-4 text-sm text-foreground">
+          <pre className="m-4 overflow-auto rounded-control bg-card p-4 text-small text-foreground">
             <code>{text}</code>
           </pre>
         )}

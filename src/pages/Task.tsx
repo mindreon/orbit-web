@@ -1,6 +1,9 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { Link, useParams } from "react-router";
 import { AgentQuestion } from "../components/tasks/AgentQuestion";
+import { ReviewNotice } from "../components/tasks/ReviewNotice";
+import { TakeoverNotice } from "../components/tasks/TakeoverNotice";
+import type { NodeActions } from "../components/tasks/NodeActions";
 import { ApprovalInbox } from "../components/tasks/ApprovalInbox";
 import { Composer } from "../components/tasks/Composer";
 import { useConfigCatalog } from "../lib/configCatalog";
@@ -9,10 +12,13 @@ import { TaskHeader } from "../components/tasks/TaskHeader";
 import { OVERVIEW, TaskPanel } from "../components/tasks/TaskPanel";
 import { Conversation } from "../components/conversation/Conversation";
 import { describeFailure } from "../lib/api";
+import { nodeTitle, profileName } from "../lib/display";
+import { BREAKPOINT, useMediaQuery } from "../lib/useMediaQuery";
 import { fileKey, flattenArtifacts, type ArtifactFile } from "../lib/artifacts";
 import { approvalInfos } from "../lib/approvals";
 import { buildTimeline } from "../lib/conversation";
-import { controlTask, decideTaskApproval, sendTaskMessage } from "../lib/tasks";
+import { completeTaskNode, controlTask, decideTaskApproval, grantTaskBudget, sendTaskMessage, switchNodeProfile } from "../lib/tasks";
+import { pendingSwitch, totalReserved, type BudgetAmounts, type ProfileSwitch } from "../lib/taskEvents";
 import { useTasksStore } from "../lib/tasksStore";
 import { useTaskStream } from "../lib/useTaskStream";
 import { Alert } from "../ui/Alert";
@@ -30,7 +36,10 @@ function TaskView({ taskId }: { taskId: string }) {
   const catalog = useConfigCatalog();
   const upsert = useTasksStore((state) => state.upsert);
   const [actionError, setActionError] = useState<string | null>(null);
-  const [panelOpen, setPanelOpen] = useState(true);
+  const [notice, setNotice] = useState<string | null>(null);
+  // Wide screens open with the details column beside the conversation; narrower ones keep it as a drawer, closed until asked for.
+  const wide = useMediaQuery(BREAKPOINT.lg);
+  const [panelOpen, setPanelOpen] = useState(() => window.matchMedia(BREAKPOINT.lg).matches);
   const [openFiles, setOpenFiles] = useState<readonly ArtifactFile[]>([]);
   const [active, setActive] = useState(OVERVIEW);
 
@@ -42,13 +51,37 @@ function TaskView({ taskId }: { taskId: string }) {
   const files = useMemo(() => flattenArtifacts(artifacts), [artifacts]);
   const turns = useMemo(() => (task ? buildTimeline(task, events, live) : []), [task, events, live]);
   const approvals = useMemo(() => approvalInfos(events), [events]);
+  // 事件比任务快照先到：已有结果的审批立刻离开待确认；被取消的留一张说明。
+  const pendingApprovals = (task?.pending_approvals ?? []).filter((id) => live.approvals[id] === undefined);
+  const cancelledApprovals = Object.keys(live.approvals).filter((id) => live.approvals[id] === "CANCELLED");
+
+  const nameOf = useCallback((ref: string) => profileName(ref, catalog.experts), [catalog.experts]);
+  const drawerOpen = panelOpen && !wide;
+  useEffect(() => {
+    if (!drawerOpen) return;
+    const onKey = (event: KeyboardEvent) => event.key === "Escape" && setPanelOpen(false);
+    document.addEventListener("keydown", onKey);
+    return () => document.removeEventListener("keydown", onKey);
+  }, [drawerOpen]);
 
   const act = useCallback(async (run: () => Promise<unknown>) => {
+    setNotice(null);
     try {
       await run();
       setActionError(null);
     } catch (err) {
       setActionError(describeFailure("操作失败", err));
+    }
+  }, []);
+
+  /** 弹窗和表单里的操作：失败时把原因还给它们，就地显示，不占页面顶部的提示。 */
+  const attempt = useCallback(async (run: () => Promise<unknown>): Promise<string | null> => {
+    try {
+      await run();
+      setActionError(null);
+      return null;
+    } catch (err) {
+      return describeFailure("操作失败", err);
     }
   }, []);
 
@@ -68,11 +101,11 @@ function TaskView({ taskId }: { taskId: string }) {
 
   if (!task) {
     return (
-      <main className="flex min-h-0 flex-1 flex-col bg-card p-6">
+      <main className="flex min-h-0 flex-1 flex-col bg-card p-4 sm:p-6">
         {failure ? (
           <div className="mx-auto w-full max-w-xl space-y-4">
             <Alert>{failure}</Alert>
-            <Link to="/" className="inline-flex h-9 items-center rounded-lg border border-border px-4 text-sm hover:bg-secondary">
+            <Link to="/" className="inline-flex h-9 items-center rounded-control border border-border px-4 text-body hover:bg-secondary">
               回到新建任务
             </Link>
           </div>
@@ -88,17 +121,48 @@ function TaskView({ taskId }: { taskId: string }) {
 
   // 只有取消才结束任务；做完只是空闲，随时可以接着聊。
   const closed = task.status === "CANCELLED";
+  const nodeTitles = Object.fromEntries((plan?.nodes ?? []).map((node) => [node.node_id, nodeTitle(node.title)]));
+  const pendingSwitches: Record<string, ProfileSwitch> = {};
+  for (const item of live.switches) {
+    const pending = pendingSwitch(live, item.nodeId);
+    if (pending) pendingSwitches[item.nodeId] = pending;
+  }
+  const nodeActions: NodeActions = {
+    taskStatus: task.status,
+    experts: catalog.experts,
+    onComplete: (nodeId, reason) => attempt(() => completeTaskNode(task.task_id, nodeId, reason)),
+    onSwitch: async (nodeId, toProfile, reason) => {
+      try {
+        const result = await switchNodeProfile(task.task_id, nodeId, toProfile, reason);
+        setActionError(null);
+        setNotice(
+          result.needs_approval === true
+            ? "已提交切换，等你批准后从下一次执行起生效。"
+            : result.needs_approval === false
+              ? "已切换，从下一次执行起生效。"
+              : "已提交切换：如需你批准，审批卡会出现在对话里；生效后从下一次执行起使用新专家。",
+        );
+        return null;
+      } catch (err) {
+        return describeFailure("操作失败", err);
+      }
+    },
+  };
+  // 「需要你」的提示卡在场：审批、复核、接管、Agent 提问。
+  const attention = pendingApprovals.length > 0 || task.status === "PAUSED_NEEDS_REVIEW" || task.status === "TAKEN_OVER" || Boolean(live.question);
+  const grantBudget = (delta: BudgetAmounts) => attempt(() => grantTaskBudget(task.task_id, delta));
   const message = (text: string, delivery: "queue" | "interrupt") => act(() => sendTaskMessage(task.task_id, text, delivery));
 
   return (
     <div className="flex min-h-0 flex-1">
       <main className="flex min-h-0 min-w-0 flex-1 flex-col bg-card">
-        <TaskHeader task={task} onCancel={() => void act(() => controlTask(task.task_id, "cancel"))} panelOpen={panelOpen} onOpenPanel={() => setPanelOpen(true)} />
-        {failure ? <Alert className="mx-6 mt-3">{failure}</Alert> : null}
-        {reconnecting ? <Alert tone="warning" className="mx-6 mt-3">实时事件连接已断开，正在重连…</Alert> : null}
+        <TaskHeader task={task} onCancel={() => void act(() => controlTask(task.task_id, "cancel"))} onTakeover={() => void act(() => controlTask(task.task_id, "takeover"))} panelOpen={panelOpen} onOpenPanel={() => setPanelOpen(true)} />
+        {failure ? <Alert className="mx-4 mt-3 sm:mx-6">{failure}</Alert> : null}
+        {notice ? <Alert tone="info" className="mx-4 mt-3 sm:mx-6"><span data-testid="action-notice">{notice}</span></Alert> : null}
+        {reconnecting ? <Alert tone="warning" className="mx-4 mt-3 sm:mx-6">实时事件连接已断开，正在重连…</Alert> : null}
         <Conversation
           turns={turns}
-          profile={task.profile}
+          expertName={nameOf(task.profile)}
           files={files}
           onOpenFile={openFile}
           onOpenAllFiles={() => {
@@ -106,28 +170,37 @@ function TaskView({ taskId }: { taskId: string }) {
             setPanelOpen(true);
           }}
         >
-          <ApprovalInbox approvals={task.pending_approvals ?? []} infos={approvals} onDecide={(id, decision, always) => void act(() => decideTaskApproval(task.task_id, id, decision, always))} />
+          <ApprovalInbox approvals={pendingApprovals} cancelled={cancelledApprovals} infos={approvals} nodeTitles={nodeTitles} nameOf={nameOf} onDecide={(id, decision, always) => void act(() => decideTaskApproval(task.task_id, id, decision, always))} />
+          {task.status === "PAUSED_NEEDS_REVIEW" ? <ReviewNotice review={live.review} onResume={() => void act(() => controlTask(task.task_id, "resume"))} onGrantBudget={grantBudget} /> : null}
+          {task.status === "TAKEN_OVER" ? <TakeoverNotice onHandback={() => void act(() => controlTask(task.task_id, "handback"))} /> : null}
           {live.question ? <AgentQuestion question={live.question} onAnswer={(text) => message(text, "queue")} /> : null}
-          {task.status === "PAUSED" ? <p className="text-center text-xs text-muted-foreground">已停止，点击右下角的 ▶ 继续。</p> : null}
+          {task.status === "PAUSED" ? <p className="text-center text-small text-muted-foreground">已停止，点击右下角的 ▶ 继续。</p> : null}
           {closed && turns.length > 0 ? (
-            <p className="text-center text-xs text-muted-foreground">
+            <p className="text-center text-small text-muted-foreground">
               任务已取消。
-              <Link to="/" className="ml-1 text-primary hover:underline">
+              <Link to="/" className="ml-1 text-primary-700 hover:underline">
                 基于此开新任务
               </Link>
             </p>
           ) : null}
         </Conversation>
-        <Composer onSend={message} onControl={(action) => void act(() => controlTask(task.task_id, action))} status={task.status} closed={closed} config={config} catalog={catalog} />
+        <Composer onSend={message} onControl={(action) => void act(() => controlTask(task.task_id, action))} status={task.status} closed={closed} attention={attention} config={config} catalog={catalog} />
       </main>
+      {drawerOpen ? <div aria-hidden="true" data-testid="panel-backdrop" className="fixed inset-0 z-30 bg-black/40" onClick={() => setPanelOpen(false)} /> : null}
       {panelOpen ? (
         <TaskPanel
           plan={plan}
+          nodes={live.nodes}
+          task={task}
+          reserved={totalReserved(live)}
+          pendingSwitches={pendingSwitches}
+          nodeActions={nodeActions}
           attempts={live.attempts}
           events={events}
           files={files}
           openFiles={openFiles}
           active={active}
+          nameOf={nameOf}
           onActivate={setActive}
           onOpenFile={openFile}
           onCloseFile={closeFile}

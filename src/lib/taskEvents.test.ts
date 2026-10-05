@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { applyEvent, emptyLiveState, markStreamGap, mergeEvent, type TaskLiveState } from "./taskEvents";
+import { applyEvent, budgetAmounts, emptyLiveState, markStreamGap, mergeEvent, pendingSwitch, totalReserved, type TaskLiveState } from "./taskEvents";
 import type { TaskEvent } from "./tasks";
 
 let counter = 0;
@@ -32,7 +32,7 @@ const started = (attemptId: string, seq: number, version = 1) =>
 describe("attempt timeline folding", () => {
   it("adds a running attempt on attempt.started and reads attempt_no", () => {
     const state = fold([event("attempt.started", { attempt_id: "a1", node_id: "n1", attempt_no: 2 }, { seq: 1 })]);
-    expect(state.attempts).toEqual([{ attemptId: "a1", nodeId: "n1", attemptNo: 2, status: "running", resumed: 0 }]);
+    expect(state.attempts).toEqual([{ attemptId: "a1", nodeId: "n1", attemptNo: 2, status: "running", resumed: 0, marks: [] }]);
   });
 
   it("defaults attempt_no to 1 and missing string fields to empty", () => {
@@ -75,20 +75,37 @@ describe("attempt timeline folding", () => {
     expect(state.question).toEqual({ attemptId: "a1", text: "?" });
   });
 
+  it("keeps a structured output the attempt reports, and none when it reports nothing or an empty one", () => {
+    const run = (output: unknown) => fold([started("a1", 1), event("attempt.finished", { attempt_id: "a1", outcome: "completed", output }, { seq: 2, entity: ["attempt", "a1", 2] })]).attempts[0];
+    expect(run({ summary: "ok", count: 3 })?.output).toEqual({ summary: "ok", count: 3 });
+    expect(run({})?.output).toBeUndefined();
+    expect(run(undefined)?.output).toBeUndefined();
+    expect(run([1])?.output).toBeUndefined();
+  });
+
+  it("marks an output that was too large to send, and keeps it apart from a real output", () => {
+    const attempt = fold([started("a1", 1), event("attempt.finished", { attempt_id: "a1", outcome: "completed", output_truncated: true }, { seq: 2, entity: ["attempt", "a1", 2] })]).attempts[0];
+    expect(attempt?.outputTruncated).toBe(true);
+    expect(attempt?.output).toBeUndefined();
+    const plain = fold([started("a1", 1), event("attempt.finished", { attempt_id: "a1", outcome: "completed" }, { seq: 2, entity: ["attempt", "a1", 2] })]).attempts[0];
+    expect(plain?.outputTruncated).toBeUndefined();
+  });
+
   it.each([
     ["completed", "completed"],
     ["cancelled", "cancelled"],
     ["failed", "failed"],
     ["anything else", "failed"],
     ["", "failed"],
-  ])("maps outcome %j to status %s and drops the attempt's live text", (outcome, status) => {
+  ])("maps outcome %j to status %s and keeps the attempt's streamed text for the conversation", (outcome, status) => {
     const state = fold([
       started("a1", 1),
       event("agent.token_delta", { attempt_id: "a1", text: "partial" }, { after_seq: 1 }),
       event("attempt.finished", { attempt_id: "a1", outcome }, { seq: 2, entity: ["attempt", "a1", 2] }),
     ]);
     expect(state.attempts[0]?.status).toBe(status);
-    expect(state.live).toEqual({});
+    // live 保留：历史轮次（工具调用之间的话）只在 blocks 里，final 只覆盖最后一轮。
+    expect(state.live["a1"]).toEqual([{ id: "", text: "partial" }]);
     expect(state.truncated).toEqual({});
   });
 
@@ -109,14 +126,27 @@ describe("attempt timeline folding", () => {
     expect(state.attempts).toEqual([]);
   });
 
-  it("stores the final message on its attempt and drops the streamed text", () => {
+  it("stores the final message on its attempt and keeps the streamed blocks", () => {
     const state = fold([
       started("a1", 1),
       event("agent.token_delta", { attempt_id: "a1", text: "Hel" }, { after_seq: 1 }),
       event("message.agent_final", { attempt_id: "a1", text: "Hello" }, { seq: 2, entity: ["attempt", "a1", 0] }),
     ]);
     expect(state.attempts[0]?.finalText).toBe("Hello");
-    expect(state.live).toEqual({});
+    expect(state.live["a1"]).toEqual([{ id: "", text: "Hel" }]);
+  });
+
+  it("marks a message.user boundary on the latest attempt with the block counts so far", () => {
+    const state = fold([
+      started("a1", 1),
+      event("agent.token_delta", { attempt_id: "a1", text: "Hel" }, { after_seq: 1 }),
+      event("message.user", { text: "1" }, { seq: 2 }),
+    ]);
+    expect(state.attempts[0]?.marks).toEqual([{ text: 1, thinking: 0 }]);
+
+    // 已结束的尝试不拆：用户之后的新消息属于下一次 attempt.started。
+    const after = fold([event("attempt.finished", { attempt_id: "a1", outcome: "completed" }, { seq: 3, entity: ["attempt", "a1", 2] }), event("message.user", { text: "再来" }, { seq: 4 })], state);
+    expect(after.attempts[0]?.marks).toEqual([{ text: 1, thinking: 0 }]);
   });
 
   it("does not mutate the state it was given", () => {
@@ -270,7 +300,8 @@ describe("ephemeral streamed text and the truncation mark", () => {
     );
     const done = applyEvent(gapped, event("message.agent_final", { attempt_id: "a1", text: "Hello" }, { seq: 2, entity: ["attempt", "a1", 0] }));
     expect(done.truncated).toEqual({});
-    expect(done.live).toEqual({});
+    // live 保留：更早的流式轮次要留给会话渲染，final 只代表最后一轮。
+    expect(done.live["a1"]).toEqual([{ id: "", text: "Hel" }]);
   });
 
   it("clears the mark when the attempt finishes without a final message", () => {
@@ -349,5 +380,252 @@ describe("mergeEvent", () => {
     const copy = [...log];
     mergeEvent(log, event("b", {}, { seq: 1 }));
     expect(log).toEqual(copy);
+  });
+});
+
+describe("a node that fails and a task that waits for a person", () => {
+  const nodeChange = (seq: number, node: string, from: string, to: string, reason = "") =>
+    event("node.status_changed", { node_id: node, from_status: from, to_status: to, reason }, { seq, entity: ["node", node, seq] });
+  const taskChange = (seq: number, to: string, reason = "", from = "RUNNING") =>
+    event("task.status_changed", { from_status: from, to_status: to, reason }, { seq, entity: ["task", "task_1", seq] });
+
+  it("keeps the latest status and reason per node: a retry, then blocked", () => {
+    const retrying = fold([nodeChange(1, "n1", "RUNNING", "RETRY_PENDING", "model timed out")]);
+    expect(retrying.nodes).toEqual({ n1: { status: "RETRY_PENDING", reason: "model timed out" } });
+    const blocked = fold([nodeChange(2, "n1", "RETRY_PENDING", "BLOCKED", "gave up after 3 attempts")], retrying);
+    expect(blocked.nodes.n1).toEqual({ status: "BLOCKED", reason: "gave up after 3 attempts" });
+    const back = fold([nodeChange(3, "n1", "BLOCKED", "READY", "resumed by a person")], blocked);
+    expect(back.nodes.n1?.status).toBe("READY");
+  });
+
+  it("ignores a node event with no node id", () => {
+    expect(fold([event("node.status_changed", { to_status: "BLOCKED" }, { seq: 1 })]).nodes).toEqual({});
+  });
+
+  it("waits for a person with the reason, and stops waiting when the task leaves review", () => {
+    const waiting = fold([taskChange(1, "PAUSED_NEEDS_REVIEW", "node n1 is blocked: gave up")]);
+    expect(waiting.review).toEqual({ reason: "node n1 is blocked: gave up", rejection: null });
+    expect(fold([taskChange(2, "RUNNING", "", "PAUSED_NEEDS_REVIEW")], waiting).review).toBeNull();
+  });
+
+  it("does not wait for a person on other pauses", () => {
+    expect(fold([taskChange(1, "PAUSED")]).review).toBeNull();
+  });
+
+  it("carries the failure class of a failed attempt, and none for one that completed", () => {
+    const failed = fold([
+      started("a1", 1),
+      event("attempt.finished", { attempt_id: "a1", outcome: "failed", failure: { failure_class: "model", retryable: true, message: "502 from the model" } }, { seq: 2, entity: ["attempt", "a1", 2] }),
+    ]);
+    expect(failed.attempts[0]).toMatchObject({ status: "failed", failure: { failureClass: "model", retryable: true, message: "502 from the model" } });
+    const done = fold([started("a2", 3), event("attempt.finished", { attempt_id: "a2", outcome: "completed" }, { seq: 4, entity: ["attempt", "a2", 2] })]);
+    expect(done.attempts[0]?.failure).toBeUndefined();
+  });
+
+  it("reads an old attempt.finished without a failure", () => {
+    const state = fold([started("a1", 1), event("attempt.finished", { attempt_id: "a1", outcome: "failed" }, { seq: 2, entity: ["attempt", "a1", 2] })]);
+    expect(state.attempts[0]).toMatchObject({ status: "failed" });
+    expect(state.attempts[0]?.failure).toBeUndefined();
+  });
+});
+
+describe("approvals that end without a decision from the person", () => {
+  const decided = (seq: number, id: string, status: string) =>
+    event("approval.decided", { approval_id: id, status }, { seq, entity: ["approval", id, 2] });
+
+  it("records a cancelled approval, so the card leaves the pending state", () => {
+    expect(fold([decided(1, "apr_1", "CANCELLED")]).approvals).toEqual({ apr_1: "CANCELLED" });
+  });
+
+  it("records the other outcomes too and keeps each approval apart", () => {
+    const state = fold([decided(1, "apr_1", "APPROVED"), decided(2, "apr_2", "REJECTED"), decided(3, "apr_3", "CANCELLED")]);
+    expect(state.approvals).toEqual({ apr_1: "APPROVED", apr_2: "REJECTED", apr_3: "CANCELLED" });
+  });
+
+  it("ignores a decision without an id or with a status it does not know", () => {
+    expect(fold([decided(1, "", "CANCELLED"), decided(2, "apr_1", "EXPIRED")]).approvals).toEqual({});
+  });
+});
+
+describe("a follow-up message that could not be added", () => {
+  const rejected = (seq: number) => event("plan.change_rejected", { status: "rejected", code: "TOO_MANY_OPS", detail: "the plan is full" }, { seq });
+  const review = (seq: number) =>
+    event("task.status_changed", { from_status: "RUNNING", to_status: "PAUSED_NEEDS_REVIEW", reason: "message 2 could not be added to the plan: TOO_MANY_OPS: the plan is full" }, { seq, entity: ["task", "task_1", seq] });
+
+  it("shows the person that the message was not taken up, and why", () => {
+    const state = fold([rejected(1), review(2)]);
+    expect(state.review).toEqual({
+      reason: "message 2 could not be added to the plan: TOO_MANY_OPS: the plan is full",
+      rejection: { code: "TOO_MANY_OPS", detail: "the plan is full" },
+    });
+    expect(state.rejection).toBeNull();
+  });
+
+  it("does not blame a later review on a rejection that other events came between", () => {
+    const state = fold([rejected(1), started("a1", 2), event("task.status_changed", { from_status: "RUNNING", to_status: "PAUSED_NEEDS_REVIEW", reason: "unplannable" }, { seq: 3 })]);
+    expect(state.review).toEqual({ reason: "unplannable", rejection: null });
+  });
+
+  it("lets ephemeral stream chunks sit between the rejection and the review", () => {
+    const state = fold([rejected(1), event("agent.token_delta", { attempt_id: "a1", block_id: "b", text: "x" }, { after_seq: 1 }), review(2)]);
+    expect(state.review?.rejection).toEqual({ code: "TOO_MANY_OPS", detail: "the plan is full" });
+  });
+
+  it("clears the notice when the task is resumed", () => {
+    const state = fold([rejected(1), review(2), event("task.status_changed", { from_status: "PAUSED_NEEDS_REVIEW", to_status: "RUNNING", reason: "" }, { seq: 3, entity: ["task", "task_1", 3] })]);
+    expect(state.review).toBeNull();
+  });
+});
+
+describe("a plan with archived steps", () => {
+  it("renders old events whose nodes the live plan no longer has: attempts and node events need no plan", () => {
+    const state = fold([
+      started("a1", 1),
+      event("node.status_changed", { node_id: "n_archived", from_status: "RUNNING", to_status: "COMPLETED" }, { seq: 2, entity: ["node", "n_archived", 2] }),
+      event("attempt.finished", { attempt_id: "a1", outcome: "completed" }, { seq: 3, entity: ["attempt", "a1", 2] }),
+    ]);
+    expect(state.attempts[0]).toMatchObject({ nodeId: "n1", status: "completed" });
+    expect(state.nodes.n_archived).toEqual({ status: "COMPLETED", reason: "" });
+  });
+});
+
+describe("a task that runs out of budget", () => {
+  const nodeChange = (seq: number, node: string, from: string, to: string, reason = "") =>
+    event("node.status_changed", { node_id: node, from_status: from, to_status: to, reason }, { seq, entity: ["node", node, seq] });
+  const taskChange = (seq: number, to: string, reason = "", from = "RUNNING") =>
+    event("task.status_changed", { from_status: from, to_status: to, reason }, { seq, entity: ["task", "task_1", seq] });
+  const exhausted = (seq: number, detail = "tokens: the node needs 800 and 400 is left") =>
+    event("budget.exhausted", { scope: "task", node_id: "n1", detail }, { seq });
+
+  it("takes the detail of budget.exhausted into the review notice", () => {
+    const state = fold([exhausted(1), taskChange(2, "PAUSED_NEEDS_REVIEW", "budget exhausted: node n1 cannot start")]);
+    expect(state.review?.budget).toEqual({ scope: "task", nodeId: "n1", detail: "tokens: the node needs 800 and 400 is left" });
+  });
+
+  it("keeps a budget.exhausted without a detail (the exploration ran out) as a budget wait", () => {
+    const state = fold([event("budget.exhausted", { scope: "exploration", node_id: "n1" }, { seq: 1 }), taskChange(2, "PAUSED_NEEDS_REVIEW", "exploration budget spent without a plan")]);
+    expect(state.review?.budget).toEqual({ scope: "exploration", nodeId: "n1", detail: "" });
+  });
+
+  it("knows an attempt that spent its budget from its failure class, with the node blocked", () => {
+    const state = fold([
+      started("a1", 1),
+      event("attempt.finished", { attempt_id: "a1", outcome: "failed", failure: { failure_class: "budget", retryable: false, message: "the attempt's token budget is spent" } }, { seq: 2, entity: ["attempt", "a1", 2] }),
+      nodeChange(3, "n1", "RUNNING", "BLOCKED", "a budget failure that cannot be retried"),
+      taskChange(4, "PAUSED_NEEDS_REVIEW", "node n1 is blocked"),
+    ]);
+    expect(state.attempts[0]?.failure?.failureClass).toBe("budget");
+    expect(state.review?.budget).toEqual({ scope: "node", nodeId: "n1", detail: "the attempt's token budget is spent" });
+  });
+
+  it("is not a budget wait when the node is blocked for another reason, or its latest attempt failed otherwise", () => {
+    const state = fold([
+      started("a1", 1),
+      event("attempt.finished", { attempt_id: "a1", outcome: "failed", failure: { failure_class: "budget", retryable: false, message: "spent" } }, { seq: 2, entity: ["attempt", "a1", 2] }),
+      started("a2", 3, 3),
+      event("attempt.finished", { attempt_id: "a2", outcome: "failed", failure: { failure_class: "model", retryable: true, message: "502" } }, { seq: 4, entity: ["attempt", "a2", 4] }),
+      nodeChange(5, "n1", "RUNNING", "BLOCKED", "retries are used up"),
+      taskChange(6, "PAUSED_NEEDS_REVIEW", "node n1 is blocked"),
+    ]);
+    expect(state.review?.budget).toBeUndefined();
+  });
+
+  it("does not blame a later review on an old budget.exhausted that a grant or another status change followed", () => {
+    const granted = fold([exhausted(1), event("budget.granted", { command_id: "c1", delta: { tokens: 1000 } }, { seq: 2 }), taskChange(3, "PAUSED_NEEDS_REVIEW", "something else")]);
+    expect(granted.review?.budget).toBeUndefined();
+    const held = fold([exhausted(1), taskChange(2, "PAUSED"), taskChange(3, "PAUSED_NEEDS_REVIEW", "something else", "PAUSED")]);
+    expect(held.review?.budget).toBeUndefined();
+  });
+
+  it("clears the wait when the grant resumes the task", () => {
+    const waiting = fold([exhausted(1), taskChange(2, "PAUSED_NEEDS_REVIEW", "budget exhausted")]);
+    const resumed = fold([event("budget.granted", { command_id: "c1", delta: { tokens: 1000 } }, { seq: 3 }), taskChange(4, "RUNNING", "budget_granted", "PAUSED_NEEDS_REVIEW")], waiting);
+    expect(resumed.review).toBeNull();
+    expect(resumed.exhausted).toBeNull();
+  });
+
+  it("tracks what running attempts hold back, and gives it back when they end; an unknown cost stays absent", () => {
+    const state = fold([
+      event("attempt.started", { attempt_id: "a1", node_id: "n1", attempt_no: 1, budget_reserved: { tokens: 600, tool_calls: null, cost_usd_micros: null } }, { seq: 1, entity: ["attempt", "a1", 1] }),
+      event("attempt.started", { attempt_id: "a2", node_id: "n2", attempt_no: 1, budget_reserved: { tokens: 300, wall_s: 60 } }, { seq: 2, entity: ["attempt", "a2", 1] }),
+    ]);
+    expect(state.reserved).toEqual({ a1: { tokens: 600 }, a2: { tokens: 300, wall_s: 60 } });
+    expect(totalReserved(state)).toEqual({ tokens: 900, wall_s: 60 });
+    const after = fold([event("attempt.finished", { attempt_id: "a1", outcome: "completed" }, { seq: 3, entity: ["attempt", "a1", 2] })], state);
+    expect(totalReserved(after)).toEqual({ tokens: 300, wall_s: 60 });
+    // An attempt without a reservation (older events) holds nothing.
+    expect(fold([started("a3", 4)]).reserved).toEqual({});
+  });
+
+  it("reads budget amounts leniently", () => {
+    expect(budgetAmounts({ tokens: 5, wall_s: -1, cost_usd_micros: null, tool_calls: "x" })).toEqual({ tokens: 5 });
+    expect(budgetAmounts(null)).toEqual({});
+  });
+});
+
+describe("a task a person takes over", () => {
+  it("keeps the reason a person gave when completing a node by hand", () => {
+    const state = fold([
+      event("task.status_changed", { from_status: "RUNNING", to_status: "TAKEN_OVER", reason: "" }, { seq: 1, entity: ["task", "task_1", 1] }),
+      event("node.status_changed", { node_id: "n1", from_status: "READY", to_status: "COMPLETED", reason: "I wrote the file myself", frozen: true }, { seq: 2, entity: ["node", "n1", 1] }),
+    ]);
+    expect(state.nodes.n1).toEqual({ status: "COMPLETED", reason: "I wrote the file myself" });
+  });
+});
+
+describe("a node whose profile is switched", () => {
+  it("records the switch and says on the next attempt which profile it came from", () => {
+    const state = fold([
+      event("profile.switched", { node_id: "n1", from_profile: "default@1", to_profile: "coder@2", reason: "needs a coder", approval_id: "apr_1" }, { seq: 1 }),
+      event("attempt.started", { attempt_id: "a2", node_id: "n1", attempt_no: 2, profile: "coder@2", switched_from: "default@1" }, { seq: 2, entity: ["attempt", "a2", 1] }),
+    ]);
+    expect(state.switches).toEqual([{ nodeId: "n1", from: "default@1", to: "coder@2", reason: "needs a coder", approvalId: "apr_1" }]);
+    expect(state.attempts[0]).toMatchObject({ profile: "coder@2", switchedFrom: "default@1" });
+  });
+
+  it("is pending until an attempt of the node runs as the new profile", () => {
+    const switched = fold([event("profile.switched", { node_id: "n1", from_profile: "default@1", to_profile: "coder@2", reason: "r" }, { seq: 1 })]);
+    expect(pendingSwitch(switched, "n1")?.to).toBe("coder@2");
+    expect(pendingSwitch(switched, "n2")).toBeNull();
+    const running = fold([event("attempt.started", { attempt_id: "a1", node_id: "n1", attempt_no: 1, profile: "default@1" }, { seq: 2, entity: ["attempt", "a1", 1] })], switched);
+    expect(pendingSwitch(running, "n1")?.to).toBe("coder@2");
+    const applied = fold([event("attempt.started", { attempt_id: "a2", node_id: "n1", attempt_no: 2, profile: "coder@2", switched_from: "default@1" }, { seq: 3, entity: ["attempt", "a2", 1] })], running);
+    expect(pendingSwitch(applied, "n1")).toBeNull();
+  });
+
+  it("leaves switchedFrom off an attempt that was not switched, and ignores a switch with no node", () => {
+    const state = fold([event("profile.switched", { from_profile: "a@1", to_profile: "b@1", reason: "x" }, { seq: 1 }), started("a1", 2)]);
+    expect(state.switches).toEqual([]);
+    expect(state.attempts[0]?.switchedFrom).toBeUndefined();
+  });
+});
+
+describe("a node's status events keyed by node or by task", () => {
+  const nodeEvent = (seq: number, to: string, entity: [string, string, number]) =>
+    event("node.status_changed", { node_id: "n1", from_status: "READY", to_status: to }, { seq, entity });
+
+  it("applies per-node versions: two nodes counting from 1 do not hide each other", () => {
+    const state = fold([
+      event("node.status_changed", { node_id: "n1", to_status: "RUNNING" }, { seq: 1, entity: ["node", "n1", 3] }),
+      event("node.status_changed", { node_id: "n2", to_status: "RUNNING" }, { seq: 2, entity: ["node", "n2", 1] }),
+    ]);
+    expect(state.nodes).toMatchObject({ n1: { status: "RUNNING" }, n2: { status: "RUNNING" } });
+    expect(state.versions).toMatchObject({ "node:n1": 3, "node:n2": 1 });
+  });
+
+  it("ignores a late older event of the same node", () => {
+    const state = fold([nodeEvent(2, "COMPLETED", ["node", "n1", 4]), nodeEvent(1, "RUNNING", ["node", "n1", 3])]);
+    expect(state.nodes.n1?.status).toBe("COMPLETED");
+  });
+
+  it("still orders events of the older shape, where the node's change carries the task's version", () => {
+    const state = fold([nodeEvent(2, "COMPLETED", ["task", "task_1", 7]), nodeEvent(1, "RUNNING", ["task", "task_1", 6])]);
+    expect(state.nodes.n1?.status).toBe("COMPLETED");
+    expect(state.versions).toEqual({ "task:task_1": 7 });
+  });
+
+  it("mixes both shapes in one log", () => {
+    const state = fold([nodeEvent(1, "RUNNING", ["task", "task_1", 5]), nodeEvent(2, "COMPLETED", ["node", "n1", 1])]);
+    expect(state.nodes.n1?.status).toBe("COMPLETED");
   });
 });

@@ -2,15 +2,15 @@ import type { ButtonHTMLAttributes } from "react";
 import { cn } from "../lib/cn";
 
 const VARIANTS = {
-  primary: "bg-primary text-primary-foreground hover:bg-primary/90",
+  primary: "bg-primary text-primary-foreground hover:bg-primary-hover",
   secondary: "border border-border bg-card text-foreground hover:bg-secondary",
-  ghost: "text-foreground/80 hover:bg-secondary",
-  danger: "border border-destructive/40 bg-card text-destructive hover:bg-destructive/10",
+  ghost: "text-gray-700 hover:bg-secondary",
+  danger: "border border-danger-200 bg-card text-danger-700 hover:bg-danger-50",
 } as const;
 
 const SIZES = {
-  sm: "h-8 px-3 text-[13px]",
-  md: "h-9 px-4 text-sm",
+  sm: "h-8 px-3 text-small",
+  md: "h-9 px-4 text-body",
 } as const;
 
 export type ButtonProps = ButtonHTMLAttributes<HTMLButtonElement> & {
@@ -23,7 +23,7 @@ export function Button({ variant = "secondary", size = "md", type = "button", cl
     <button
       type={type}
       className={cn(
-        "inline-flex shrink-0 items-center justify-center gap-1.5 rounded-lg font-medium transition-colors disabled:cursor-not-allowed disabled:opacity-40",
+        "inline-flex shrink-0 items-center justify-center gap-1.5 rounded-control font-medium transition-colors disabled:cursor-not-allowed disabled:opacity-40",
         VARIANTS[variant],
         SIZES[size],
         className,

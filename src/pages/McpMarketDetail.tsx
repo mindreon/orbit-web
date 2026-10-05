@@ -24,19 +24,19 @@ function cleanReadmeBlock(block: string) {
 }
 
 function ReadmeBody({ text }: { text: string }) {
-  if (!text.trim()) return <p className="text-[14px] leading-6 text-muted-foreground">这份快照没有服务说明。</p>;
+  if (!text.trim()) return <p className="text-body leading-6 text-muted-foreground">这份快照没有服务说明。</p>;
   const blocks = text
     .split(/\n{2,}/)
     .map((block) => (block.startsWith("```") ? block : cleanReadmeBlock(block)))
     .filter((block) => block.trim());
   return (
-    <div className="space-y-3 text-[14px] font-light leading-6 text-foreground">
+    <div className="space-y-3 text-body font-normal leading-6 text-foreground">
       {blocks.map((block, index) => {
         const fenced = block.startsWith("```");
         if (fenced) {
           const code = block.replace(/^```[^\n]*\n?/, "").replace(/```$/, "");
           return (
-            <pre key={index} className="overflow-auto rounded-lg bg-muted p-3 text-[12px] leading-5 text-foreground/80">
+            <pre key={index} className="overflow-auto rounded-control bg-muted p-3 text-caption leading-5 text-gray-700">
               {code}
             </pre>
           );
@@ -44,7 +44,7 @@ function ReadmeBody({ text }: { text: string }) {
         const heading = block.match(/^(#{1,3})\s+([\s\S]+)$/);
         if (heading && !block.includes("\n")) {
           return (
-            <h3 key={index} className="text-[16px] font-semibold leading-7 text-foreground">
+            <h3 key={index} className="text-title font-semibold leading-7 text-foreground">
               {heading[2]}
             </h3>
           );
@@ -60,17 +60,17 @@ function ReadmeBody({ text }: { text: string }) {
 }
 
 function ToolList({ tools }: { tools: McpMarketTool[] }) {
-  if (tools.length === 0) return <p className="text-[14px] leading-6 text-muted-foreground">工具信息暂未提供</p>;
+  if (tools.length === 0) return <p className="text-body leading-6 text-muted-foreground">工具信息暂未提供</p>;
   return (
     <ul className="space-y-4">
       {tools.map((tool) => (
-        <li key={tool.name} className="rounded-xl bg-muted px-[18px] py-[14px]">
-          <h3 className="text-[16px] font-semibold leading-7 text-foreground">{tool.name}</h3>
-          {tool.description ? <p className="mt-1 whitespace-pre-wrap text-[14px] font-light leading-6 text-foreground/80">{tool.description}</p> : null}
+        <li key={tool.name} className="rounded-card bg-muted px-[18px] py-[14px]">
+          <h3 className="text-title font-semibold leading-7 text-foreground">{tool.name}</h3>
+          {tool.description ? <p className="mt-1 whitespace-pre-wrap text-body font-normal leading-6 text-gray-700">{tool.description}</p> : null}
           {tool.params.length > 0 ? (
             <ul className="mt-3 space-y-2">
               {tool.params.map((param) => (
-                <li key={param.name} className="text-[13px] leading-5 text-foreground/80">
+                <li key={param.name} className="text-small leading-5 text-gray-700">
                   <span className="font-medium text-foreground">{param.name}</span>
                   <span className="text-muted-foreground">
                     {" "}
@@ -120,34 +120,34 @@ export function McpMarketDetailPage() {
   return (
     <div className="flex min-h-0 flex-1 flex-col bg-card">
       <PageHeader title="服务详情" back={{ to: "/experts/connectors", label: "MCP 广场" }} />
-      <div className="min-h-0 flex-1 overflow-auto px-6 py-6">
+      <div className="min-h-0 flex-1 overflow-auto px-4 py-6 sm:px-6">
       <section aria-label="MCP 详情" className="mx-auto max-w-[920px]">
-        {loading ? <p className="text-[14px] text-muted-foreground">正在读取服务详情。</p> : null}
+        {loading ? <p className="text-body text-muted-foreground">正在读取服务详情。</p> : null}
         {error ? <Alert>{error}</Alert> : null}
         {item ? (
           <>
             <div className="flex items-start gap-4">
-              <CatalogAvatar src={mcpMarketIconPath(id)} fallback={initial} className="h-[60px] w-[60px] text-[22px]" />
+              <CatalogAvatar src={mcpMarketIconPath(id)} fallback={initial} className="h-[60px] w-[60px] text-heading" />
               <div className="min-w-0 flex-1">
                 <div className="flex flex-wrap items-center gap-2">
-                  <h1 className="text-[18px] font-semibold leading-6 text-foreground">{item.name}</h1>
-                  <span className={`inline-flex h-5 items-center rounded-full bg-muted px-2 text-[11px] font-medium ${item.hosted ? "text-primary" : "text-success"}`}>
+                  <h1 className="text-heading font-semibold leading-6 text-foreground">{item.name}</h1>
+                  <span className={`inline-flex h-5 items-center rounded-full bg-muted px-2 text-caption font-medium ${item.hosted ? "text-primary-700" : "text-success-700"}`}>
                     {item.hosted ? "Hosted" : "Local"}
                   </span>
-                  {item.updatedOn ? <span className="text-[12px] leading-4 text-muted-foreground">{item.updatedOn}</span> : null}
+                  {item.updatedOn ? <span className="text-caption leading-4 text-muted-foreground">{item.updatedOn}</span> : null}
                 </div>
-                <p className="mt-2 flex flex-wrap gap-3 text-[12px] leading-4 text-muted-foreground">
+                <p className="mt-2 flex flex-wrap gap-3 text-caption leading-4 text-muted-foreground">
                   {item.hosted && item.calls > 0 ? <span title="托管服务调用次数">{formatStat(item.calls)}</span> : null}
                   {item.views > 0 ? <span title="浏览">{formatStat(item.views)}</span> : null}
                   {item.stars > 0 ? <span title="收藏">{formatStat(item.stars)}</span> : null}
                   <span>{item.needsOnline ? "需要联网" : "可离线使用"}</span>
                 </p>
-                <p className="mt-2 text-[12px] leading-4 text-muted-foreground">{item.author}</p>
+                <p className="mt-2 text-caption leading-4 text-muted-foreground">{item.author}</p>
               </div>
             </div>
-            <p className="mt-4 text-[14px] font-light leading-6 text-foreground/80">{item.summary}</p>
-            <div className="mt-3 flex flex-wrap items-center gap-3 text-[12px] leading-5 text-foreground/80">
-              {item.categoryName ? <span className="rounded bg-muted px-[5px]">{item.categoryName}</span> : null}
+            <p className="mt-4 text-body font-normal leading-6 text-gray-700">{item.summary}</p>
+            <div className="mt-3 flex flex-wrap items-center gap-3 text-caption leading-5 text-gray-700">
+              {item.categoryName ? <span className="rounded-control bg-muted px-[5px]">{item.categoryName}</span> : null}
               {item.license ? <span>许可证：{item.license}</span> : null}
               {item.author ? <span>开发者：{item.author}</span> : null}
             </div>
@@ -156,7 +156,7 @@ export function McpMarketDetailPage() {
                 type="button"
                 role="tab"
                 aria-selected={tab === "readme"}
-                className={`border-b-2 pb-2 text-[14px] font-medium ${tab === "readme" ? "border-primary text-primary" : "border-transparent text-muted-foreground"}`}
+                className={`border-b-2 pb-2 text-body font-medium ${tab === "readme" ? "border-primary text-primary-700" : "border-transparent text-muted-foreground"}`}
                 onClick={() => setTab("readme")}
               >
                 服务详情
@@ -165,7 +165,7 @@ export function McpMarketDetailPage() {
                 type="button"
                 role="tab"
                 aria-selected={tab === "tools"}
-                className={`border-b-2 pb-2 text-[14px] font-medium ${tab === "tools" ? "border-primary text-primary" : "border-transparent text-muted-foreground"}`}
+                className={`border-b-2 pb-2 text-body font-medium ${tab === "tools" ? "border-primary text-primary-700" : "border-transparent text-muted-foreground"}`}
                 onClick={() => setTab("tools")}
               >
                 工具
@@ -174,8 +174,8 @@ export function McpMarketDetailPage() {
             <div className="mt-5" role="tabpanel">
               {tab === "readme" ? <ReadmeBody text={item.readme} /> : <ToolList tools={item.tools} />}
             </div>
-            <aside className="mt-8 rounded-xl bg-muted px-[18px] py-[14px] text-[13px] leading-6 text-foreground/80">
-              <h2 className="text-[14px] font-medium text-foreground">服务配置</h2>
+            <aside className="mt-8 rounded-card bg-muted px-[18px] py-[14px] text-small leading-6 text-gray-700">
+              <h2 className="text-body font-medium text-foreground">服务配置</h2>
               {item.hosted ? (
                 <p className="mt-1">托管服务的连接地址按账号发放，属于敏感信息。这里不保存，也不在这里连接。</p>
               ) : (

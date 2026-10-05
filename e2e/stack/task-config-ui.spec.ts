@@ -30,8 +30,11 @@ test("E30 the + menu sets a task's expert, connectors and mode, and changes them
   await expect(menu).toBeVisible();
   await menu.getByRole("menuitem", { name: "模式" }).click();
   await page.getByRole("menuitemradio", { name: /仅问答/ }).click();
+  // A choice closes the menu: open it again for the next one.
+  await page.getByTestId("config-add").click();
   await menu.getByRole("menuitem", { name: "专家" }).click();
   await page.getByRole("menuitemradio", { name: new RegExp(expertName) }).click();
+  await page.getByTestId("config-add").click();
   await menu.getByRole("menuitem", { name: "连接器" }).click();
   await page.getByRole("menuitemcheckbox", { name: new RegExp(docsName) }).click();
   await page.keyboard.press("Escape");
@@ -137,7 +140,8 @@ test("E31 the skill panel, the expert editor, the list of my experts and a stale
   await page.waitForURL(/\/experts\/agents$/);
   const mine = page.getByTestId("my-expert").filter({ hasText: expertName });
   await expect(mine).toHaveCount(1);
-  await expect(mine).toContainText("v1");
+  // The list shows the name, not the version: that is on the edit page.
+  await expect(mine).not.toContainText(/\bv\d+\b/);
   const created = ((await (await request.get("/v1/experts")).json()) as { items: Array<{ expert_id: string; ref: string; name: string; skill_ids: string[]; connector_ids: string[] }> }).items.find((item) => item.name === expertName)!;
   expect(created.skill_ids).toEqual([skill.id]);
   expect(created.connector_ids).toEqual([connectorId]);
@@ -148,7 +152,9 @@ test("E31 the skill panel, the expert editor, the list of my experts and a stale
   await page.getByLabel("指令").fill("Be casual.");
   await page.getByRole("button", { name: "保存" }).click();
   await page.waitForURL(/\/experts\/agents$/);
-  await expect(page.getByTestId("my-expert").filter({ hasText: expertName })).toContainText("v2");
+  // A new version replaces the old one in the list (still one card, no version number shown); the API holds version 2.
+  await expect(page.getByTestId("my-expert").filter({ hasText: expertName })).toContainText("Be casual.");
+  expect(((await (await request.get("/v1/experts")).json()) as { items: Array<{ name: string; version: number }> }).items.find((item) => item.name === expertName)?.version).toBe(2);
   // Version 1 is exactly what it was; a task naming it still runs that configuration.
   const v1 = (await (await request.get(`/v1/profiles/${created.ref}`)).json()) as { spec: { instructions: string } };
   expect(v1.spec.instructions).toBe("Be formal.");

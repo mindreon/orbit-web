@@ -12,13 +12,13 @@ interface CatalogHeaderProps {
 /** 专家、技能、连接器三页共用的标题栏：左边是页面名，右边是搜索和主操作。 */
 export function CatalogHeader({ title, search, children }: CatalogHeaderProps) {
   return (
-    <header className="flex h-14 shrink-0 items-center gap-3 border-b border-border bg-card px-6">
-      <h1 className="text-base font-semibold text-foreground">{title}</h1>
-      <div className="ml-auto flex items-center gap-2">
+    <header className="flex h-14 shrink-0 items-center gap-3 bg-card px-4 sm:px-6">
+      <h1 className="shrink-0 text-title font-semibold text-foreground">{title}</h1>
+      <div className="ml-auto flex min-w-0 items-center gap-2">
         {search ? (
-          <label className="relative hidden sm:block">
+          <label className="relative min-w-0">
             <Search aria-hidden="true" className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-            <Input aria-label={search.placeholder} value={search.value} placeholder={search.placeholder} className="w-64 pl-9" onChange={(event) => search.onChange(event.target.value)} />
+            <Input aria-label={search.placeholder} value={search.value} placeholder={search.placeholder} className="w-36 pl-9 sm:w-64" onChange={(event) => search.onChange(event.target.value)} />
           </label>
         ) : null}
         {children}

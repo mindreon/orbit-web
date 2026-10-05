@@ -2,6 +2,7 @@ import js from "@eslint/js";
 import reactHooks from "eslint-plugin-react-hooks";
 import globals from "globals";
 import tseslint from "typescript-eslint";
+import designTokens from "./eslint-rules/design-tokens.js";
 
 // Deliberately loose: the recommended rule sets, with rules that would need business-code rewrites left as warnings.
 export default tseslint.config(
@@ -23,6 +24,13 @@ export default tseslint.config(
       "react-hooks/rules-of-hooks": "error",
       "react-hooks/exhaustive-deps": "warn",
     },
+  },
+  {
+    // Design tokens: no arbitrary font sizes, no opacity-built semantic colours (see eslint-rules/design-tokens.js).
+    files: ["src/**/*.{ts,tsx}"],
+    ignores: ["src/**/*.test.ts"],
+    plugins: { orbit: { rules: { "design-tokens": designTokens } } },
+    rules: { "orbit/design-tokens": "error" },
   },
   {
     files: ["e2e/**/*.{ts,mjs}", "*.config.{ts,js}", "playwright*.ts"],

@@ -4,11 +4,11 @@ import { formatSize } from "../../lib/time";
 import { getArtifactURL } from "../../lib/tasks";
 
 const KIND_ICON: Record<FileKind, { Icon: typeof File; box: string }> = {
-  image: { Icon: FileImage, box: "bg-primary/10 text-primary" },
+  image: { Icon: FileImage, box: "bg-primary-100 text-primary-700" },
   html: { Icon: Code2, box: "bg-accent text-accent-foreground" },
-  markdown: { Icon: FileText, box: "bg-success/10 text-success" },
+  markdown: { Icon: FileText, box: "bg-success-100 text-success-700" },
   text: { Icon: FileText, box: "bg-secondary text-muted-foreground" },
-  pdf: { Icon: FileText, box: "bg-destructive/10 text-destructive" },
+  pdf: { Icon: FileText, box: "bg-danger-100 text-danger-700" },
   other: { Icon: File, box: "bg-secondary text-muted-foreground" },
 };
 
@@ -16,7 +16,7 @@ export function FileIcon({ file, size = "md" }: { file: Pick<ArtifactFile, "name
   const { Icon, box } = KIND_ICON[fileKind(file.name, file.mediaType)];
   const dimension = size === "sm" ? "h-6 w-6" : "h-9 w-9";
   return (
-    <span className={`flex ${dimension} shrink-0 items-center justify-center rounded-lg ${box}`}>
+    <span className={`flex ${dimension} shrink-0 items-center justify-center rounded-control ${box}`}>
       <Icon aria-hidden="true" className={size === "sm" ? "h-3.5 w-3.5" : "h-[18px] w-[18px]"} />
     </span>
   );
@@ -34,21 +34,21 @@ export function ArtifactCards({ files, onOpen, onOpenAll }: { files: readonly Ar
     <div>
       <ul className="grid gap-2 sm:grid-cols-2">
         {files.map((file) => (
-          <li key={`${file.manifestId}/${file.name}`} className="flex items-center gap-1 rounded-xl bg-secondary/70 pr-2 hover:bg-secondary">
+          <li key={`${file.manifestId}/${file.name}`} className="flex items-center gap-1 rounded-card bg-secondary pr-2 hover:bg-gray-200">
             <button type="button" className="flex min-w-0 flex-1 items-center gap-3 px-3 py-3 text-left" onClick={() => onOpen(file)}>
               <FileIcon file={file} />
               <span className="min-w-0">
-                <span className="block truncate text-sm font-medium text-foreground">{file.name}</span>
-                <span className="block text-xs text-muted-foreground">{formatSize(file.size)}</span>
+                <span className="block truncate text-body font-medium text-foreground">{file.name}</span>
+                <span className="block text-caption text-muted-foreground">{formatSize(file.size)}</span>
               </span>
             </button>
-            <button type="button" aria-label={`下载 ${file.name}`} className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg text-muted-foreground hover:bg-card hover:text-foreground" onClick={() => downloadArtifact(file)}>
+            <button type="button" aria-label={`下载 ${file.name}`} className="flex h-8 w-8 shrink-0 items-center justify-center rounded-control text-gray-500 hover:bg-card hover:text-foreground" onClick={() => downloadArtifact(file)}>
               <Download className="h-4 w-4" />
             </button>
           </li>
         ))}
       </ul>
-      <button type="button" className="mt-2 text-sm text-muted-foreground hover:text-foreground" onClick={onOpenAll}>
+      <button type="button" className="mt-2 text-small text-muted-foreground hover:text-foreground" onClick={onOpenAll}>
         查看所有产物（{files.length}）›
       </button>
     </div>

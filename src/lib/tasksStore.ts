@@ -1,6 +1,6 @@
 import { create } from "zustand";
 import { describeFailure } from "./api";
-import { listTasks, type Task } from "./tasks";
+import { deleteTask, listTasks, type Task } from "./tasks";
 
 interface TasksState {
   readonly tasks: readonly Task[];
@@ -9,6 +9,8 @@ interface TasksState {
   readonly load: () => Promise<void>;
   /** 新建或更新一个任务，列表里已有就替换，没有就放到最前面。 */
   readonly upsert: (task: Task) => void;
+  /** 调后端删除一个任务并把它从列表里去掉；返回是否删除成功，失败时置 error 并保持列表不变。 */
+  readonly remove: (taskId: string) => Promise<boolean>;
 }
 
 /** 侧栏、新建页和任务页共用的任务列表，谁改了任务都能同步到侧栏。 */
@@ -30,6 +32,16 @@ export const useTasksStore = create<TasksState>((set) => ({
         ? state.tasks.map((item) => (item.task_id === task.task_id ? task : item))
         : [task, ...state.tasks],
     })),
+  remove: async (taskId) => {
+    try {
+      await deleteTask(taskId);
+    } catch (err) {
+      set({ error: describeFailure("删除任务失败", err) });
+      return false;
+    }
+    set((state) => ({ tasks: state.tasks.filter((item) => item.task_id !== taskId), error: null }));
+    return true;
+  },
 }));
 
 /** 按最近更新排序，最新的在前。 */
