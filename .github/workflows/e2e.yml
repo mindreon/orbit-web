@@ -26,7 +26,7 @@ jobs:
       # Update both together with the orbit-infra pin (`git -C orbit-infra ls-tree HEAD orbit-control orbit-runtime`);
       # when a batch moves the pin, the refs move in the same commit.
       ORBIT_CONTROL_REF: d15e908653ac87054ffc9ac24d652aa2e4be9236
-      ORBIT_RUNTIME_REF: 8cb1b9a7623530711e372188b66b99ab9864308b
+      ORBIT_RUNTIME_REF: 98f4437ce4e246b8c90ec12e4f4193c9dad6cc91
       # Keep the stack's files (bin, logs, stack.json, tool log) in the workspace, where the steps below collect them.
       # Without this, up.mjs would use the parent of the checkout. The two clones live in the runner's temp directory;
       # the `runner` context is not available in a job-level `env`, so the first step exports their paths.

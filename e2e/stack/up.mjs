@@ -56,7 +56,6 @@ function prepare() {
   run("go", ["build", "-o", join(BIN, "orbit-control"), "./cmd/orbit-control"], controlDir);
   if (!existsSync(join(runtimeDir, ".venv", "bin", "orbit-worker"))) {
     console.log("[stack] installing orbit-runtime");
-    run("sh", ["-c", "cat uv.lock.parts/part-* > uv.lock && sha256sum -c uv.lock.parts/SHA256SUMS"], runtimeDir);
     run("uv", ["sync", "--frozen", "--no-dev", "--python", "3.11"], runtimeDir);
   }
   const localTemporal = process.env.TEMPORAL_CLI_BIN ?? (process.platform === "darwin" || process.platform === "linux" ? out("sh", ["-c", "command -v temporal || true"], process.cwd()) : "");
