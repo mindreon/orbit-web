@@ -7,7 +7,7 @@ import designTokens from "./eslint-rules/design-tokens.js";
 // Deliberately loose: the recommended rule sets, with rules that would need business-code rewrites left as warnings.
 export default tseslint.config(
   {
-    ignores: ["dist", "coverage", ".stack", "acceptance-report", "playwright-report*", "test-results*", "node_modules"],
+    ignores: ["dist", "coverage", ".stack", "playwright-report*", "test-results*", "node_modules"],
   },
   js.configs.recommended,
   ...tseslint.configs.recommended,

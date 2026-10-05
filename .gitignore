@@ -44,7 +44,6 @@ yarn-error.log*
 next-env.d.ts
 /perf-results
 /.stack
-/acceptance-report
 /playwright-report-stack
 /test-results-stack
 /e2e-artifacts

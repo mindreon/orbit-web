@@ -13,7 +13,8 @@ import { join, resolve } from "node:path";
 import { eventually, killWorker, sql, waitForStatus } from "./tasks";
 
 const INFRA = resolve(process.env.ORBIT_INFRA_DIR ?? join(process.cwd(), ".."));
-const PYTHON = join(INFRA, "orbit-runtime", ".venv", "bin", "python");
+// The runtime checkout the stack runs: next to this repo, or wherever CI cloned it (ORBIT_RUNTIME_DIR, as up.mjs reads it).
+const PYTHON = join(process.env.ORBIT_RUNTIME_DIR ?? join(INFRA, "orbit-runtime"), ".venv", "bin", "python");
 const MCP_SERVER = join(process.cwd(), "e2e", "stack", "mock_mcp_server.py");
 const SKILLS_DIR = join(process.env.ORBIT_STACK_DIR ?? join(INFRA, ".stack"), "skills");
 const unique = (label: string) => `${label} ${Date.now()}`;

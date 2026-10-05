@@ -8,7 +8,7 @@
  *   N4 embedded, the task list disappears together with the sidebar
  */
 import type { Page } from "@playwright/test";
-import { expect, test } from "./test";
+import { expect, test } from "@playwright/test";
 
 const TASK_ID = "task_01ARZ3NDEKTSV4RRFFQ69G5FAV";
 const ATTEMPT_ID = "att_01ARZ3NDEKTSV4RRFFQ69G5FAW";

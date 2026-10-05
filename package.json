@@ -12,8 +12,7 @@
     "test": "vitest run",
     "test:coverage": "vitest run --coverage",
     "test:e2e": "playwright test",
-    "test:stack": "playwright test -c playwright.stack.config.ts",
-    "report:acceptance": "node e2e/report/build.mjs"
+    "test:stack": "playwright test -c playwright.stack.config.ts"
   },
   "dependencies": {
     "clsx": "^2.1.1",

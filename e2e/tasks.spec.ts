@@ -1,4 +1,4 @@
-import { expect, test } from "./test";
+import { expect, test } from "@playwright/test";
 
 test("task desk creates a task, renders its plan and sends an interrupt", async ({ page }) => {
   const task = {

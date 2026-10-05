@@ -12,7 +12,6 @@ export default defineConfig({
   reporter: [
     ["list"],
     ["html", { open: "never", outputFolder: "playwright-report" }],
-    ["./e2e/report/acceptance-reporter.ts", { run: "scripted", environment: "orbit-web (vite) with a route-mocked task API, plus the dependency licence check" }],
   ],
   outputDir: "test-results",
   use: {

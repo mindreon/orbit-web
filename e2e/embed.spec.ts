@@ -9,7 +9,7 @@
  *   W5 standalone, the sidebar is missing or the page touches a bus that does not exist
  */
 import type { Page } from "@playwright/test";
-import { expect, test } from "./test";
+import { expect, test } from "@playwright/test";
 
 type Emit = { event: string; args: unknown[] };
 

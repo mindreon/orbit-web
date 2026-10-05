@@ -1,7 +1,7 @@
 /** Helpers for the acceptance E2E against the running stack (mock model mode). */
 import { expect, type APIRequestContext } from "@playwright/test";
 
-export { metrics, shot, verify } from "../helpers";
+export { shot } from "../helpers";
 
 export const CONTROL_URL = "http://127.0.0.1:18180";
 const RELAY_ADMIN = "http://127.0.0.1:18183";

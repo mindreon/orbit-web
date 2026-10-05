@@ -20,7 +20,7 @@
 import { mkdirSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import type { Page } from "@playwright/test";
-import { expect, test } from "./test";
+import { expect, test } from "@playwright/test";
 
 const OUT = "e2e-artifacts/design";
 const TASK_ID = "task_01ARZ3NDEKTSV4RRFFQ69G5FAV";

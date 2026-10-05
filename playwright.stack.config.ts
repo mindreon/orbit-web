@@ -15,7 +15,6 @@ export default defineConfig({
   reporter: [
     ["list"],
     ["html", { open: "never", outputFolder: "playwright-report-stack" }],
-    ["./e2e/report/acceptance-reporter.ts", { run: "stack", environment: "running stack, mock model mode: Temporal dev server + orbit-control + orbit-orch + orbit-worker (ORBIT_MODEL_MODE=mock) + orbit-web production build" }],
   ],
   outputDir: "test-results-stack",
   use: {

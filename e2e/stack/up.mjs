@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 /**
- * Brings up the real Orbit stack for the acceptance E2E, in mock model mode, and keeps it running until killed:
+ * Brings up the real Orbit stack for the stack E2E, in mock model mode, and keeps it running until killed:
  *   Temporal dev server → orbit-control (public + internal listener) → orbit-orch + orbit-worker (ORBIT_MODEL_MODE=mock)
  *   → orbit-web production build served by `vite preview`, proxying /v1 to control through a TCP relay.
  * The relay exists for the resume tests only: POST http://127.0.0.1:<admin>/drop?holdMs=N cuts every live connection
@@ -15,7 +15,7 @@ import { createServer as createHttpServer } from "node:http";
 import { connect, createServer as createTcpServer } from "node:net";
 import { dirname, join, resolve } from "node:path";
 
-// The acceptance stack must exercise the current submodules by default. CI can
+// The stack under test must exercise the current submodules by default. CI can
 // pin immutable commits with ORBIT_CONTROL_REF / ORBIT_RUNTIME_REF.
 const CONTROL_REF = process.env.ORBIT_CONTROL_REF ?? "working-tree";
 const RUNTIME_REF = process.env.ORBIT_RUNTIME_REF ?? "working-tree";

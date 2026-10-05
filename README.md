@@ -21,7 +21,7 @@ pnpm build && pnpm start
 
 | 命令 | 跑在哪里 | 覆盖什么 |
 |---|---|---|
-| `pnpm test:stack` | 真实栈：Temporal + orbit-control + orbit-runtime（orch、worker）+ Postgres + MinIO + orbit-web 生产构建，由 `e2e/stack/up.mjs` 拉起 | E1–E20 任务验收，`real-model.spec.ts` 需要 `.env` 里配置真实模型 |
+| `pnpm test:stack` | 真实栈：Temporal + orbit-control + orbit-runtime（orch、worker）+ Postgres + MinIO + orbit-web 生产构建，由 `e2e/stack/up.mjs` 拉起 | E1–E66 任务验收（含专家团的群聊、@ 提及），`real-model.spec.ts` 需要 `.env` 里配置真实模型 |
 | `pnpm test:e2e` | 只起 vite，任务接口用 `page.route` 模拟 | 任务页的渲染；依赖许可证检查 |
 
-`pnpm test:stack` 需要 Docker、Go、uv 和 Python 3.11。每个验证步骤用 `verify()`（`e2e/helpers.ts`）记下「步骤 / 期望 / 实际 / 是否通过」，`pnpm report:acceptance` 合成验收报告。
+`pnpm test:stack` 需要 Docker、Go、uv 和 Python 3.11。每个场景同时检查页面和后端事实；结果看 Playwright 报告（`playwright-report-stack/`，CI 里作为产物上传）。
