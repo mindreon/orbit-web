@@ -1,7 +1,8 @@
 import { useEffect, useMemo, useState } from "react";
 import { Link } from "react-router";
-import { catalogueLabel, expertSummary, frameworkLabel } from "../lib/display";
-import { listExperts, type Expert } from "../lib/experts";
+import { catalogueLabel, expertSummary, frameworkLabel, roleName } from "../lib/display";
+import { isTeam, listExperts, type Expert } from "../lib/experts";
+import { AvatarStack } from "../components/TeamAvatars";
 import { Button } from "../ui/Button";
 import { describeFailure } from "../lib/api";
 import { agentIconPath, agentPath, listAgents, type Agent } from "../lib/catalog";
@@ -22,6 +23,20 @@ const SORTS = [
 ] as const;
 
 const PAGE_SIZE = 24;
+
+/** 专家团卡片的内容：叠在一起的成员头像，和「领队 …；成员 …」一行。 */
+function TeamSummary({ team }: { team: Expert }) {
+  const members = (team.members ?? []).map((member) => ({ role: member.role, label: member.label, name: member.name }));
+  const leader = team.members?.find((member) => member.role === team.leader);
+  return (
+    <div className="mt-2 flex items-center gap-3">
+      <AvatarStack members={members} leader={team.leader} size="md" />
+      <p data-testid="team-roles" className="line-clamp-2 min-w-0 text-small text-muted-foreground">
+        领队 {leader?.name ?? ""} · {members.length} 位成员：{members.map((member) => roleName(member.role, member.label, team.leader)).join("、")}
+      </p>
+    </div>
+  );
+}
 
 /** 目录快照里没有分类标签全集，分类片从当页结果聚合出来。 */
 export function AgentsPage() {
@@ -98,15 +113,16 @@ export function AgentsPage() {
               <h2 className="mb-2 text-small font-medium text-muted-foreground">我的专家</h2>
               <ul className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
                 {mine.map((expert) => (
-                  <li key={expert.expert_id} data-testid="my-expert" className="rounded-card bg-card p-4 shadow-sm">
+                  <li key={expert.expert_id} data-testid="my-expert" data-kind={isTeam(expert) ? "team" : "expert"} className="rounded-card bg-card p-4 shadow-sm">
                     {/* 名字和「编辑」是大小不同的两段字：按基线对齐。版本号只在编辑页里看 */}
                     <div className="flex items-baseline gap-2">
                       <span className="min-w-0 truncate text-body font-semibold text-foreground">{expert.name}</span>
+                      {isTeam(expert) ? <span data-testid="team-badge" className="shrink-0 rounded-control bg-primary-100 px-1.5 py-0.5 text-caption font-medium text-primary-700">专家团</span> : null}
                       <Link to={`/experts/${encodeURIComponent(expert.expert_id)}/edit`} className="ml-auto shrink-0 text-small text-primary-700 hover:underline">
                         编辑
                       </Link>
                     </div>
-                    <p className="mt-1 line-clamp-2 text-small text-muted-foreground">{expertSummary(expert.instructions) || "没有指令"}</p>
+                    {isTeam(expert) ? <TeamSummary team={expert} /> : <p className="mt-1 line-clamp-2 text-small text-muted-foreground">{expertSummary(expert.instructions) || "没有指令"}</p>}
                   </li>
                 ))}
               </ul>

@@ -100,3 +100,16 @@ export function parseGrant(input: GrantInput): { readonly delta: BudgetAmounts; 
   if (Object.keys(out).length === 0) return { delta: null, error: "至少填一项要追加的额度。" };
   return { delta: out, error: "" };
 }
+
+/**
+ * One short line for the usage of a turn or a round: 「令牌 1,234 · 工具 3 次 · 2 秒」. A part that is zero or missing is
+ * left out, so a turn that used nothing metered says nothing.
+ */
+export function usageLine(usage: Readonly<Record<string, unknown>> | undefined): string {
+  if (!usage) return "";
+  const tokens = (num(usage.tokens_in) ?? 0) + (num(usage.tokens_out) ?? 0);
+  const calls = num(usage.tool_calls) ?? 0;
+  const wall = num(usage.wall_s) ?? 0;
+  const cost = num(usage.cost_usd_micros) ?? 0;
+  return [tokens > 0 ? `令牌 ${FORMAT.tokens(tokens)}` : "", calls > 0 ? `工具 ${calls} 次` : "", wall > 0 ? formatSeconds(wall) : "", cost > 0 ? formatCost(cost) : ""].filter(Boolean).join(" · ");
+}

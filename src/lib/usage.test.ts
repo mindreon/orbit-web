@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { emptyGrant, formatCost, isUsageIdle, parseGrant, usageRows } from "./usage";
+import { emptyGrant, formatCost, isUsageIdle, parseGrant, usageLine, usageRows } from "./usage";
 
 const row = (rows: ReturnType<typeof usageRows>, key: string) => rows.find((item) => item.key === key)!;
 
@@ -60,5 +60,14 @@ describe("parseGrant", () => {
     expect(parseGrant({ ...emptyGrant, cost_usd: "0" }).delta).toBeNull();
     expect(parseGrant({ ...emptyGrant, cost_usd: "x" }).delta).toBeNull();
     expect(parseGrant({ ...emptyGrant, wall_s: "-1" }).error).toContain("用时");
+  });
+});
+
+describe("usageLine", () => {
+  it("says what a turn used and leaves out what it did not", () => {
+    expect(usageLine({ tokens_in: 1000, tokens_out: 234, tool_calls: 3, wall_s: 75 })).toBe("令牌 1,234 · 工具 3 次 · 1 分 15 秒");
+    expect(usageLine({ tokens_in: 0, tokens_out: 0, tool_calls: 0, wall_s: 0, cost_usd_micros: null })).toBe("");
+    expect(usageLine(undefined)).toBe("");
+    expect(usageLine({ cost_usd_micros: 1500 })).toBe("$0.0015");
   });
 });

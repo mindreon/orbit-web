@@ -58,6 +58,9 @@ export type SopStepInfo = {
   subject: string;
 };
 
+/** What bounds one team stage (contract `TeamStageInfo`). */
+export type TeamStageLimits = { max_members?: number; max_rounds?: number; max_messages?: number; max_hops?: number };
+
 export type Plan = {
   plan_version: number;
   hash: string;
@@ -75,6 +78,13 @@ export type Plan = {
     /** The SOP node this node was compiled from; absent for ordinary nodes. */
     parent_node_id?: string | null;
     sop_step?: SopStepInfo | null;
+    /** Which round of the leader's reviews this node is (set on a review node only). */
+    review_round?: number | null;
+    /** Which team member the node belongs to (set in a task with a team): the role id and what a person called it. */
+    owner_role?: string | null;
+    owner_label?: string | null;
+    /** The limits of a team stage node. */
+    team?: TeamStageLimits | null;
   }>;
   edges: Array<{ from: string; to: string }>;
   /** Completed nodes compacted out of the live plan (older plans and tasks have none). */
@@ -100,8 +110,9 @@ export function getArtifactURL(manifestId: string, name: string): Promise<string
 }
 export function listProfiles(): Promise<Profile[]> { return api<{ items: Profile[] }>("/v1/profiles").then((body) => body.items); }
 
-export function sendTaskMessage(id: string, text: string, delivery: "queue" | "interrupt" = "queue") {
-  return api<Record<string, unknown>>(`/v1/tasks/${encodeURIComponent(id)}/messages`, { method: "POST", body: JSON.stringify({ text, delivery }) });
+/** `mentions` are team role ids (no "@"); only a task with a team accepts them. */
+export function sendTaskMessage(id: string, text: string, delivery: "queue" | "interrupt" = "queue", mentions: readonly string[] = []) {
+  return api<Record<string, unknown>>(`/v1/tasks/${encodeURIComponent(id)}/messages`, { method: "POST", body: JSON.stringify({ text, delivery, ...(mentions.length > 0 ? { mentions } : {}) }) });
 }
 
 export function controlTask(id: string, action: "pause" | "resume" | "stop" | "cancel" | "takeover" | "handback") {

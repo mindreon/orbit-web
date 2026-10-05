@@ -1,10 +1,12 @@
-import { Check, ChevronRight, Copy } from "lucide-react";
+import { Check, ChevronRight, ClipboardCheck, Copy } from "lucide-react";
 import { useState } from "react";
 import type { ArtifactFile } from "../../lib/artifacts";
 import type { AgentTurn } from "../../lib/conversation";
+import { roleText, type NodeRole } from "../../lib/display";
 import { shortDateTime } from "../../lib/time";
 import { RichText } from "../markdown/RichText";
 import { StatusBadge } from "../../ui/StatusBadge";
+import { Avatar } from "../TeamAvatars";
 import { attemptStatusText, failureClassText, statusTone } from "../tasks/statusText";
 import { ArtifactCards } from "./ArtifactCards";
 import { StepList } from "./StepList";
@@ -16,6 +18,9 @@ interface AgentMessageProps {
   readonly files: readonly ArtifactFile[];
   readonly onOpenFile: (file: ArtifactFile) => void;
   readonly onOpenAllFiles: () => void;
+  /** Who the node of this reply belongs to: a member (shown above the reply), the leader's review (shown above it too), or the leader (no label: it is the main speaker). */
+  readonly speaker?: NodeRole;
+  readonly nameOf?: (ref: string) => string;
 }
 
 function CopyButton({ text }: { text: string }) {
@@ -51,11 +56,20 @@ function Thinking({ text, open }: { text: string; open: boolean }) {
 }
 
 /** 一次尝试对应一条 Agent 回复：先是执行步骤，再是回复正文，最后是产物和脚注。 */
-export function AgentMessage({ turn, expertName, files, onOpenFile, onOpenAllFiles }: AgentMessageProps) {
+export function AgentMessage({ turn, expertName, files, onOpenFile, onOpenAllFiles, speaker, nameOf }: AgentMessageProps) {
   const done = turn.status === "completed" || turn.status === "failed" || turn.status === "cancelled";
   const thinking = turn.status === "running" && turn.text === "" && turn.thinking === "" && turn.steps.length === 0;
+  const labelled = speaker && speaker.kind !== "leader" ? speaker : undefined;
+  // The footer names whoever answered: the member's expert, not the task's (the leader's).
+  const footerName = speaker?.name || expertName;
   return (
-    <div data-testid="agent-message" data-status={turn.status} className="space-y-3">
+    <div data-testid="agent-message" data-status={turn.status} data-speaker={speaker?.kind} className="space-y-3">
+      {labelled ? (
+        <p data-testid="speaker" data-kind={labelled.kind} data-role={labelled.role} className="flex items-center gap-1.5 text-small font-medium text-gray-700">
+          {labelled.kind === "review" ? <ClipboardCheck aria-hidden="true" className="h-4 w-4 shrink-0 text-primary-700" /> : <Avatar name={labelled.name || (nameOf ? nameOf(labelled.expert) : "")} tone={1} />}
+          <span data-testid="speaker-label">{roleText(labelled, nameOf)}</span>
+        </p>
+      ) : null}
       <StepList steps={turn.steps} active={turn.status === "running"} />
       {thinking ? <p className="text-body text-muted-foreground">正在思考…</p> : null}
       {turn.thinking !== "" ? <Thinking text={turn.thinking} open={turn.status === "running" && turn.text === ""} /> : null}
@@ -89,7 +103,7 @@ export function AgentMessage({ turn, expertName, files, onOpenFile, onOpenAllFil
       {done ? (
         <div className="flex items-center gap-2 text-caption text-muted-foreground">
           {turn.text ? <CopyButton text={turn.text} /> : null}
-          <span>{expertName}</span>
+          <span>{footerName}</span>
           <span>{shortDateTime(turn.at)}</span>
         </div>
       ) : null}

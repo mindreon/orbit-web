@@ -50,7 +50,17 @@ export const eventTypeText: Readonly<Record<string, string>> = {
   "budget.granted": "已追加预算",
   "usage.recorded": "用量记录",
   "profile.switched": "专家已切换",
+  "plan.review_limit_reached": "复盘轮数已达上限",
+  "team.round_started": "团队回合开始",
+  "team.round_finished": "团队回合结束",
+  "team.member_turn_started": "成员开始执行",
+  "team.member_turn_finished": "成员执行结束",
+  "team.message": "团队便条",
 };
+
+/** 团队回合的结果，和成员一次执行的结果。 */
+export const teamRoundText: Readonly<Record<string, string>> = { running: "进行中", assigned: "已派活", completed: "已给出结果", stopped: "已停止" };
+export const teamTurnText: Readonly<Record<string, string>> = { running: "执行中", completed: "已完成", failed: "失败" };
 
 /** 任务、节点、尝试的状态归到同一套颜色：进行中蓝、等待黄、完成绿、失败红、其余灰。 */
 export function statusTone(status: string): Tone {

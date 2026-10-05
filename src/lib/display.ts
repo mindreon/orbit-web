@@ -129,3 +129,102 @@ export function sopProgress(children: readonly PlanNodeLike[]): { done: number; 
   const steps = children.filter((child) => child.sop_step?.role === "step");
   return { done: steps.filter((child) => child.status === "COMPLETED").length, total: steps[0]?.sop_step?.total ?? steps.length };
 }
+
+// ---- Teams -------------------------------------------------------------------------------------------------------
+
+/** What the leader's own planning node says to a person who chose a team. */
+export const TEAM_TOOLTIP = "领队负责规划，成员按分工执行";
+
+/** The title the workflow gives the leader's review node (a system title, in the user's language already). */
+export const REVIEW_TITLE = "领队复盘";
+
+/**
+ * What a person sees for a role: the label they gave it. A team from before labels existed has none, and then the role id
+ * is all there is to show (the leader is 「领队」 either way).
+ */
+export const roleName = (role: string, label?: string | null, leader = ""): string => (label ?? "").trim() || (role !== "" && role === leader ? "领队" : role);
+
+/** 「<显示名> · <专家名>」: who answered, for a node a member ran. */
+export const memberLabel = (name: string, expertName: string): string => `${name} · ${expertName}`;
+
+/** 「领队复盘 · 第 N 轮」; a review the workflow gave no round (an older one) is just 「领队复盘」. */
+export const reviewLabel = (round?: number | null): string => (round ? `${REVIEW_TITLE} · 第 ${round} 轮` : REVIEW_TITLE);
+
+/** An approval a team member raised, in words; `name` is the member's label. */
+export const memberApprovalTitle = (name: string): string => `成员 ${name} 请求确认`;
+
+type TeamNodeLike = {
+  readonly node_id: string;
+  readonly type: string;
+  readonly title: string;
+  readonly owner_profile?: string | null;
+  readonly parent_node_id?: string | null;
+  /** Set by the workflow on a review node: which round of the leader's reviews it is. */
+  readonly review_round?: number | null;
+  /** The member the workflow says the node belongs to (a task with a team). */
+  readonly owner_role?: string | null;
+  readonly owner_label?: string | null;
+};
+
+type TeamMemberLike = { readonly role: string; readonly expert: string; readonly name?: string; readonly label?: string };
+type TeamLike = { readonly leader: string; readonly members: readonly TeamMemberLike[] };
+
+/** Whether a node is the leader's review of what its tasks produced. */
+export const isReviewNode = (node: Pick<TeamNodeLike, "type" | "title" | "review_round">): boolean => (node.review_round ?? 0) > 0 || (node.type === "agent_turn" && node.title === REVIEW_TITLE);
+
+/** Who a node belongs to: the team's leader, one of its members, or (a review) the leader reviewing round `round`. */
+export type NodeRole = {
+  readonly kind: "leader" | "member" | "review";
+  readonly role: string;
+  /** What a person called the role; empty when there is none. */
+  readonly label: string;
+  readonly expert: string;
+  readonly name: string;
+  readonly round?: number;
+};
+
+/**
+ * The role of every node that has one. A review is the node the workflow marks with a `review_round`; a node whose
+ * executor is a member's expert is that member's; one whose executor is the leader's expert (the leader's own planning, and
+ * every node it gave to nobody) is the leader's. A task without a team has no roles, only reviews.
+ */
+export function nodeRoles(team: TeamLike | null, nodes: readonly TeamNodeLike[]): Record<string, NodeRole> {
+  const leader = team?.members.find((member) => member.role === team.leader);
+  const leaderRole = (round?: number, kind: "leader" | "review" = "leader"): NodeRole => ({
+    kind,
+    role: leader?.role ?? "",
+    label: leader?.label ?? "",
+    expert: leader?.expert ?? "",
+    name: leader?.name ?? "",
+    ...(round ? { round } : {}),
+  });
+  const out: Record<string, NodeRole> = {};
+  for (const node of nodes) {
+    if (isReviewNode(node)) {
+      out[node.node_id] = leaderRole(node.review_round ?? undefined, "review");
+      continue;
+    }
+    if (!team) continue;
+    // The workflow names the owner itself: that settles it, whatever experts the members share.
+    const named = node.owner_role ? team.members.find((member) => member.role === node.owner_role) : undefined;
+    if (named) {
+      out[node.node_id] = named.role === team.leader ? { ...leaderRole(), label: node.owner_label || leaderRole().label } : { kind: "member", role: named.role, label: node.owner_label || named.label || "", expert: named.expert, name: named.name ?? "" };
+      continue;
+    }
+    const owner = node.owner_profile ?? "";
+    const matches = team.members.filter((member) => member.expert === owner);
+    if (matches.length === 0) continue;
+    // Work the leader gave to a member is nested under the node that gave it; the leader's own nodes are not.
+    const member = node.parent_node_id ? (matches.find((item) => item.role !== team.leader) ?? matches[0]) : (matches.find((item) => item.role === team.leader) ?? matches[0]);
+    out[node.node_id] = member.role === team.leader ? leaderRole() : { kind: "member", role: member.role, label: member.label ?? "", expert: member.expert, name: member.name ?? "" };
+  }
+  return out;
+}
+
+/** What to call whoever a node belongs to, in the plan and above a reply: 「研究员 · 调研专家」, 「领队 · 撰稿专家」, 「领队复盘 · 第 2 轮」. */
+export function roleText(role: NodeRole, nameOf: (ref: string) => string = (ref) => ref): string {
+  if (role.kind === "review") return reviewLabel(role.round);
+  const name = role.name || (role.expert ? nameOf(role.expert) : "");
+  const who = role.kind === "leader" ? roleName(role.role, role.label, role.role) : roleName(role.role, role.label);
+  return name ? `${who} · ${name}` : who;
+}

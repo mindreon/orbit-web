@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { applyEvent, budgetAmounts, emptyLiveState, markStreamGap, mergeEvent, pendingSwitch, totalReserved, type TaskLiveState } from "./taskEvents";
+import { applyEvent, budgetAmounts, emptyLiveState, markStreamGap, mergeEvent, pendingSwitch, stageOfNode, teamMessageCount, totalReserved, type TaskLiveState } from "./taskEvents";
 import type { TaskEvent } from "./tasks";
 
 let counter = 0;
@@ -627,5 +627,161 @@ describe("a node's status events keyed by node or by task", () => {
   it("mixes both shapes in one log", () => {
     const state = fold([nodeEvent(1, "RUNNING", ["task", "task_1", 5]), nodeEvent(2, "COMPLETED", ["node", "n1", 1])]);
     expect(state.nodes.n1?.status).toBe("COMPLETED");
+  });
+});
+
+/**
+ * Ways the team events can fold wrongly, each asserted below:
+ *   M1 a round, a member turn or a note is lost, doubled, or shown out of order when the log is replayed or arrives late
+ *   M2 a member turn that finishes is shown as still running (or a failed one as completed), or its task is forgotten
+ *   M3 a finish for a turn the page never saw start makes the turn vanish
+ *   M4 the messages counted against the limit differ from assignments + results + notes
+ *   M5 two attempts of one stage (a retry) are mixed into one view
+ *   M6 the review cap's reason is lost, or a stale one is shown for a later, unrelated review
+ *   M7 the label of a role is dropped, or one is invented for a team from before labels
+ *   M8 the stage's limits or message count are not the ones the events report
+ */
+describe("team stage events", () => {
+  const entity = (attemptId: string, version: number): [string, string, number] => ["team", attemptId, version];
+  const base = { node_id: "n_stage", attempt_id: "att_s1" };
+  const roundStarted = (seq: number, round: number, version = seq) => event("team.round_started", { ...base, round, max_rounds: 10 }, { seq, entity: entity("att_s1", version) });
+  const turnStarted = (seq: number, role: string, task: string, round = 1, member = `att_m_${role}`) =>
+    event("team.member_turn_started", { ...base, round, role, executor: `${role}@1`, member_attempt_id: member, task }, { seq, entity: entity("att_s1", seq) });
+  const turnFinished = (seq: number, role: string, outcome: "completed" | "failed", summary: string, round = 1, member = `att_m_${role}`) =>
+    event("team.member_turn_finished", { ...base, round, role, executor: `${role}@1`, member_attempt_id: member, outcome, summary, usage: { tokens_in: 10, tokens_out: 5, tool_calls: 1, wall_s: 2 }, artifacts: ["a.md"] }, { seq, entity: entity("att_s1", seq) });
+  const note = (seq: number, noteSeq: number, role: string, text: string) => event("team.message", { ...base, seq: noteSeq, round: 1, from_role: role, from_label: "", role, text }, { seq, entity: entity("att_s1", seq) });
+  const roundFinished = (seq: number, round: number, outcome: string, extra: Record<string, unknown> = {}) =>
+    event("team.round_finished", { ...base, round, outcome, assignments: 2, ...extra }, { seq, entity: entity("att_s1", seq) });
+
+  const log = [
+    roundStarted(1, 1),
+    note(2, 1, "lead", "kickoff: 2 task(s)"),
+    turnStarted(3, "researcher", "find facts"),
+    turnStarted(4, "writer", "draft it"),
+    turnFinished(5, "researcher", "completed", "found 3 facts"),
+    turnFinished(6, "writer", "failed", "could not draft"),
+    roundFinished(7, 1, "assigned"),
+    roundStarted(8, 2),
+  ];
+
+  it("builds the rounds, the member turns and the mailbox of a stage (M1, M2)", () => {
+    const stage = Object.values(fold(log).teams)[0];
+    expect(stage).toMatchObject({ attemptId: "att_s1", nodeId: "n_stage", round: 2, maxRounds: 10 });
+    expect(stage.rounds.map((round) => [round.round, round.outcome])).toEqual([[1, "assigned"], [2, "running"]]);
+    expect(stage.rounds[0].assignments).toBe(2);
+    expect(stage.turns.map((turn) => [turn.role, turn.outcome, turn.task, turn.summary])).toEqual([
+      ["researcher", "completed", "find facts", "found 3 facts"],
+      ["writer", "failed", "draft it", "could not draft"],
+    ]);
+    expect(stage.turns[0]).toMatchObject({ artifacts: ["a.md"], usage: { tokens_in: 10 } });
+    expect(stage.notes).toEqual([{ seq: 1, role: "lead", label: "", text: "kickoff: 2 task(s)" }]);
+  });
+
+  it("shows a turn as running until its finish arrives (M2)", () => {
+    const stage = Object.values(fold(log.slice(0, 4)).teams)[0];
+    expect(stage.turns.map((turn) => turn.outcome)).toEqual(["running", "running"]);
+    expect(stage.rounds[0].outcome).toBe("running");
+  });
+
+  it("keeps a turn whose start the page never saw (M3)", () => {
+    const stage = Object.values(fold([turnFinished(5, "researcher", "completed", "ok")]).teams)[0];
+    expect(stage.turns).toHaveLength(1);
+    expect(stage.turns[0]).toMatchObject({ role: "researcher", outcome: "completed", task: "" });
+  });
+
+  it("keeps a member's second task apart from its first (M2)", () => {
+    const stage = Object.values(fold([turnStarted(1, "writer", "one", 1, "att_a"), turnFinished(2, "writer", "completed", "did one", 1, "att_a"), turnStarted(3, "writer", "two", 2, "att_b")]).teams)[0];
+    expect(stage.turns.map((turn) => [turn.task, turn.outcome])).toEqual([["one", "completed"], ["two", "running"]]);
+  });
+
+  it("is the same whichever order the frames arrived in, and a replay changes nothing (M1)", () => {
+    const shuffled = [...log].reverse().reduce((events, item) => [...mergeEvent(events, item)], [] as readonly TaskEvent[]);
+    const doubled = [...log, ...log].reduce((events, item) => [...mergeEvent(events, item)], [] as readonly TaskEvent[]);
+    const once = fold(log).teams;
+    expect(fold(shuffled).teams).toEqual(once);
+    expect(fold(doubled).teams).toEqual(once);
+  });
+
+  it("puts the notes in the order they were posted, and never twice (M1)", () => {
+    const state = fold([note(1, 2, "writer", "second"), note(2, 1, "lead", "first"), note(3, 2, "writer", "second again")]);
+    expect(Object.values(state.teams)[0].notes.map((item) => item.text)).toEqual(["first", "second"]);
+  });
+
+  it("counts the messages it has seen, and takes the count the events report instead (M4)", () => {
+    const stage = Object.values(fold(log).teams)[0];
+    // The page counts the messages it has seen when the events do not say (here: the one note).
+    expect(teamMessageCount(stage)).toBe(1);
+    expect(teamMessageCount({ ...stage, messages: 7 })).toBe(7);
+  });
+
+  it("keeps two attempts of one stage apart and finds the latest of a node (M5)", () => {
+    const second = event("team.round_started", { node_id: "n_stage", attempt_id: "att_s2", round: 1, max_rounds: 10 }, { seq: 20, entity: entity("att_s2", 1) });
+    const state = fold([...log, second]);
+    expect(Object.keys(state.teams)).toEqual(["att_s1", "att_s2"]);
+    expect(stageOfNode(state, "n_stage")?.attemptId).toBe("att_s2");
+    expect(stageOfNode(state, "n_other")).toBeUndefined();
+  });
+
+  it("keeps the label a person gave a role beside the role id, and none for a team from before labels (M7)", () => {
+    const labelled = event("team.member_turn_started", { ...base, round: 1, role: "member-2", label: "研究员", executor: "e@1", member_attempt_id: "att_m", task: "t" }, { seq: 1, entity: entity("att_s1", 1) });
+    const note = event("team.message", { ...base, seq: 1, round: 1, from_role: "member-2", from_label: "研究员", role: "member-2", label: "研究员", text: "hi" }, { seq: 2, entity: entity("att_s1", 2) });
+    const stage = Object.values(fold([labelled, note]).teams)[0];
+    expect(stage.turns[0].label).toBe("研究员");
+    expect(stage.notes[0].label).toBe("研究员");
+    const old = Object.values(fold([turnStarted(1, "researcher", "x")]).teams)[0];
+    expect(old.turns[0].label).toBe("");
+  });
+
+  it("reads the stage's limits and message count from the round events (M8)", () => {
+    const started = event("team.round_started", { ...base, round: 1, max_rounds: 10, max_messages: 40, max_members: 4, messages: 3 }, { seq: 1, entity: entity("att_s1", 1) });
+    const finished = event("team.round_finished", { ...base, round: 1, outcome: "assigned", assignments: 1, messages: 6 }, { seq: 2, entity: entity("att_s1", 2) });
+    const stage = Object.values(fold([started]).teams)[0];
+    expect(stage).toMatchObject({ maxMessages: 40, maxMembers: 4, messages: 3, maxRounds: 10 });
+    expect(Object.values(fold([started, finished]).teams)[0]).toMatchObject({ maxMessages: 40, messages: 6 });
+    // A round that does not repeat the limits keeps the ones the stage was given.
+    const next = event("team.round_started", { ...base, round: 2, max_rounds: 10 }, { seq: 3, entity: entity("att_s1", 3) });
+    expect(Object.values(fold([started, finished, next]).teams)[0]).toMatchObject({ maxMessages: 40, messages: 6 });
+    // Events from before they were sent say nothing, and nothing is made up.
+    const bare = Object.values(fold([roundStarted(1, 1)]).teams)[0];
+    expect(bare.maxMessages).toBeUndefined();
+    expect(bare.messages).toBeUndefined();
+  });
+
+  it("counts on from the number a round reported, one for each message that comes after it, and not twice for a replay (M8)", () => {
+    const started = event("team.round_started", { ...base, round: 1, max_rounds: 10, messages: 4 }, { seq: 1, entity: entity("att_s1", 1) });
+    const say = (seq: number) => event("team.message", { ...base, seq, round: 1, from_role: "lead", text: "x" }, { seq: seq + 1, entity: entity("att_s1", seq + 1) });
+    const state = fold([started, say(1), say(2), say(2)]);
+    expect(Object.values(state.teams)[0].messages).toBe(6);
+  });
+
+  it("reads a stopped round with its reason (M1)", () => {
+    const stage = Object.values(fold([roundStarted(1, 1), roundFinished(2, 1, "stopped", { reason: "达到 1 轮上限", assignments: 0 })]).teams)[0];
+    expect(stage.rounds[0]).toMatchObject({ outcome: "stopped", reason: "达到 1 轮上限" });
+  });
+
+  it("ignores an older version of the stage that arrives late (M1)", () => {
+    const state = fold([roundStarted(2, 2, 5), event("team.round_started", { ...base, round: 1, max_rounds: 10 }, { seq: 1, entity: entity("att_s1", 2) })]);
+    expect(Object.values(state.teams)[0].rounds.map((round) => round.round)).toEqual([2]);
+  });
+});
+
+describe("the review cap", () => {
+  const limit = (seq: number) => event("plan.review_limit_reached", { node_id: "n_x", round: 6, max_rounds: 5, children: 1 }, { seq, entity: ["task", "task_1", seq] });
+  const paused = (seq: number) => event("task.status_changed", { from_status: "RUNNING", to_status: "PAUSED_NEEDS_REVIEW", reason: "the leader's reviews reached the limit of 5 rounds" }, { seq, entity: ["task", "task_1", seq] });
+
+  it("hands the cap to the review notice the task asks for right after it (M6)", () => {
+    const state = fold([limit(1), paused(2)]);
+    expect(state.review).toEqual({ reason: "the leader's reviews reached the limit of 5 rounds", rejection: null, limit: { nodeId: "n_x", round: 6, maxRounds: 5, children: 1 } });
+    expect(state.reviewLimit).toBeNull();
+  });
+
+  it("does not blame a later review on an old cap that another status change followed (M6)", () => {
+    const state = fold([limit(1), event("task.status_changed", { from_status: "RUNNING", to_status: "PAUSED", reason: "" }, { seq: 2, entity: ["task", "task_1", 2] }), paused(3)]);
+    expect(state.review?.limit).toBeUndefined();
+  });
+
+  it("stops waiting when the task leaves review (M6)", () => {
+    const state = fold([limit(1), paused(2), event("task.status_changed", { from_status: "PAUSED_NEEDS_REVIEW", to_status: "RUNNING", reason: "" }, { seq: 3, entity: ["task", "task_1", 3] })]);
+    expect(state.review).toBeNull();
   });
 });

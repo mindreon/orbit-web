@@ -1,8 +1,12 @@
 import { api } from "./api";
 
-/** 专家：一个版本一行不可变的 profile。任务引用的是 `ref`（「<id>@<版本>」）。 */
+/** 专家团的一名成员：角色 ID（`role`，ASCII，给程序用），人看到的显示名 `label`，和这个角色用哪一位（固定版本的）单人专家。`name` 是那个版本的专家名。 */
+export type TeamMember = { role: string; expert: string; name: string; description?: string; /** 人看到的名字（≤40 字）；旧的专家团没有。 */ label?: string };
+
+/** 专家：一个版本一行不可变的 profile。任务引用的是 `ref`（「<id>@<版本>」）。`kind` 缺省（旧数据）就是单人专家。 */
 export type Expert = {
   expert_id: string;
+  kind?: "expert" | "team";
   ref: string;
   version: number;
   name: string;
@@ -11,7 +15,12 @@ export type Expert = {
   connector_ids: string[];
   skill_ids: string[];
   created_at: string;
+  /** 专家团才有：领队的角色名，和成员。 */
+  leader?: string;
+  members?: TeamMember[];
 };
+
+export type TeamMemberInput = { role: string; expert: string; description?: string; label?: string };
 
 export type ExpertInput = {
   name: string;
@@ -19,7 +28,16 @@ export type ExpertInput = {
   model?: string;
   connector_ids?: string[];
   skill_ids?: string[];
+  /** 专家团：自己没有指令、模型、连接器和技能（后端会拒绝），这些在成员专家里。 */
+  kind?: "expert" | "team";
+  leader?: string;
+  members?: TeamMemberInput[];
 };
+
+export const isTeam = (expert: Pick<Expert, "kind">): boolean => expert.kind === "team";
+
+/** 单人专家：可以当成员、可以指派给某一步。专家团不能（后端拒绝团队嵌套，也不能当节点的专家）。 */
+export const singleExperts = <T extends Pick<Expert, "kind">>(experts: readonly T[]): T[] => experts.filter((expert) => !isTeam(expert));
 
 export async function listExperts(): Promise<Expert[]> {
   const body = await api<{ items: Expert[] | null }>("/v1/experts");

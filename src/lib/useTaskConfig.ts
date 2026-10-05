@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { ApiError, describeFailure } from "./api";
-import { emptyDraft, draftToInput, getTaskConfig, updateTaskConfig, viewToDraft, type ConfigDraft, type TaskConfigView } from "./taskConfig";
+import { emptyDraft, draftToInput, getTaskConfig, updateTaskConfig, viewToDraft, type ConfigDraft, type TaskConfigView, type TeamView } from "./taskConfig";
 
 export type TaskConfigState = {
   readonly draft: ConfigDraft;
@@ -10,6 +10,8 @@ export type TaskConfigState = {
   /** 配置读到之前不能改：此时没有可以依据的版本。 */
   readonly ready: boolean;
   readonly apply: (next: ConfigDraft) => void;
+  /** 任务选的是专家团时它的领队和成员（成员带专家名），否则 null。 */
+  readonly team: TeamView | null;
 };
 
 /**
@@ -28,9 +30,10 @@ export function useTaskConfig(taskId: string | null): TaskConfigState {
   const load = useCallback(async () => {
     if (!taskId) return;
     const next = await getTaskConfig(taskId);
+    const fresh = viewToDraft(next);
     latest.current = next;
     setView(next);
-    setDraft((current) => ({ ...viewToDraft(next), labels: current.labels }));
+    setDraft((current) => ({ ...fresh, labels: current.labels }));
   }, [taskId]);
 
   useEffect(() => {
@@ -42,10 +45,11 @@ export function useTaskConfig(taskId: string | null): TaskConfigState {
     let gone = false;
     getTaskConfig(taskId)
       .then((next) => {
+        const fresh = viewToDraft(next);
         if (gone) return;
         latest.current = next;
         setView(next);
-        setDraft(viewToDraft(next));
+        setDraft(fresh);
       })
       .catch((err: unknown) => !gone && setError(describeFailure("读取任务配置失败", err)));
     return () => {
@@ -78,5 +82,5 @@ export function useTaskConfig(taskId: string | null): TaskConfigState {
     [taskId, load],
   );
 
-  return { draft: { ...draft, labels: { ...labels, ...draft.labels } }, version: view?.config_version ?? 1, notice, error, ready: view !== null, apply };
+  return { draft: { ...draft, labels: { ...labels, ...draft.labels } }, version: view?.config_version ?? 1, notice, error, ready: view !== null, apply, team: view?.team ?? null };
 }

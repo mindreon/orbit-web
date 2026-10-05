@@ -8,7 +8,7 @@ const WEB = "http://127.0.0.1:3410";
  */
 export default defineConfig({
   testDir: "./e2e/stack",
-  testMatch: /(?:task|task-config|task-config-ui|task-session|sandbox|conversation|control|v3-acceptance|real-model)\.spec\.ts/,
+  testMatch: /(?:task|task-config|task-config-ui|task-session|sandbox|conversation|control|v3-acceptance|team|real-model)\.spec\.ts/,
   workers: 1,
   retries: 0,
   timeout: 120_000,

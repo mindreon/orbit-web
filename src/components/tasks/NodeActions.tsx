@@ -1,7 +1,7 @@
 import { MoreHorizontal } from "lucide-react";
 import { useState } from "react";
 import { nodeTitle, profileName } from "../../lib/display";
-import type { Expert } from "../../lib/experts";
+import { singleExperts, type Expert } from "../../lib/experts";
 import type { Plan } from "../../lib/tasks";
 import { Button } from "../../ui/Button";
 import { Dialog } from "../../ui/Dialog";
@@ -99,7 +99,8 @@ function CompleteDialog({ node, onClose, onSubmit }: { node: PlanNode; onClose: 
 }
 
 function SwitchDialog({ node, experts, onClose, onSubmit }: { node: PlanNode; experts: readonly Expert[]; onClose: () => void; onSubmit: (toProfile: string, reason: string) => Promise<string | null> }) {
-  const choices = experts.filter((expert) => expert.ref !== node.owner_profile);
+  // A team has no agent to run (control refuses it as a node's profile): only single experts can take a step over.
+  const choices = singleExperts(experts).filter((expert) => expert.ref !== node.owner_profile);
   const [target, setTarget] = useState(choices[0]?.ref ?? "");
   const [reason, setReason] = useState("手动切换");
   const { error, sending, run } = useSubmit(onClose);

@@ -17,4 +17,18 @@ describe("approvalInfos", () => {
   it("reads an event without a kind", () => {
     expect(approvalInfos([requested({ approval_id: "apr_3", subject: { summary: "x" } })]).apr_3?.kind).toBe("");
   });
+
+  it("names the team member that asked, and does not say its role twice (T6)", () => {
+    const infos = approvalInfos([
+      requested({ approval_id: "apr_4", node_id: "n_1", subject: { kind: "tool_call", summary: "researcher: Bash", detail: "ls", role: "researcher" } }),
+      requested({ approval_id: "apr_5", subject: { kind: "tool_call", summary: "Bash", detail: "ls", role: null } }),
+      requested({ approval_id: "apr_6", subject: { kind: "tool_call", summary: "researcher：Bash", role: "researcher" } }),
+      requested({ approval_id: "apr_7", subject: { kind: "tool_call", summary: "reviewer: Bash", role: "writer" } }),
+    ]);
+    expect(infos.apr_4).toMatchObject({ role: "researcher", tool: "Bash" });
+    expect(infos.apr_5).toMatchObject({ role: "", tool: "Bash" });
+    expect(infos.apr_6.tool).toBe("Bash");
+    // A summary that starts with another word is left alone.
+    expect(infos.apr_7.tool).toBe("reviewer: Bash");
+  });
 });

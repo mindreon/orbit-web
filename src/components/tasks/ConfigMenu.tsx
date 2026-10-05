@@ -1,7 +1,8 @@
 import { Bot, ChevronRight, Link2, Paperclip, Plus, Sparkles, Wrench } from "lucide-react";
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import { Link } from "react-router";
-import { expertSummary } from "../../lib/display";
+import { TEAM_TOOLTIP, expertSummary, roleName } from "../../lib/display";
+import { isTeam, singleExperts, type Expert } from "../../lib/experts";
 import { effectiveConnectors, effectiveSkills, type ConfigCatalog } from "../../lib/configCatalog";
 import { cn } from "../../lib/cn";
 import { MODE_OPTIONS, type ConfigDraft, type ConfigMode } from "../../lib/taskConfig";
@@ -128,12 +129,29 @@ function ModePanel({ draft, onChange }: Pick<ConfigMenuProps, "draft" | "onChang
   );
 }
 
+/** 选中一个专家团：任务会带着它的领队和成员（后端据专家团的引用展开）。 */
+const withTeam = (draft: ConfigDraft, team: Expert): ConfigDraft => ({
+  ...draft,
+  expert: team.ref,
+  team: { ref: team.ref, leader: team.leader ?? "", members: (team.members ?? []).map((member) => ({ ...member })) },
+  teamName: team.name,
+});
+
+const teamHint = (team: Expert): string => `领队 ${team.members?.find((member) => member.role === team.leader)?.name ?? ""} · 成员 ${(team.members ?? []).map((member) => roleName(member.role, member.label, team.leader)).join("、")}`;
+
 function ExpertPanel({ draft, onChange, catalog }: Pick<ConfigMenuProps, "draft" | "onChange" | "catalog">) {
+  const singles = singleExperts(catalog.experts);
+  const teams = catalog.experts.filter(isTeam);
+  const single = (ref: string): ConfigDraft => ({ ...draft, expert: ref, team: null, teamName: "" });
   return (
     <>
-      <Option kind="radio" checked={draft.expert === ""} label="默认智能体" hint="不指定专家" onClick={() => onChange({ ...draft, expert: "" })} />
-      {catalog.experts.map((expert) => (
-        <Option key={expert.ref} kind="radio" checked={draft.expert === expert.ref} label={expert.name} hint={expertSummary(expert.instructions) || "没有指令"} onClick={() => onChange({ ...draft, expert: expert.ref })} />
+      <Option kind="radio" checked={draft.expert === ""} label="默认智能体" hint="不指定专家" onClick={() => onChange(single(""))} />
+      {singles.map((expert) => (
+        <Option key={expert.ref} kind="radio" checked={draft.expert === expert.ref} label={expert.name} hint={expertSummary(expert.instructions) || "没有指令"} onClick={() => onChange(single(expert.ref))} />
+      ))}
+      {teams.length > 0 ? <p className="px-3 pb-1 pt-2 text-caption font-medium text-muted-foreground">专家团</p> : null}
+      {teams.map((team) => (
+        <Option key={team.ref} kind="radio" checked={draft.expert === team.ref} label={team.name} hint={teamHint(team)} title={TEAM_TOOLTIP} id={team.ref} onClick={() => onChange(withTeam(draft, team))} />
       ))}
       {!catalog.loading && catalog.experts.length === 0 ? <p className="px-3 py-2 text-caption text-muted-foreground">还没有自己的专家。</p> : null}
       <Link to="/experts/new" className="mt-1 block rounded-control px-3 py-2 text-body text-primary-700 hover:bg-secondary">

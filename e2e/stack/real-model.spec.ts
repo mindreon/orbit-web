@@ -3,7 +3,7 @@
  * triggers (`slow:`, `plan:`, ...) are not used; each goal is plain language. Skipped on the mock stack.
  */
 import { expect, test } from "@playwright/test";
-import { addNodes, createTask, eventually, getPlan, openTask, registerSop, sql, taskStatus, waitForStatus } from "./tasks";
+import { addNodes, createTask, eventually, getPlan, openTask, registerSop, sopSteps, sql, startsByNode, taskStatus, waitForStatus } from "./tasks";
 
 test.skip(process.env.STACK_MODEL !== "real", "needs STACK_MODEL=real");
 test.describe.configure({ timeout: 240_000 });
@@ -54,20 +54,26 @@ test("real model: an SOP's executor and verifier accept a good step and the SOP 
   await openTask(page, title);
 
   await waitForStatus(request, taskId, "COMPLETED", 200_000);
-  // One try per step: the verifier accepted both first time.
-  expect(sql(`SELECT string_agg(seq::text, ',' ORDER BY seq) FROM checkpoints WHERE task_id = '${taskId}' AND kind = 'sop_run_state'`)).toBe("11,21");
+  // The SOP is compiled into one node per step; the verifier accepted both first time, so each step ran one attempt.
+  const steps = await sopSteps(request, taskId);
+  expect(steps.map((node) => node.status)).toEqual(["COMPLETED", "COMPLETED"]);
+  expect(steps.map((node) => startsByNode(taskId)[node.node_id])).toEqual([1, 1]);
 });
 
-test("real model: a step the verifier can never accept is refused three times and fails the attempt", async ({ request }) => {
+test("real model: a step the verifier can never accept retries its node, then blocks it and asks for a review", async ({ page, request }) => {
   const sop = await registerSop(request, `impossible${Date.now()}`, 1, ["Reply with a number that is both greater than 10 and less than 5"]);
-  const taskId = await createTask(request, unique("REAL sop fail"), "Reply with one word. Do not use tools.");
+  const title = unique("REAL sop fail");
+  const taskId = await createTask(request, title, "Reply with one word. Do not use tools.");
   await addNodes(request, taskId, [{ type: "sop_stage", title: "Impossible", sop }]);
+  await openTask(page, title);
 
-  await eventually(
-    async () => sql(`SELECT count(*) FROM task_events WHERE task_id = '${taskId}' AND event_type = 'attempt.finished' AND body->'payload'->>'outcome' = 'failed'`),
-    (count) => Number(count) >= 1,
-    "the impossible SOP step to fail",
-    220_000,
-  );
-  expect(sql(`SELECT string_agg(seq::text, ',' ORDER BY seq) FROM checkpoints WHERE task_id = '${taskId}' AND kind = 'sop_run_state'`)).toBe("11,12,13");
+  // A refused step retries its node (3 tries by default; backoff 5s, then 30s). Out of tries the node is BLOCKED and the
+  // task pauses for a person; the attempt is not what ends the task any more.
+  await waitForStatus(request, taskId, "PAUSED_NEEDS_REVIEW", 220_000);
+  const [step] = await sopSteps(request, taskId);
+  expect(step.status).toBe("BLOCKED");
+  expect(startsByNode(taskId)[step.node_id]).toBe(3);
+  expect(sql(`SELECT count(*) FROM task_events WHERE task_id = '${taskId}' AND event_type = 'attempt.finished' AND body->'payload'->>'outcome' = 'failed'`)).toBe("3");
+  await expect(page.getByTestId("review-notice")).toBeVisible();
+  await expect(page.getByTestId("review-resume")).toBeVisible();
 });

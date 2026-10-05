@@ -1,9 +1,11 @@
 import { Hammer, Link2, Sparkles, X, type LucideIcon } from "lucide-react";
 import type { ReactNode } from "react";
-import { profileName } from "../../lib/display";
+import { TEAM_TOOLTIP, profileName } from "../../lib/display";
 import { effectiveConnectors, effectiveSkills, expertOf, type ConfigCatalog } from "../../lib/configCatalog";
 import { useSkillNames } from "../../lib/skillNames";
 import { MODE_OPTIONS, type ConfigDraft } from "../../lib/taskConfig";
+import { refId } from "../../lib/team";
+import { Avatar, AvatarStack } from "../TeamAvatars";
 
 interface ConfigChipsProps {
   readonly draft: ConfigDraft;
@@ -13,11 +15,7 @@ interface ConfigChipsProps {
 
 /** 专家胶囊：头像圆点 + 名称。和 WorkBuddy 一样把专家当身份展示，而不是一串引用。 */
 function ExpertAvatar({ name }: { name: string }) {
-  return (
-    <span aria-hidden="true" className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-primary-100 text-caption font-semibold text-primary-700">
-      {name.trim().slice(0, 1) || "专"}
-    </span>
-  );
+  return <Avatar name={name} />;
 }
 
 function ChipIcon({ Icon, className }: { Icon: LucideIcon; className?: string }) {
@@ -31,7 +29,7 @@ export function ConfigChips({ draft, onChange, catalog }: ConfigChipsProps) {
   const connectors = effectiveConnectors(draft, catalog.experts);
   // 菜单里勾选过的名称记在 labels 里；从任务配置或专家默认读回来的只有 id，这里查目录补名称。
   const skillNames = useSkillNames(skills);
-  const chips: Array<{ key: string; label: string; icon: ReactNode; remove: () => void }> = [];
+  const chips: Array<{ key: string; label: string; icon: ReactNode; title?: string; remove: () => void }> = [];
 
   if (draft.mode !== "default") {
     chips.push({
@@ -41,7 +39,12 @@ export function ConfigChips({ draft, onChange, catalog }: ConfigChipsProps) {
       remove: () => onChange({ ...draft, mode: "default" }),
     });
   }
-  if (draft.expert) {
+  if (draft.team) {
+    // 专家团：团队名和成员头像叠在一起；领队负责规划，成员按分工执行。
+    const name = draft.teamName || catalog.experts.find((item) => item.expert_id === refId(draft.expert))?.name || "专家团";
+    const members = draft.team.members.map((member) => ({ role: member.role, label: member.label, name: member.name || profileName(member.expert, catalog.experts) }));
+    chips.push({ key: "team", label: name, title: TEAM_TOOLTIP, icon: <AvatarStack members={members} leader={draft.team.leader} />, remove: () => onChange({ ...draft, expert: "", team: null, teamName: "" }) });
+  } else if (draft.expert) {
     const name = expert?.name ?? profileName(draft.expert, catalog.experts);
     chips.push({ key: "expert", label: name, icon: <ExpertAvatar name={name} />, remove: () => onChange({ ...draft, expert: "" }) });
   }
@@ -67,7 +70,7 @@ export function ConfigChips({ draft, onChange, catalog }: ConfigChipsProps) {
   return (
     <ul aria-label="已选择" className="flex max-w-[60%] flex-wrap items-center gap-1.5 py-2.5 pl-4">
       {chips.map((chip) => (
-        <li key={chip.key} data-testid="config-chip" className="flex h-7 items-center gap-1.5 rounded-full bg-secondary pl-2.5 pr-1 text-caption text-foreground">
+        <li key={chip.key} data-testid="config-chip" data-chip={chip.key} title={chip.title} className="flex h-7 items-center gap-1.5 rounded-full bg-secondary pl-2.5 pr-1 text-caption text-foreground">
           {chip.icon}
           <span className="max-w-40 truncate">{chip.label}</span>
           <button type="button" aria-label={`移除 ${chip.label}`} className="flex h-5 w-5 items-center justify-center rounded-full text-muted-foreground hover:bg-gray-200" onClick={chip.remove}>

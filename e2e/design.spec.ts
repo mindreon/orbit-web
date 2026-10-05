@@ -13,6 +13,9 @@
  *   P6 under 1024px the details are not a drawer opened from the header; under 640px the sidebar is not a drawer
  *   P7 a sidebar group label is not at least twice as close to its own group as to the previous one; "即将" entries look like real ones
  *   P8 a coming-soon page offers a disabled primary action or developer copy
+ *   P9 the team surfaces (team card, team editor, "+" menu chip, member labels, grouped plan, team stage, member approval,
+ *      review cap notice) scroll sideways or break the type scale at either width, or show a role id, `id@version` or an
+ *      English limit word
  */
 import { mkdirSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
@@ -120,7 +123,7 @@ const AGENTS = [
   agent("神秘助手", { name: "神秘助手", description: "没有收录的框架标签不应该露出来。", framework: "weird-framework", catalogues: ["others"] }),
 ];
 
-async function mockBackend(page: Page, scenario: { events?: typeof events; plan?: typeof plan; task?: Record<string, unknown> } = {}) {
+async function mockBackend(page: Page, scenario: { events?: typeof events; plan?: typeof plan; task?: Record<string, unknown>; experts?: unknown[]; config?: Record<string, unknown>; refuseExpert?: Record<string, unknown> } = {}) {
   const feed = scenario.events ?? events;
   const shownPlan = scenario.plan ?? plan;
   const shownTask = { ...task, ...scenario.task };
@@ -147,14 +150,73 @@ async function mockBackend(page: Page, scenario: { events?: typeof events; plan?
     if (pathname === `/v1/tasks/${TASK_ID}`) return json(shownTask);
     if (pathname.endsWith("/plan")) return json(shownPlan);
     if (pathname.endsWith("/artifacts")) return json({ items: [{ manifest_id: "man_1", task_id: TASK_ID, attempt_id: "att_1", entries: [{ name: "风险摘要.md", media_type: "text/markdown", size_bytes: 2048, blob_ref: "sha256:x" }], created_at: NOW }] });
-    if (pathname.endsWith("/config")) return json({ config_version: 1, expert: "writer@1", skills: null, connector_ids: null, mode: "default" });
-    if (pathname === "/v1/experts") return json({ items: [expert] });
+    if (pathname.endsWith("/config")) return json(scenario.config ?? { config_version: 1, expert: "writer@1", skills: null, connector_ids: null, mode: "default" });
+    if (pathname === "/v1/experts" && route.request().method() === "POST" && scenario.refuseExpert) return route.fulfill({ status: 400, json: scenario.refuseExpert });
+    if (pathname === "/v1/experts") return json({ items: scenario.experts ?? [expert] });
     if (pathname === "/v1/agents") return json({ items: AGENTS, total: AGENTS.length, page: 1, pageSize: 24 });
     if (pathname === "/v1/skills") return json({ items: [{ id: "@a/s", handle: "@a", slug: "s", name: "周报写作", description: "把零散记录整理成周报。", descriptionEn: "", category: "", categoryName: "", tags: [], license: "", iconUrl: "", sourceUrl: "", downloads: 12, visits: 1, likes: 3, updatedAt: "0", source: "common" }], total: 1, page: 1, pageSize: 24, installedAt: NOW });
     if (pathname === "/v1/mcp-market") return json({ items: [{ id: "m1", name: "文档检索", summary: "搜索团队文档。", author: "示例团队", category: "dev", categoryName: "开发", categoryMore: 0, calls: 0, views: 10, stars: 2, verified: true, hosted: true, needsOnline: true, source: "modelscope" }], total: 1, stored: 1, page: 1, pageSize: 30 });
     return json({ items: [], total: 0 });
   });
 }
+
+
+// ---- Teams ------------------------------------------------------------------------------------------------------
+const researcher = { ...expert, expert_id: "research", ref: "research@1", name: "调研专家", instructions: "你擅长调研。" };
+const reviewer = { ...expert, expert_id: "reviewer", ref: "reviewer@1", name: "评审专家", instructions: "你擅长评审。" };
+const teamMembers = [
+  { role: "member-1", label: "主编", expert: "writer@1", name: "文案专家", description: "统筹" },
+  { role: "member-2", label: "研究员", expert: "research@1", name: "调研专家", description: "找资料" },
+  { role: "member-3", label: "评审员", expert: "reviewer@1", name: "评审专家", description: "把关" },
+];
+const team = { expert_id: "team1", kind: "team", ref: "team1@1", version: 1, name: "内容小队", instructions: "", model: "", connector_ids: [], skill_ids: [], created_at: NOW, leader: "member-1", members: teamMembers };
+const teamConfig = { config_version: 2, expert: "writer@1", skills: null, connector_ids: null, mode: "default", team_ref: "team1@1", team: { ref: "team1@1", leader: "member-1", members: teamMembers } };
+const ENTITY_STAGE = { kind: "team", id: "att_stage" };
+const stageEvent = (seq: number, type: string, payload: Record<string, unknown>) => ({ ...event(seq, type, { node_id: "n_stage", attempt_id: "att_stage", ...payload }), entity: { ...ENTITY_STAGE, version: seq } });
+const teamPlan = {
+  ...plan,
+  nodes: [
+    node("n_1", "Explore and plan", "COMPLETED", { frozen: true, owner_profile: "writer@1" }),
+    node("n_2", "调研发布风险", "COMPLETED", { frozen: true, depends_on: ["n_1"], owner_profile: "research@1", parent_node_id: "n_1", owner_role: "member-2", owner_label: "研究员" }),
+    node("n_3", "领队复盘", "COMPLETED", { frozen: true, depends_on: ["n_2"], owner_profile: "writer@1", review_round: 1 }),
+    node("n_stage", "评审发布方案", "RUNNING", { type: "team_stage", depends_on: ["n_3"], owner_profile: "writer@1", team: { max_members: 4, max_rounds: 10, max_messages: 60, max_hops: 3 } }),
+    node("n_4", "整理成一页摘要", "PENDING", { depends_on: ["n_stage"], owner_profile: "writer@1" }),
+  ],
+};
+const gm = (seq: number, kind: string, from: string, to: string[], text: string, extra: Record<string, unknown> = {}) =>
+  event(seq, "team.message", { node_id: "n_stage", attempt_id: "att_stage", seq, kind, from_role: from, from_label: teamMembers.find((m) => m.role === from)?.label ?? "", role: from, to_roles: to, text, round: 1, hop: 0, artifacts: [], ...extra });
+let ephemeral = 0;
+const worker = (type: string, role: string, payload: Record<string, unknown>) => ({ ...event(0, type, { attempt_id: "att_stage", team_role: role, team_label: teamMembers.find((m) => m.role === role)?.label, team_session: `sess-${role}`, ...payload }), event_id: `eph_${(ephemeral += 1)}`, after_seq: 14 });
+const teamEvents = [
+  event(1, "task.created", { goal: task.goal, title: task.title }),
+  event(2, "attempt.started", { attempt_id: "att_1", node_id: "n_1", attempt_no: 1, profile: "writer@1" }),
+  event(3, "message.agent_final", { attempt_id: "att_1", text: "我把工作拆开了：先请调研专家查资料，再由我复盘。" }),
+  event(4, "attempt.finished", { attempt_id: "att_1", node_id: "n_1", outcome: "completed" }),
+  gm(5, "assign", "member-1", ["member-2"], "调研发布风险：把本周的风险列出来", { node_id: "n_2", attempt_id: "att_1", round: 0 }),
+  event(6, "attempt.started", { attempt_id: "att_2", node_id: "n_2", attempt_no: 1, profile: "research@1" }),
+  event(7, "tool.call_finished", { attempt_id: "att_2", tool_call_id: "tc_a", tool_name: "read_file", state: "success", result_preview: "ok" }),
+  event(8, "message.agent_final", { attempt_id: "att_2", text: "三项风险：迁移窗口、证书到期、灰度比例。" }),
+  event(9, "attempt.finished", { attempt_id: "att_2", node_id: "n_2", outcome: "completed" }),
+  gm(10, "reply", "member-2", ["member-1"], "三项风险：迁移窗口、证书到期、灰度比例。", { node_id: "n_2", attempt_id: "att_2", round: 0 }),
+  event(11, "attempt.started", { attempt_id: "att_3", node_id: "n_3", attempt_no: 1, profile: "writer@1" }),
+  event(12, "attempt.finished", { attempt_id: "att_3", node_id: "n_3", outcome: "completed" }),
+  gm(13, "review", "member-1", [], "调研结果可靠，接下来请评审把关。", { node_id: "n_3", attempt_id: "att_3", round: 0 }),
+  event(14, "message.user", { text: "再核对一遍来源", mentions: ["member-2"], delivery: "queue" }),
+  event(15, "attempt.started", { attempt_id: "att_stage", node_id: "n_stage", attempt_no: 1, profile: "writer@1" }),
+  { ...stageEvent(16, "team.round_started", { round: 1, max_rounds: 10, max_messages: 60, max_members: 4, max_hops: 3, messages: 0 }) },
+  gm(17, "assign", "member-1", ["member-3"], "评审发布方案的回滚步骤"),
+  gm(18, "note", "member-3", ["member-2"], "@研究员 回滚步骤里的证书续期谁负责？"),
+  gm(19, "system", "system", ["member-3"], "这一轮 @ 唤醒已到 3 跳上限，没有再唤醒成员。"),
+  { ...worker("tool.call_started", "member-3", { tool_call_id: "tc_b", tool_name: "Bash", args_preview: "cat rollback.md" }), after_seq: 19 },
+  { ...worker("agent.token_delta", "member-3", { block_id: "b1", text: "回滚步骤缺少数据库回退的验证。" }), after_seq: 19 },
+  { ...worker("agent.token_delta", "member-2", { block_id: "b1", text: "证书续期由运维负责，我去确认。" }), after_seq: 19 },
+  event(20, "approval.requested", { approval_id: "apr_1", node_id: "n_stage", attempt_id: "att_stage", subject: { kind: "tool_call", summary: "member-3: Bash", detail: "cat rollback.md", role: "member-3", role_label: "评审员", allow_rule: { tool_name: "Bash", rule_content: "cat:*" } } }),
+];
+const capEvents = [
+  event(1, "task.created", { goal: task.goal, title: task.title }),
+  event(2, "plan.review_limit_reached", { node_id: "n_2", round: 6, max_rounds: 5, children: 2 }),
+  event(3, "task.status_changed", { from_status: "RUNNING", to_status: "PAUSED_NEEDS_REVIEW", reason: "the leader's reviews reached the limit of 5 rounds: the tasks created in the last round are done and were not reviewed" }),
+];
 
 /** Every distinct rendered font size (px) of elements that show text, inputs included. */
 async function renderedFontSizes(page: Page): Promise<number[]> {
@@ -411,6 +473,229 @@ for (const viewport of VIEWPORTS) {
         await expect(page.getByText(ready).first()).toBeVisible();
         await check(page, name);
       }
+    });
+
+    test("teams: the list shows a team card with stacked avatars and roles; the editor creates and edits a team", async ({ page }) => {
+      await page.unroute("**/v1/**");
+      await mockBackend(page, { experts: [expert, researcher, reviewer, team] });
+      await page.goto("/experts/agents");
+      await expect(page.getByTestId("my-expert")).toHaveCount(4);
+      const card = page.locator('[data-testid="my-expert"][data-kind="team"]');
+      await expect(card).toContainText("内容小队");
+      await expect(card.getByTestId("team-badge")).toHaveText("专家团");
+      await expect(card.getByTestId("avatar")).toHaveCount(3);
+      await expect(card.getByTestId("avatar-stack")).toHaveAttribute("aria-label", /研究员 · 调研专家/);
+      await expect(card.getByTestId("team-roles")).toContainText("领队 文案专家 · 3 位成员：主编、研究员、评审员");
+      expect(await page.locator("body").innerText()).not.toMatch(/team1@|research@|writer@/);
+      await check(page, "experts-team");
+
+      // Creating: the type switch offers both kinds, the team form validates before it sends.
+      await page.goto("/experts/new");
+      await expect(page.getByRole("tab", { name: "单人专家" })).toHaveAttribute("aria-selected", "true");
+      await page.getByRole("tab", { name: "专家团" }).click();
+      await expect(page.getByTestId("team-member-row")).toHaveCount(1);
+      // The primary field is the label (显示名); the ASCII id is made for the row and sits under 「高级」.
+      await expect(page.getByLabel("显示名 1")).toHaveValue("领队");
+      await expect(page.getByTestId("team-member-advanced").first()).not.toHaveAttribute("open", "");
+      await expect(page.getByLabel("角色 ID 1")).toHaveValue("member-1");
+      await page.getByRole("button", { name: "添加成员" }).click();
+      await expect(page.getByTestId("team-member-row")).toHaveCount(2);
+      await expect(page.getByLabel("角色 ID 2")).toHaveValue("member-2");
+      await page.getByRole("button", { name: "保存" }).click();
+      await expect(page.getByText("请填写专家团的名称。")).toBeVisible();
+      await expect(page.getByText("请选择这位成员由哪位专家担任。").first()).toBeVisible();
+      await expect(page.getByText("请填写这位成员的显示名。")).toBeVisible();
+      await check(page, "team-editor-errors");
+      await page.getByLabel("名称", { exact: true }).fill("内容小队");
+      await page.getByLabel("专家 1").selectOption("writer@1");
+      await page.getByLabel("显示名 2").fill("研究员");
+      await page.getByLabel("专家 2").selectOption("research@1");
+      // The form is checked again after every change: a repeated id is flagged on the row that repeats it, and the flag
+      // goes the moment the id is fixed (it used to stay until the next save).
+      await page.getByTestId("team-member-advanced").nth(1).getByText("高级").click();
+      await page.getByLabel("角色 ID 2").fill("member-1");
+      await expect(page.getByText("角色 ID 不能重复。")).toHaveCount(1);
+      await expect(page.getByTestId("team-member-row").nth(1).getByText("角色 ID 不能重复。")).toBeVisible();
+      await page.getByLabel("角色 ID 2").fill("member-2");
+      await expect(page.getByText("角色 ID 不能重复。")).toHaveCount(0);
+      await expect(page.getByText("请填写专家团的名称。")).toHaveCount(0);
+      await page.getByLabel("职责 2").fill("找资料");
+      await page.getByLabel("第 2 位成员当领队").check();
+      await check(page, "team-editor");
+
+      // Control's own refusal comes back with the field at fault, and goes under that field in Chinese.
+      await page.unroute("**/v1/**");
+      await mockBackend(page, { experts: [expert, researcher, reviewer, team], refuseExpert: { error: "team member not found", code: "TEAM_MEMBER_NOT_FOUND", message: "unknown team member expert", field: "members[1].expert", reason: "unknown team member expert" } });
+      await page.goto("/experts/new");
+      await page.getByRole("tab", { name: "专家团" }).click();
+      await page.getByRole("button", { name: "添加成员" }).click();
+      await page.getByLabel("名称", { exact: true }).fill("内容小队");
+      await page.getByLabel("专家 1").selectOption("writer@1");
+      await page.getByLabel("显示名 2").fill("研究员");
+      await page.getByLabel("专家 2").selectOption("research@1");
+      await page.getByRole("button", { name: "保存" }).click();
+      await expect(page.getByTestId("team-member-row").nth(1).getByText("这位成员的专家不存在，或不在你的空间里。")).toBeVisible();
+      await expect(page.getByTestId("team-member-row").nth(0).getByText("这位成员的专家不存在")).toHaveCount(0);
+      await expect(page.getByText("保存专家团失败：请看下面标出的地方。")).toBeVisible();
+      expect(await page.locator("body").innerText()).not.toContain("unknown team member expert");
+      await check(page, "team-editor-refused");
+      // Changing the form clears control's refusal.
+      await page.getByLabel("专家 2").selectOption("reviewer@1");
+      await expect(page.getByText("这位成员的专家不存在，或不在你的空间里。")).toHaveCount(0);
+
+      // Editing keeps the kind: no type switch, the members are filled in and the leader is marked.
+      await page.unroute("**/v1/**");
+      await mockBackend(page, { experts: [expert, researcher, reviewer, team] });
+      await page.goto("/experts/team1/edit");
+      await expect(page.getByRole("heading", { name: "编辑专家团" })).toBeVisible();
+      await expect(page.getByRole("tab", { name: "专家团" })).toHaveCount(0);
+      await expect(page.getByTestId("team-member-row")).toHaveCount(3);
+      await expect(page.getByLabel("显示名 2")).toHaveValue("研究员");
+      await expect(page.getByLabel("角色 ID 2")).toHaveValue("member-2");
+      await expect(page.getByLabel("第 1 位成员当领队")).toBeChecked();
+      await check(page, "team-edit");
+    });
+
+    test("teams: member replies carry the role, the plan groups by member, the team stage opens, a member's approval says who asks", async ({ page }) => {
+      await page.unroute("**/v1/**");
+      await mockBackend(page, { events: teamEvents as never, plan: teamPlan as never, task: { profile: "writer@1", pending_approvals: ["apr_1"] }, experts: [expert, researcher, reviewer, team], config: teamConfig });
+      await page.goto(`/tasks/${TASK_ID}`);
+
+      // The conversation is a group chat: a header per speaker (label · expert, the leader marked), bubbles stacked under it.
+      const chatGroups = page.getByTestId("chat-group");
+      await expect(chatGroups.first().getByTestId("chat-speaker")).toHaveText("主编 · 文案专家");
+      await expect(chatGroups.first().getByTestId("chat-leader-tag")).toHaveText("领队");
+      const researcherGroup = page.locator('[data-testid="chat-group"][data-role="member-2"]').first();
+      await expect(researcherGroup.getByTestId("chat-speaker")).toHaveText("研究员 · 调研专家");
+      // The assignment carries who it is for as a chip; the reply who it answers; the member's steps are folded under it.
+      await expect(page.locator('[data-testid="chat-bubble"][data-kind="assign"]').first().getByTestId("mention-chip").first()).toHaveText("@研究员");
+      await expect(researcherGroup.getByTestId("chat-to").first()).toContainText("@主编");
+      await expect(researcherGroup.getByText("已执行 1 个步骤")).toBeVisible();
+      // The review of round one, by the node's own number.
+      await expect(page.getByTestId("chat-review")).toHaveText("领队复盘 · 第 1 轮");
+      // The user's @ is a chip; a member's @ of another is a chip inside its note; the notice is quiet and centred.
+      await expect(page.getByTestId("user-message").getByTestId("mention-chip")).toHaveText("@研究员");
+      await expect(page.locator('[data-testid="chat-bubble"][data-kind="note"]').getByTestId("mention-chip").first()).toHaveText("@研究员");
+      await expect(page.getByTestId("chat-system")).toContainText("3 跳上限");
+      // Two members are working at once: a bubble each, streaming into their own.
+      const live = page.locator('[data-testid="chat-bubble"][data-live="true"]');
+      await expect(live).toHaveCount(2);
+      await expect(page.locator('[data-testid="chat-group"][data-role="member-3"]').last()).toContainText("回滚步骤缺少数据库回退的验证。");
+      await expect(page.locator('[data-testid="chat-group"][data-role="member-2"]').last()).toContainText("证书续期由运维负责");
+      await expect(page.locator('[data-testid="chat-group"][data-role="member-3"]').last().getByText("正在执行步骤…")).toBeVisible();
+      await expect(page.locator('[data-testid="chat-group"][data-role="member-2"]').last().getByText(/已执行/)).toHaveCount(0);
+
+      // The approval a member raised, inline, with the member's name.
+      const approval = page.getByTestId("approval-item");
+      await expect(approval).toContainText("成员 评审员 请求确认");
+      await expect(approval).toHaveAttribute("data-role", "member-3");
+      await expect(approval).not.toContainText("member-3:");
+      await expect(approval.getByTestId("attention-bar")).toBeVisible();
+
+      // The composer chip: the team's name with its members' avatars, and what a team means.
+      const chip = page.locator('[data-testid="config-chip"][data-chip="team"]');
+      await expect(chip).toContainText("内容小队");
+      await expect(chip).toHaveAttribute("title", "领队负责规划，成员按分工执行");
+      await expect(chip.getByTestId("avatar")).toHaveCount(3);
+      if (phone) await page.getByRole("button", { name: "展开详情" }).click();
+
+      const panel = page.getByRole("complementary", { name: "任务详情" });
+      await expect(panel.getByTestId("plan-node-role").first()).toContainText("主编 · 文案专家");
+      const roleOf = (title: string) => panel.getByTestId("plan-node").filter({ hasText: title }).getByTestId("plan-node-role");
+      await expect(roleOf("调研发布风险")).toContainText("研究员 · 调研专家");
+      await expect(roleOf("领队复盘")).toContainText("领队复盘 · 第 1 轮");
+      await expect(panel.getByTestId("plan-node").filter({ hasText: "调研发布风险" })).toHaveAttribute("data-role", "member-2");
+
+      // The team stage: where it is against its limits.
+      const stage = panel.getByTestId("team-stage");
+      await expect(stage).toBeVisible();
+      await expect(stage.getByTestId("team-progress")).toHaveText("第 1/10 轮 · 消息 3/60 · 跳数上限 3");
+      // The members' words are in the chat, not in the plan: the panel keeps the summary line only.
+      await expect(stage.getByTestId("team-turn")).toHaveCount(0);
+      await expect(stage.getByTestId("team-note")).toHaveCount(0);
+
+      // Grouped by member: the leader first, each member a group, the nodes under their owner.
+      await expect(panel.getByTestId("plan-member-group")).toHaveCount(0);
+      await panel.getByRole("tab", { name: "按成员" }).click();
+      const groups = panel.getByTestId("plan-member-group");
+      await expect(groups).toHaveCount(3);
+      await expect(groups.nth(0)).toHaveAttribute("data-role", "member-1");
+      await expect(groups.nth(0).getByTestId("plan-node")).toHaveCount(4);
+      await expect(groups.nth(1).getByTestId("plan-node")).toHaveCount(1);
+      await expect(groups.nth(2)).toContainText("还没有分到节点");
+      await panel.getByRole("tab", { name: "按顺序" }).click();
+      await expect(groups).toHaveCount(0);
+
+      const body = await page.locator("body").innerText();
+      expect(body).not.toMatch(/research@\d|writer@\d|reviewer@\d|team1@\d|max_rounds|team_stage|member-\d/);
+      await check(page, phone ? "team-task-drawer" : "team-task");
+    });
+
+    test("teams: the '+' menu offers the team and says what it means", async ({ page }) => {
+      await page.unroute("**/v1/**");
+      await mockBackend(page, { experts: [expert, researcher, team] });
+      await page.goto("/");
+      await page.getByTestId("config-add").click();
+      await page.getByRole("menuitem", { name: "专家", exact: true }).click();
+      const option = page.getByRole("menuitemradio", { name: /内容小队/ });
+      await expect(option).toBeVisible();
+      await expect(option).toHaveAttribute("title", "领队负责规划，成员按分工执行");
+      await expect(option).toContainText("领队 文案专家");
+      // A team is not offered as a single expert: the single experts are listed on their own.
+      await expect(page.getByRole("menuitemradio", { name: /^文案专家 / })).toBeVisible();
+      await check(page, "team-menu");
+      await option.click();
+      const chip = page.locator('[data-testid="config-chip"][data-chip="team"]');
+      await expect(chip).toContainText("内容小队");
+      await expect(chip.getByTestId("avatar")).toHaveCount(3);
+      await check(page, "team-chip");
+    });
+
+    test("teams: a task that reached the review cap shows an attention card with the reason and the resume action", async ({ page }) => {
+      await page.unroute("**/v1/**");
+      await mockBackend(page, { events: capEvents as never, plan: teamPlan as never, task: { status: "PAUSED_NEEDS_REVIEW", profile: "writer@1", pending_approvals: [] }, experts: [expert, researcher, reviewer, team], config: teamConfig });
+      await page.goto(`/tasks/${TASK_ID}`);
+      const notice = page.getByTestId("review-notice");
+      await expect(notice).toHaveAttribute("data-kind", "review_limit");
+      await expect(notice).toContainText("领队复盘已到上限（5 轮）");
+      await expect(page.getByTestId("review-limit-detail")).toContainText("第 6 轮创建的 2 个任务");
+      await expect(page.getByTestId("review-reason")).toContainText("the leader's reviews reached the limit of 5 rounds");
+      await expect(notice.getByTestId("attention-bar")).toBeVisible();
+      await expect(page.getByTestId("review-resume")).toBeVisible();
+      await check(page, "team-review-cap");
+    });
+
+    test("teams: the group chat itself with the drawer closed fits the width; the @ picker fits too", async ({ page }) => {
+      await page.unroute("**/v1/**");
+      await mockBackend(page, { events: teamEvents as never, plan: teamPlan as never, task: { profile: "writer@1", pending_approvals: ["apr_1"] }, experts: [expert, researcher, reviewer, team], config: teamConfig });
+      await page.goto(`/tasks/${TASK_ID}`);
+      if (phone) await expect(page.getByRole("complementary", { name: "任务详情" })).toBeHidden();
+      await expect(page.getByTestId("chat-system")).toBeVisible();
+      // A step fold expanded, so the bubble's longest content is on screen.
+      const fold = page.locator('[data-testid="chat-group"][data-role="member-2"]').first().getByText("已执行 1 个步骤");
+      await fold.click();
+      await expect(page.getByTestId("step-row").first()).toBeVisible();
+      await page.getByTestId("approval-item").scrollIntoViewIfNeeded();
+      // Every bubble, notice, mention chip and card stays inside the viewport and the conversation column.
+      const column = (await page.getByTestId("conversation-column").boundingBox())!;
+      for (const testId of ["chat-bubble", "chat-system", "user-message", "approval-item", "mention-chip"]) {
+        for (const box of await page.getByTestId(testId).evaluateAll((nodes) => nodes.map((node) => { const r = node.getBoundingClientRect(); return { x: r.x, right: r.right, w: r.width }; }))) {
+          expect(box.x, `${testId} left edge`).toBeGreaterThanOrEqual(0);
+          expect(box.right, `${testId} right edge`).toBeLessThanOrEqual(Math.min(viewport.width, column.x + column.width) + 1);
+        }
+      }
+      await check(page, "team-chat");
+
+      // The composer with the picker open.
+      await page.getByPlaceholder("向任务发送消息").click();
+      await page.getByPlaceholder("向任务发送消息").pressSequentially("@");
+      const picker = page.getByTestId("mention-picker");
+      await expect(picker.getByRole("option")).toHaveCount(3);
+      const box = (await picker.boundingBox())!;
+      expect(box.x).toBeGreaterThanOrEqual(0);
+      expect(box.x + box.width).toBeLessThanOrEqual(viewport.width);
+      expect(box.y).toBeGreaterThanOrEqual(0);
+      await check(page, "team-picker");
     });
 
     test("sidebar: group labels hug their group, coming-soon entries are quiet; a drawer on phones", async ({ page }) => {

@@ -1,5 +1,5 @@
 import { ArrowRightLeft, ClipboardCheck, ShieldAlert, ShieldOff } from "lucide-react";
-import { humanizeProfileRefs } from "../../lib/display";
+import { humanizeProfileRefs, memberApprovalTitle } from "../../lib/display";
 import { ruleText, type ApprovalInfo } from "../../lib/approvals";
 import { Attention } from "../../ui/Attention";
 import { Button } from "../../ui/Button";
@@ -13,11 +13,13 @@ interface ApprovalInboxProps {
   readonly nodeTitles?: Readonly<Record<string, string>>;
   /** 专家引用（id@版本）到显示名，切换专家的审批不显示引用。 */
   readonly nameOf?: (ref: string) => string;
+  /** 成员的角色 ID 到显示名（团队里查）；不传就直接写角色 ID。 */
+  readonly roleNameOf?: (role: string) => string;
   readonly onDecide: (approvalId: string, decision: "approve" | "reject", always: boolean) => void;
 }
 
 /** 需要你确认的操作，直接出现在对话最下面，不用去别处找。说明是什么操作，再给三个选择：允许一次、本任务内总是允许、拒绝。 */
-export function ApprovalInbox({ approvals, cancelled = [], infos, nodeTitles = {}, nameOf = (ref) => ref, onDecide }: ApprovalInboxProps) {
+export function ApprovalInbox({ approvals, cancelled = [], infos, nodeTitles = {}, nameOf = (ref) => ref, roleNameOf = (role) => role, onDecide }: ApprovalInboxProps) {
   if (approvals.length === 0 && cancelled.length === 0) return null;
   return (
     <section aria-label="审批收件箱" className="space-y-3">
@@ -86,9 +88,10 @@ export function ApprovalInbox({ approvals, cancelled = [], infos, nodeTitles = {
             icon={ShieldAlert}
             data-testid="approval-item"
             data-state="pending"
+            data-role={info?.role || undefined}
             title={
               <>
-                需要你的确认
+                {info?.role ? <span data-testid="approval-member">{memberApprovalTitle(info.roleLabel || roleNameOf(info.role))}</span> : "需要你的确认"}
                 {info?.tool ? <span className="rounded-control bg-card px-1.5 py-0.5 font-mono text-caption font-normal text-gray-700">{info.tool}</span> : null}
               </>
             }

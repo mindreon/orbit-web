@@ -24,6 +24,8 @@ export interface AgentTurn {
   readonly kind: "agent";
   readonly id: string;
   readonly attemptId: string;
+  /** The plan node the attempt runs; empty until the page has seen the attempt start. */
+  readonly nodeId: string;
   /** 同一次尝试里的第几段：你的每条消息会把尝试的输出切成下一段。 */
   readonly generation: number;
   readonly attemptNo: number;
@@ -103,6 +105,7 @@ function fold(turns: readonly Turn[], event: TaskEvent): readonly Turn[] {
           kind: "agent",
           id: str(payload, "attempt_id"),
           attemptId: str(payload, "attempt_id"),
+          nodeId: str(payload, "node_id"),
           generation: 0,
           attemptNo: Number(payload.attempt_no ?? 1),
           status: "running",

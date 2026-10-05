@@ -6,6 +6,10 @@ export interface ApprovalInfo {
   readonly kind: string;
   /** The node it concerns, when the event names one (a profile switch does). */
   readonly nodeId: string;
+  /** The team member that asked (`ApprovalSubject.role`); empty for an approval nobody in a team raised. */
+  readonly role: string;
+  /** What a person called that member (`ApprovalSubject.role_label`); empty when the event has none. */
+  readonly roleLabel: string;
   readonly tool: string;
   /** 调用带的参数：命令、路径。 */
   readonly detail: string;
@@ -14,6 +18,13 @@ export interface ApprovalInfo {
 }
 
 const text = (value: unknown): string => (typeof value === "string" ? value : "");
+
+/** A member's approval summary starts with `<role>:` (the stage adds it); the role is shown on its own, so it is not said twice. */
+const withoutRolePrefix = (summary: string, role: string): string => {
+  if (role === "") return summary;
+  for (const prefix of [`${role}: `, `${role}:`, `${role}：`]) if (summary.startsWith(prefix)) return summary.slice(prefix.length);
+  return summary;
+};
 
 export function approvalInfos(events: readonly TaskEvent[]): Readonly<Record<string, ApprovalInfo>> {
   const infos: Record<string, ApprovalInfo> = {};
@@ -24,7 +35,9 @@ export function approvalInfos(events: readonly TaskEvent[]): Readonly<Record<str
     infos[text(event.payload.approval_id)] = {
       kind: text(subject.kind),
       nodeId: text(event.payload.node_id),
-      tool: text(subject.summary),
+      role: text(subject.role),
+      roleLabel: text(subject.role_label),
+      tool: withoutRolePrefix(text(subject.summary), text(subject.role)),
       detail: text(subject.detail),
       rule: rule ? { tool: text(rule.tool_name), content: typeof rule.rule_content === "string" ? rule.rule_content : null } : null,
     };

@@ -57,13 +57,82 @@ export interface BudgetHold {
   readonly detail: string;
 }
 
+/** The leader's reviews reached `Policy.max_review_rounds` (plan.review_limit_reached): the last round's tasks are done and were not reviewed. */
+export interface ReviewLimit {
+  readonly nodeId: string;
+  readonly round: number;
+  readonly maxRounds: number;
+  /** How many tasks the last round created. */
+  readonly children: number;
+}
+
 /** The task waits for a person (PAUSED_NEEDS_REVIEW): why, and the plan change that was turned down just before, if any. */
 export interface ReviewNotice {
   readonly reason: string;
   readonly rejection: { readonly code: string; readonly detail: string } | null;
   /** Set when the wait is for budget: a person can grant more. */
   readonly budget?: BudgetHold;
+  /** Set when the wait is for the review cap: the leader would have reviewed once more. */
+  readonly limit?: ReviewLimit;
 }
+
+/** The usage of a turn or a round, as the contract reports it (`tokens_in`, `tokens_out`, `tool_calls`, `wall_s`, `cost_usd_micros`). */
+export type UsageRecord = Readonly<Record<string, unknown>>;
+
+/** One turn a member took in a team stage: what the leader asked of a role, and how it ended. */
+export interface TeamTurnView {
+  readonly round: number;
+  readonly role: string;
+  /** What a person called the role (beside `role` in the event); empty for a team from before labels. */
+  readonly label: string;
+  /** The member's expert (profile ref). */
+  readonly executor: string;
+  readonly memberAttemptId: string;
+  readonly task: string;
+  readonly outcome: "running" | "completed" | "failed";
+  readonly summary: string;
+  readonly usage?: UsageRecord;
+  readonly artifacts: readonly string[];
+}
+
+/** One turn of the stage's leader. */
+export interface TeamRoundView {
+  readonly round: number;
+  readonly outcome: "running" | "assigned" | "completed" | "stopped";
+  readonly assignments: number;
+  /** Why the stage stopped (outcome `stopped`). */
+  readonly reason: string;
+  readonly usage?: UsageRecord;
+}
+
+/** A note a member or the leader posted for the team (team.message). */
+export interface TeamNote {
+  readonly seq: number;
+  readonly role: string;
+  readonly label: string;
+  readonly text: string;
+}
+
+/** One team stage's attempt: the leader's rounds, the members' turns and the mailbox, from the stage's `team.*` events. */
+export interface TeamStageView {
+  readonly attemptId: string;
+  readonly nodeId: string;
+  /** The round the leader is in (or was in when the stage ended). */
+  readonly round: number;
+  readonly maxRounds: number;
+  /** The stage's limits and how many messages it has used, as team.round_* report them; absent in events from before they were sent. */
+  readonly maxMessages?: number;
+  readonly maxMembers?: number;
+  /** How long a chain of @-wakes may get inside one round. */
+  readonly maxHops?: number;
+  readonly messages?: number;
+  readonly rounds: readonly TeamRoundView[];
+  readonly turns: readonly TeamTurnView[];
+  readonly notes: readonly TeamNote[];
+}
+
+/** What counts against a stage's `max_messages`: every assignment, every result and every note (the events say it too, when they do). */
+export const teamMessageCount = (stage: TeamStageView): number => stage.messages ?? stage.notes.length;
 
 /** A node's profile was switched (profile.switched): it applies from the node's next attempt. */
 export interface ProfileSwitch {
@@ -116,9 +185,18 @@ export interface TaskLiveState {
   readonly approvals: Readonly<Record<string, ApprovalOutcome>>;
   /** 最近一次 attempt.* 事件对应的尝试：message.user（回答/追问）落在它身上。 */
   readonly lastAttemptId: string;
+  /** Team stages by the stage's attempt id, oldest first (a retried stage has one entry per attempt). */
+  readonly teams: Readonly<Record<string, TeamStageView>>;
+  /** A plan.review_limit_reached that the next review notice takes as its cause; dropped by the next status change. */
+  readonly reviewLimit: ReviewLimit | null;
 }
 
-export const emptyLiveState: TaskLiveState = { attempts: [], question: null, live: {}, thinking: {}, truncated: {}, versions: {}, nodes: {}, review: null, rejection: null, exhausted: null, reserved: {}, switches: [], approvals: {}, lastAttemptId: "" };
+export const emptyLiveState: TaskLiveState = { attempts: [], question: null, live: {}, thinking: {}, truncated: {}, versions: {}, nodes: {}, review: null, rejection: null, exhausted: null, reserved: {}, switches: [], approvals: {}, lastAttemptId: "", teams: {}, reviewLimit: null };
+
+/** The newest team stage of a node (its latest attempt), or undefined when the node never ran one. */
+export function stageOfNode(state: TaskLiveState, nodeId: string): TeamStageView | undefined {
+  return Object.values(state.teams).filter((stage) => stage.nodeId === nodeId).at(-1);
+}
 
 const field = (payload: Record<string, unknown>, key: string): string => {
   const value = payload[key];
@@ -205,6 +283,100 @@ export function pendingSwitch(state: TaskLiveState, nodeId: string): ProfileSwit
 
 const APPROVAL_OUTCOMES: readonly string[] = ["APPROVED", "REJECTED", "CANCELLED", "TAKEN_OVER"];
 
+const count = (payload: Record<string, unknown>, key: string): number => {
+  const value = payload[key];
+  return typeof value === "number" && Number.isFinite(value) ? value : 0;
+};
+
+const usageOf = (value: unknown): UsageRecord | undefined => (isRecord(value) ? value : undefined);
+
+/** Applies `change` to the stage of the event's attempt, creating it when this is the first event the page sees of it. */
+function withStage(state: TaskLiveState, payload: Record<string, unknown>, change: (stage: TeamStageView) => TeamStageView): TaskLiveState {
+  const attemptId = field(payload, "attempt_id");
+  if (attemptId === "") return state;
+  const current = state.teams[attemptId] ?? { attemptId, nodeId: field(payload, "node_id"), round: 0, maxRounds: 0, rounds: [], turns: [], notes: [] };
+  return { ...state, teams: { ...state.teams, [attemptId]: change(current) } };
+}
+
+/** max_messages, max_members and messages of a team.round_started, when it has them. */
+const limitsOf = (payload: Record<string, unknown>, stage: TeamStageView) => ({
+  ...(count(payload, "max_messages") > 0 ? { maxMessages: count(payload, "max_messages") } : stage.maxMessages ? { maxMessages: stage.maxMessages } : {}),
+  ...(typeof payload.max_hops === "number" ? { maxHops: count(payload, "max_hops") } : stage.maxHops !== undefined ? { maxHops: stage.maxHops } : {}),
+  ...(count(payload, "max_members") > 0 ? { maxMembers: count(payload, "max_members") } : stage.maxMembers ? { maxMembers: stage.maxMembers } : {}),
+  ...(typeof payload.messages === "number" ? { messages: count(payload, "messages") } : stage.messages !== undefined ? { messages: stage.messages } : {}),
+});
+
+const upsertRound = (rounds: readonly TeamRoundView[], round: TeamRoundView): readonly TeamRoundView[] =>
+  rounds.some((item) => item.round === round.round) ? rounds.map((item) => (item.round === round.round ? { ...item, ...round } : item)) : [...rounds, round].sort((a, b) => a.round - b.round);
+
+const stageSeq = (state: TaskLiveState, payload: Record<string, unknown>): number => (state.teams[field(payload, "attempt_id")]?.notes.length ?? 0) + 1;
+
+function foldTeam(state: TaskLiveState, event: TaskEvent): TaskLiveState {
+  const payload = event.payload;
+  const round = count(payload, "round");
+  switch (event.type) {
+    case "team.round_started":
+      return withStage(state, payload, (stage) => ({
+        ...stage,
+        round,
+        maxRounds: count(payload, "max_rounds") || stage.maxRounds,
+        ...limitsOf(payload, stage),
+        rounds: upsertRound(stage.rounds, { round, outcome: "running", assignments: 0, reason: "" }),
+      }));
+    case "team.round_finished": {
+      const outcome = field(payload, "outcome");
+      return withStage(state, payload, (stage) => ({
+        ...stage,
+        round: Math.max(stage.round, round),
+        ...(typeof payload.messages === "number" ? { messages: count(payload, "messages") } : {}),
+        rounds: upsertRound(stage.rounds, {
+          round,
+          outcome: outcome === "assigned" || outcome === "completed" || outcome === "stopped" ? outcome : "completed",
+          assignments: count(payload, "assignments"),
+          reason: field(payload, "reason"),
+          usage: usageOf(payload.usage),
+        }),
+      }));
+    }
+    case "team.member_turn_started":
+      return withStage(state, payload, (stage) => ({
+        ...stage,
+        turns: [...stage.turns, { round, role: field(payload, "role"), label: field(payload, "label"), executor: field(payload, "executor"), memberAttemptId: field(payload, "member_attempt_id"), task: field(payload, "task"), outcome: "running", summary: "", artifacts: [] }],
+      }));
+    case "team.member_turn_finished": {
+      const memberAttemptId = field(payload, "member_attempt_id");
+      const outcome = field(payload, "outcome") === "failed" ? "failed" : "completed";
+      return withStage(state, payload, (stage) => {
+        // The turn that is still open for this member attempt; one that was never seen start (a page that joined late) is added.
+        const index = stage.turns.findIndex((turn) => turn.memberAttemptId === memberAttemptId && turn.outcome === "running");
+        const finished: TeamTurnView = {
+          round,
+          role: field(payload, "role"),
+          label: field(payload, "label"),
+          executor: field(payload, "executor"),
+          memberAttemptId,
+          task: index >= 0 ? stage.turns[index].task : "",
+          outcome,
+          summary: field(payload, "summary"),
+          usage: usageOf(payload.usage),
+          artifacts: Array.isArray(payload.artifacts) ? payload.artifacts.filter((name): name is string => typeof name === "string") : [],
+        };
+        return { ...stage, turns: index >= 0 ? stage.turns.map((turn, i) => (i === index ? finished : turn)) : [...stage.turns, finished] };
+      });
+    }
+    case "team.message": {
+      // Plan-level messages (round 0) belong to no stage: the chat shows them, a stage's own view does not take them.
+      if (count(payload, "round") === 0) return state;
+      const seq = payload.seq == null ? stageSeq(state, payload) : count(payload, "seq");
+      return withStage(state, payload, (stage) =>
+        stage.notes.some((note) => note.seq === seq) ? stage : { ...stage, ...(stage.messages !== undefined ? { messages: stage.messages + 1 } : {}), notes: [...stage.notes, { seq, role: field(payload, "from_role") || field(payload, "role"), label: field(payload, "from_label") || field(payload, "label"), text: field(payload, "text") }].sort((a, b) => a.seq - b.seq) },
+      );
+    }
+    default:
+      return state;
+  }
+}
+
 function applyChange(state: TaskLiveState, event: TaskEvent): TaskLiveState {
   // A rejected plan change is only the cause of a review that comes right after it: any other durable event ends that.
   if (state.rejection && event.seq > 0 && event.type !== "plan.change_rejected" && event.type !== "task.status_changed") {
@@ -286,10 +458,18 @@ function applyChange(state: TaskLiveState, event: TaskEvent): TaskLiveState {
       return { ...state, nodes: { ...state.nodes, [nodeId]: { status: field(payload, "to_status"), reason: field(payload, "reason") } } };
     }
     case "task.status_changed": {
-      if (payload.to_status !== "PAUSED_NEEDS_REVIEW") return { ...state, review: null, rejection: null, exhausted: null };
+      if (payload.to_status !== "PAUSED_NEEDS_REVIEW") return { ...state, review: null, rejection: null, exhausted: null, reviewLimit: null };
       const budget = state.exhausted ?? blockedByBudget(state);
-      return { ...state, review: { reason: field(payload, "reason"), rejection: state.rejection, ...(budget ? { budget } : {}) }, rejection: null, exhausted: null };
+      return { ...state, review: { reason: field(payload, "reason"), rejection: state.rejection, ...(budget ? { budget } : {}), ...(state.reviewLimit ? { limit: state.reviewLimit } : {}) }, rejection: null, exhausted: null, reviewLimit: null };
     }
+    case "plan.review_limit_reached":
+      return { ...state, reviewLimit: { nodeId: field(payload, "node_id"), round: count(payload, "round"), maxRounds: count(payload, "max_rounds"), children: count(payload, "children") } };
+    case "team.round_started":
+    case "team.round_finished":
+    case "team.member_turn_started":
+    case "team.member_turn_finished":
+    case "team.message":
+      return foldTeam(state, event);
     case "budget.exhausted":
       return { ...state, exhausted: { scope: field(payload, "scope"), nodeId: field(payload, "node_id"), detail: field(payload, "detail") } };
     case "budget.granted":
@@ -340,7 +520,7 @@ export function markStreamGap(state: TaskLiveState): TaskLiveState {
 }
 
 /** Where an event sits in the stream: a durable event at its seq, an ephemeral one right after the durable event it follows. */
-const position = (event: TaskEvent): number => (event.seq > 0 ? event.seq * 2 : (event.after_seq ?? 0) * 2 + 1);
+export const eventPosition = (event: TaskEvent): number => (event.seq > 0 ? event.seq * 2 : (event.after_seq ?? 0) * 2 + 1);
 
 /**
  * Adds an event to the log once, in stream order. Replays after a reconnect are therefore harmless, and state built
@@ -348,5 +528,5 @@ const position = (event: TaskEvent): number => (event.seq > 0 ? event.seq * 2 : 
  */
 export function mergeEvent(events: readonly TaskEvent[], event: TaskEvent): readonly TaskEvent[] {
   if (events.some((item) => item.event_id === event.event_id || (event.seq > 0 && item.seq === event.seq))) return events;
-  return [...events, event].sort((a, b) => position(a) - position(b));
+  return [...events, event].sort((a, b) => eventPosition(a) - eventPosition(b));
 }

@@ -11,14 +11,16 @@ import { useTaskConfig } from "../lib/useTaskConfig";
 import { TaskHeader } from "../components/tasks/TaskHeader";
 import { OVERVIEW, TaskPanel } from "../components/tasks/TaskPanel";
 import { Conversation } from "../components/conversation/Conversation";
+import { GroupChat } from "../components/conversation/GroupChat";
+import { buildChat, type ChatItem } from "../lib/chat";
 import { describeFailure } from "../lib/api";
-import { nodeTitle, profileName } from "../lib/display";
+import { nodeRoles, nodeTitle, profileName, roleName } from "../lib/display";
 import { BREAKPOINT, useMediaQuery } from "../lib/useMediaQuery";
 import { fileKey, flattenArtifacts, type ArtifactFile } from "../lib/artifacts";
 import { approvalInfos } from "../lib/approvals";
 import { buildTimeline } from "../lib/conversation";
 import { completeTaskNode, controlTask, decideTaskApproval, grantTaskBudget, sendTaskMessage, switchNodeProfile } from "../lib/tasks";
-import { pendingSwitch, totalReserved, type BudgetAmounts, type ProfileSwitch } from "../lib/taskEvents";
+import { pendingSwitch, stageOfNode, totalReserved, type BudgetAmounts, type ProfileSwitch } from "../lib/taskEvents";
 import { useTasksStore } from "../lib/tasksStore";
 import { useTaskStream } from "../lib/useTaskStream";
 import { Alert } from "../ui/Alert";
@@ -50,12 +52,23 @@ function TaskView({ taskId }: { taskId: string }) {
 
   const files = useMemo(() => flattenArtifacts(artifacts), [artifacts]);
   const turns = useMemo(() => (task ? buildTimeline(task, events, live) : []), [task, events, live]);
-  const approvals = useMemo(() => approvalInfos(events), [events]);
   // 事件比任务快照先到：已有结果的审批立刻离开待确认；被取消的留一张说明。
   const pendingApprovals = (task?.pending_approvals ?? []).filter((id) => live.approvals[id] === undefined);
   const cancelledApprovals = Object.keys(live.approvals).filter((id) => live.approvals[id] === "CANCELLED");
 
   const nameOf = useCallback((ref: string) => profileName(ref, catalog.experts), [catalog.experts]);
+  // Who each node belongs to (the leader, a member, the leader's review): the plan says which expert runs a node, the task's team says who that is.
+  const team = config.team;
+  const roles = useMemo(() => nodeRoles(team, plan?.nodes ?? []), [team, plan]);
+  // An approval a member of a plan-level node raised has no role of its own: the node's owner is who asks.
+  const approvals = useMemo(() => {
+    const infos = approvalInfos(events);
+    return Object.fromEntries(Object.entries(infos).map(([id, info]) => [id, info.role || !roles[info.nodeId] || roles[info.nodeId].kind !== "member" ? info : { ...info, role: roles[info.nodeId].role, roleLabel: roles[info.nodeId].label }]));
+  }, [events, roles]);
+  const roleNameOf = useCallback((role: string) => roleName(role, team?.members.find((member) => member.role === role)?.label, team?.leader), [team]);
+  const stageNodeIds = useMemo(() => new Set((plan?.nodes ?? []).filter((node) => node.type === "team_stage").map((node) => node.node_id)), [plan]);
+  const chat = useMemo<ChatItem[] | null>(() => (task && team ? buildChat({ task, events, live, team, nameOf, roles, stageNodeIds }) : null), [task, events, live, team, nameOf, roles, stageNodeIds]);
+  const stageOf = useCallback((nodeId: string) => stageOfNode(live, nodeId), [live]);
   const drawerOpen = panelOpen && !wide;
   useEffect(() => {
     if (!drawerOpen) return;
@@ -151,7 +164,7 @@ function TaskView({ taskId }: { taskId: string }) {
   // 「需要你」的提示卡在场：审批、复核、接管、Agent 提问。
   const attention = pendingApprovals.length > 0 || task.status === "PAUSED_NEEDS_REVIEW" || task.status === "TAKEN_OVER" || Boolean(live.question);
   const grantBudget = (delta: BudgetAmounts) => attempt(() => grantTaskBudget(task.task_id, delta));
-  const message = (text: string, delivery: "queue" | "interrupt") => act(() => sendTaskMessage(task.task_id, text, delivery));
+  const message = (text: string, delivery: "queue" | "interrupt", mentions: readonly string[] = []) => act(() => sendTaskMessage(task.task_id, text, delivery, mentions));
 
   return (
     <div className="flex min-h-0 flex-1">
@@ -164,13 +177,16 @@ function TaskView({ taskId }: { taskId: string }) {
           turns={turns}
           expertName={nameOf(task.profile)}
           files={files}
+          roles={roles}
+          nameOf={nameOf}
+          custom={chat && team ? { size: chat.reduce((sum, item) => sum + (item.type === "bubble" ? item.text.length + (item.work?.text.length ?? 0) + (item.work?.steps.length ?? 0) : item.type === "user" || item.type === "system" ? item.text.length : 1), chat.length), node: <GroupChat items={chat} team={team} files={files} onOpenFile={openFile} onOpenAllFiles={() => { setActive(OVERVIEW); setPanelOpen(true); }} pendingApprovals={pendingApprovals} cancelledApprovals={cancelledApprovals} approvalInfos={approvals} nodeTitles={nodeTitles} nameOf={nameOf} roleNameOf={roleNameOf} onDecide={(id, decision, always) => void act(() => decideTaskApproval(task.task_id, id, decision, always))} /> } : undefined}
           onOpenFile={openFile}
           onOpenAllFiles={() => {
             setActive(OVERVIEW);
             setPanelOpen(true);
           }}
         >
-          <ApprovalInbox approvals={pendingApprovals} cancelled={cancelledApprovals} infos={approvals} nodeTitles={nodeTitles} nameOf={nameOf} onDecide={(id, decision, always) => void act(() => decideTaskApproval(task.task_id, id, decision, always))} />
+          {chat ? null : <ApprovalInbox approvals={pendingApprovals} cancelled={cancelledApprovals} infos={approvals} nodeTitles={nodeTitles} nameOf={nameOf} roleNameOf={roleNameOf} onDecide={(id, decision, always) => void act(() => decideTaskApproval(task.task_id, id, decision, always))} />}
           {task.status === "PAUSED_NEEDS_REVIEW" ? <ReviewNotice review={live.review} onResume={() => void act(() => controlTask(task.task_id, "resume"))} onGrantBudget={grantBudget} /> : null}
           {task.status === "TAKEN_OVER" ? <TakeoverNotice onHandback={() => void act(() => controlTask(task.task_id, "handback"))} /> : null}
           {live.question ? <AgentQuestion question={live.question} onAnswer={(text) => message(text, "queue")} /> : null}
@@ -184,7 +200,7 @@ function TaskView({ taskId }: { taskId: string }) {
             </p>
           ) : null}
         </Conversation>
-        <Composer onSend={message} onControl={(action) => void act(() => controlTask(task.task_id, action))} status={task.status} closed={closed} attention={attention} config={config} catalog={catalog} />
+        <Composer onSend={message} onControl={(action) => void act(() => controlTask(task.task_id, action))} status={task.status} closed={closed} attention={attention} config={config} catalog={catalog} team={team} />
       </main>
       {drawerOpen ? <div aria-hidden="true" data-testid="panel-backdrop" className="fixed inset-0 z-30 bg-black/40" onClick={() => setPanelOpen(false)} /> : null}
       {panelOpen ? (
@@ -201,6 +217,9 @@ function TaskView({ taskId }: { taskId: string }) {
           openFiles={openFiles}
           active={active}
           nameOf={nameOf}
+          roles={roles}
+          team={team}
+          stageOf={stageOf}
           onActivate={setActive}
           onOpenFile={openFile}
           onCloseFile={closeFile}

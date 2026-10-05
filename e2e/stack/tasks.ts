@@ -11,7 +11,7 @@ const CROCKFORD = "0123456789ABCDEFGHJKMNPQRSTVWXYZ";
 
 /** What a node is inside a compiled SOP (contract v3 `sop_step`). */
 export type SopStepInfo = { sop: string; role: "sop" | "step" | "approval_before" | "approval_after"; total: number; step_id: string; index: number; subject: string };
-export type Node = { node_id: string; type: string; title: string; status: string; attempt_count: number; frozen: boolean; current_attempt_id?: string; parent_node_id?: string | null; sop_step?: SopStepInfo | null };
+export type Node = { node_id: string; type: string; title: string; status: string; attempt_count: number; frozen: boolean; owner_profile?: string; review_round?: number | null; team?: { max_members?: number; max_rounds?: number; max_messages?: number } | null; current_attempt_id?: string; parent_node_id?: string | null; sop_step?: SopStepInfo | null };
 export type PlanView = { plan_version: number; nodes: Node[] };
 export type TaskView = { task_id: string; status: string; plan_version: number; pending_approvals: string[] | null };
 
@@ -31,7 +31,7 @@ export async function eventually<T>(read: () => Promise<T>, predicate: (value: T
   throw new Error(`timed out waiting for ${what}; last value: ${JSON.stringify(last)}`);
 }
 
-export type Policy = { denied_tools?: string[]; exploration_max_tool_calls?: number };
+export type Policy = { denied_tools?: string[]; exploration_max_tool_calls?: number; max_review_rounds?: number };
 
 export async function createTask(request: APIRequestContext, title: string, goal: string, profile?: string, policy?: Policy): Promise<string> {
   const response = await request.post("/v1/tasks", { data: { title, goal, ...(profile ? { profile } : {}), ...(policy ? { policy } : {}) }, timeout: 120_000 });
@@ -105,6 +105,30 @@ export async function addNodes(request: APIRequestContext, taskId: string, draft
   });
   expect(response.status()).toBe(202);
   await eventually(() => getPlan(request, taskId), (p) => p.plan_version === plan.plan_version + 1, "the plan change to commit");
+}
+
+/** A member of a team stage: the role the leader gives work to, and the expert (profile ref) that does it. */
+export type StageMember = { role: string; executor: string; description?: string; label?: string };
+
+/**
+ * Commits one plan change that adds a `team_stage` node after the exploration node (as a user plan change; an agent may
+ * only do it with a team). `goal` is the leader's first input: the mock leader reads `team: @role task;;@role task`.
+ */
+export async function addTeamStage(request: APIRequestContext, taskId: string, stage: { title: string; goal: string; leader: string; members: readonly StageMember[]; ownerProfile: string; limits?: { max_members?: number; max_rounds?: number; max_messages?: number } }): Promise<void> {
+  const plan = await eventually(() => getPlan(request, taskId), (p) => p.plan_version >= 1, "the initial plan");
+  const response = await request.post(`/v1/tasks/${taskId}/plan`, {
+    data: {
+      schema_version: "orbit.plan_change/1",
+      command_id: ulid(),
+      task_id: taskId,
+      base_plan_version: plan.plan_version,
+      actor: { kind: "user", id: "local-user" },
+      ops: [{ op: "add_node", node: { node_id: "tmp:1", type: "team_stage", title: stage.title, owner_profile: stage.ownerProfile, depends_on: [plan.nodes[0].node_id], spec: { goal: stage.goal, leader: stage.leader, members: stage.members, ...(stage.limits ? { limits: stage.limits } : {}) } } }],
+    },
+    timeout: 120_000,
+  });
+  expect(response.status()).toBe(202);
+  await eventually(() => getPlan(request, taskId), (p) => p.plan_version === plan.plan_version + 1, "the team stage to commit");
 }
 
 /** SIGKILLs the worker and brings a new one up after `downMs` (A3/A4: kill -9). */

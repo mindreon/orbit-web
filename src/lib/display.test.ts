@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { approvalRoleLabel, catalogueLabel, groupPlan, sopProgress, sopStepLabel, expertSummary, frameworkLabel, humanizeProfileRefs, nodeTitle, nodeTypeLabel, profileName, stripFrontmatter } from "./display";
+import { roleName, approvalRoleLabel, catalogueLabel, groupPlan, isReviewNode, memberApprovalTitle, memberLabel, nodeRoles, reviewLabel, roleText, sopProgress, sopStepLabel, expertSummary, frameworkLabel, humanizeProfileRefs, nodeTitle, nodeTypeLabel, profileName, stripFrontmatter } from "./display";
 
 /**
  * Ways the display layer can fail, each asserted below:
@@ -121,5 +121,87 @@ describe("SOP plan view", () => {
   });
   it("counts steps, not approvals (S4)", () => {
     expect(sopProgress(groupPlan(nodes)[1].children)).toEqual({ done: 1, total: 2 });
+  });
+});
+
+/**
+ * Ways the team wording can fail, each asserted below:
+ *   T1 a role id reaches the screen when the member has a label, or a member from before labels shows nothing
+ *   T2 the leader is labelled by what its role was named (`lead`), not by its label or as the leader
+ *   T3 a node the leader gave to a member is attributed to the leader (or the other way round) when both use one expert
+ *   T4 a review is not numbered by the round the workflow gave it, or one without a round shows a made-up number
+ *   T5 a node nobody owns in the team gets a role anyway
+ *   T6 the approval of a member does not name the member
+ */
+describe("team roles", () => {
+  const team = {
+    leader: "lead",
+    members: [
+      { role: "lead", expert: "writer@1", name: "撰稿专家", label: "主编" },
+      { role: "member-2", expert: "research@3", name: "调研专家", label: "研究员" },
+      { role: "member-3", expert: "writer@1", name: "撰稿专家", label: "审校" },
+    ],
+  };
+  const node = (id: string, owner: string | null, extra: Record<string, unknown> = {}) => ({ node_id: id, type: "agent_turn", title: id, owner_profile: owner, parent_node_id: null, ...extra });
+
+  it("shows the label a person gave, and the role id only when there is none (T1)", () => {
+    expect(roleName("member-2", "研究员")).toBe("研究员");
+    expect(roleName("researcher", "")).toBe("researcher");
+    expect(roleName("researcher", undefined)).toBe("researcher");
+    expect(roleName("lead", "", "lead")).toBe("领队");
+    expect(roleName("lead", "主编", "lead")).toBe("主编");
+    expect(memberLabel("研究员", "调研专家")).toBe("研究员 · 调研专家");
+    expect(reviewLabel(2)).toBe("领队复盘 · 第 2 轮");
+    expect(memberApprovalTitle("研究员")).toBe("成员 研究员 请求确认");
+  });
+
+  it("labels the leader with its label, or as the leader when it has none, never by its role id (T2)", () => {
+    const roles = nodeRoles(team, [node("n1", "writer@1")]);
+    expect(roles.n1).toMatchObject({ kind: "leader", role: "lead", name: "撰稿专家" });
+    expect(roleText(roles.n1)).toBe("主编 · 撰稿专家");
+    const bare = nodeRoles({ leader: "lead", members: [{ role: "lead", expert: "writer@1", name: "撰稿专家" }] }, [node("n1", "writer@1")]);
+    expect(roleText(bare.n1)).toBe("领队 · 撰稿专家");
+  });
+
+  it("attributes a node to the member whose expert runs it, by label (T3)", () => {
+    const roles = nodeRoles(team, [node("n1", "research@3", { parent_node_id: "n0" })]);
+    expect(roles.n1).toMatchObject({ kind: "member", role: "member-2" });
+    expect(roleText(roles.n1)).toBe("研究员 · 调研专家");
+  });
+
+  it("tells a leader's own node from a member's when both run as one expert: the nested one is the member's (T3)", () => {
+    const roles = nodeRoles(team, [node("own", "writer@1"), node("given", "writer@1", { parent_node_id: "own" })]);
+    expect(roles.own.kind).toBe("leader");
+    expect(roles.given).toMatchObject({ kind: "member", role: "member-3" });
+    expect(roleText(roles.given)).toBe("审校 · 撰稿专家");
+  });
+
+  it("numbers a review by the round the workflow gave it (T4)", () => {
+    const roles = nodeRoles(team, [node("a", "writer@1"), node("r1", "writer@1", { title: "领队复盘", review_round: 1 }), node("r2", "writer@1", { title: "领队复盘", review_round: 2 }), node("r3", "writer@1", { title: "领队复盘", review_round: 1 })]);
+    expect([roles.r1.round, roles.r2.round, roles.r3.round]).toEqual([1, 2, 1]);
+    expect(roleText(roles.r2)).toBe("领队复盘 · 第 2 轮");
+    expect(roles.r1).toMatchObject({ kind: "review", name: "撰稿专家" });
+  });
+
+  it("does not invent a round for a review the workflow gave none (T4)", () => {
+    const roles = nodeRoles(team, [node("r", "writer@1", { title: "领队复盘" })]);
+    expect(roles.r.round).toBeUndefined();
+    expect(roleText(roles.r)).toBe("领队复盘");
+  });
+
+  it("gives a task without a team the reviews and nothing else (T4)", () => {
+    const roles = nodeRoles(null, [node("a", "writer@1"), node("r", "writer@1", { title: "领队复盘", review_round: 1 })]);
+    expect(Object.keys(roles)).toEqual(["r"]);
+    expect(roles.r).toMatchObject({ kind: "review", round: 1, name: "" });
+  });
+
+  it("leaves a node owned by nobody in the team without a role (T5)", () => {
+    expect(nodeRoles(team, [node("n1", "stranger@1"), node("n2", null), node("n3", "default@1")])).toEqual({});
+  });
+
+  it("takes a node marked with a review round for a review, and a team stage with the review's title for none (T4)", () => {
+    expect(isReviewNode({ type: "team_stage", title: "领队复盘" })).toBe(false);
+    expect(isReviewNode({ type: "agent_turn", title: "领队复盘" })).toBe(true);
+    expect(isReviewNode({ type: "agent_turn", title: "something else", review_round: 3 })).toBe(true);
   });
 });

@@ -188,9 +188,10 @@ test("E27 the configuration survives a worker restart and the next attempt still
     const events = sql(`SELECT seq || ' ' || event_type FROM task_events WHERE task_id = '${taskId}' ORDER BY seq`);
     throw new Error(`${error}\nthe task's events:\n${events}`, { cause: error });
   }
-  // Exploration, the question, the tool listing: the last one began after the change and has the connector.
-  expect(sql(`SELECT count(*) FROM task_events WHERE task_id = '${taskId}' AND event_type = 'attempt.started'`)).toBe("3");
-  expect(await finalText(taskId)).toContain("docs_lookup");
+  // Exploration, the question, the tool listing, and the leader's review of the two: the last ones began after the change and have the connector.
+  expect(sql(`SELECT count(*) FROM task_events WHERE task_id = '${taskId}' AND event_type = 'attempt.started'`)).toBe("4");
+  // The review comes last now, so the tool listing is no longer the final message: it is one of them.
+  await eventually(async () => sql(`SELECT count(*) FROM task_events WHERE task_id = '${taskId}' AND event_type = 'message.agent_final' AND body->'payload'->>'text' LIKE 'tools=%docs_lookup%'`), (n) => n === "1", "the tool listing with the connector's tool", 30_000);
 });
 
 // The skills the catalog fixture of up.mjs holds: one with a SKILL.md, one without, one with no text at all.

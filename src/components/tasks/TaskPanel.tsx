@@ -1,7 +1,9 @@
 import { LayoutList, PanelRightClose, X } from "lucide-react";
 import { fileKey, latestByName, type ArtifactFile } from "../../lib/artifacts";
 import { cn } from "../../lib/cn";
-import type { AttemptView, BudgetAmounts, NodeState, ProfileSwitch } from "../../lib/taskEvents";
+import type { NodeRole } from "../../lib/display";
+import type { AttemptView, BudgetAmounts, NodeState, ProfileSwitch, TeamStageView } from "../../lib/taskEvents";
+import type { TeamView } from "../../lib/taskConfig";
 import type { Plan, Task, TaskEvent } from "../../lib/tasks";
 import { ArtifactPreview } from "../conversation/ArtifactPreview";
 import { FileIcon } from "../conversation/ArtifactCards";
@@ -31,6 +33,10 @@ interface TaskPanelProps {
   readonly active: string;
   /** 专家引用（id@版本）到显示名。 */
   readonly nameOf: (ref: string) => string;
+  /** 每个节点是谁的（领队、成员、复盘），任务选了专家团时才有成员。 */
+  readonly roles: Readonly<Record<string, NodeRole>>;
+  readonly team: TeamView | null;
+  readonly stageOf: (nodeId: string) => TeamStageView | undefined;
   readonly onActivate: (key: string) => void;
   readonly onOpenFile: (file: ArtifactFile) => void;
   readonly onCloseFile: (key: string) => void;
@@ -45,7 +51,7 @@ const TAB_OFF = "text-gray-600 hover:bg-gray-200";
  * 右侧详情面板：像浏览器标签页，第一个是任务概览，点产物会多开一个预览标签。
  * 宽屏时是并排的一列，灰底托着白卡片，不画边框；窄屏（<1024px）时是从右边滑出的抽屉，由页头的按钮打开。
  */
-export function TaskPanel({ plan, nodes, task, reserved, pendingSwitches, nodeActions, attempts, events, files, openFiles, active, nameOf, onActivate, onOpenFile, onCloseFile, onCollapse }: TaskPanelProps) {
+export function TaskPanel({ plan, nodes, task, reserved, pendingSwitches, nodeActions, attempts, events, files, openFiles, active, nameOf, roles, team, stageOf, onActivate, onOpenFile, onCloseFile, onCollapse }: TaskPanelProps) {
   const activeFile = openFiles.find((file) => fileKey(file) === active);
   return (
     <aside
@@ -82,7 +88,7 @@ export function TaskPanel({ plan, nodes, task, reserved, pendingSwitches, nodeAc
       ) : (
         <div className="min-h-0 flex-1 overflow-y-auto px-4 pb-4 pt-2">
           <UsagePanel usage={task.usage} budgets={task.budgets} reserved={reserved} />
-          <PlanGraph plan={plan} nodes={nodes} pendingSwitches={pendingSwitches} actions={nodeActions} nameOf={nameOf} />
+          <PlanGraph plan={plan} nodes={nodes} pendingSwitches={pendingSwitches} actions={nodeActions} nameOf={nameOf} roles={roles} team={team} stageOf={stageOf} />
           <AttemptTimeline attempts={attempts} nameOf={nameOf} />
           <FileList files={latestByName(files)} onOpen={onOpenFile} />
           <div className="mt-6 space-y-2">

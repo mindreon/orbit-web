@@ -63,6 +63,13 @@ characters. The conversation, the user bubbles, the artifact cards and the compo
 Internal wording becomes user wording in one place, `src/lib/display.ts` (profile refs → expert names, plan node
 titles and types, catalogue and framework labels, frontmatter stripping). Add a mapping there, not in a component.
 
+Teams follow the same rule: a role id (`researcher`) becomes 「研究员」, the leader is 「领队」 whatever its role was named,
+and a review reads 「领队复盘 · 第 N 轮」 — all in `display.ts` (`roleLabel`, `memberRoleText`, `nodeRoles`, `roleText`).
+A task with a team is a group chat (`src/lib/chat.ts`, `GroupChat`): one header per run of one speaker's bubbles, the avatar
+at the group's bottom-left, @mentions as chips coloured by the member's place in the team, a notice from the runtime as a
+quiet centred line, the member's steps folded under its bubble. A plan node as 「<角色> · <专家名>」; a member's approval is
+「成员 <显示名> 请求确认」; the review cap is an `<Attention>` card with the same 「继续」 as any other wait for a person.
+
 ## Lint
 
 `eslint-rules/design-tokens.js` (rule `orbit/design-tokens`) fails on arbitrary font sizes, retired Tailwind sizes,
@@ -73,5 +80,6 @@ A legitimate exception takes `// eslint-disable-next-line orbit/design-tokens --
 
 - `pnpm test`: contrast, display mapping, usage, and the lint rule itself.
 - `pnpm exec playwright test e2e/design.spec.ts`: pages at 1440×900 and 390×844 with a mocked API; no sideways scroll,
-  only the six font sizes, conversation column width, drawers, sidebar spacing. Screenshots go to
+  only the six font sizes, conversation column width, drawers, sidebar spacing, and the team surfaces (team card, editor,
+  member labels, grouped plan, team stage, review cap). Screenshots go to
   `e2e-artifacts/design/` (git-ignored).

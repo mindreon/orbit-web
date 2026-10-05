@@ -30,13 +30,14 @@ test("E1 an agent plans two nodes, they run to completion and what was said is n
   await page.getByTestId("developer-info").getByText("开发者信息").click();
   await expect(page.getByTestId("developer-info").getByText(/plan v[2-9]/)).toBeVisible();
   await expect(taskStatus(page)).toHaveAttribute("data-status", "COMPLETED", { timeout: 60_000 });
-  await expect(planNodes(page)).toHaveCount(3);
+  // The leader reviews what its tasks produced (05 §7): a fourth node, added once the two tasks are done.
+  await expect(planNodes(page)).toHaveCount(4);
   for (const node of await planNodes(page).all()) await expect(node).toHaveAttribute("data-status", "COMPLETED");
 
   const plan = await getPlan(request, taskId);
   expect(plan.plan_version).toBeGreaterThan(1);
-  expect(plan.nodes.map((node) => node.title).sort()).toEqual(["Draft report", "Explore and plan", "Review report"]);
-  expect(plan.nodes.map((node) => node.status)).toEqual(["COMPLETED", "COMPLETED", "COMPLETED"]);
+  expect(plan.nodes.map((node) => node.title).sort()).toEqual(["Draft report", "Explore and plan", "Review report", "领队复盘"]);
+  expect(plan.nodes.map((node) => node.status)).toEqual(["COMPLETED", "COMPLETED", "COMPLETED", "COMPLETED"]);
   // Every plan change came from the agent's attempt, each under its own idempotent command.
   expect(sql(`SELECT count(*) FROM task_events WHERE task_id = '${taskId}' AND event_type = 'plan.version_committed'`)).toBe(String(plan.plan_version - 1));
 
