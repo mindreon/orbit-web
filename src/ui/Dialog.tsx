@@ -2,7 +2,7 @@ import { X } from "lucide-react";
 import { useEffect, useId, type ReactNode } from "react";
 
 /** 居中弹窗：点遮罩或按 Esc 关闭。没有引入 Radix，够用即可。 */
-export function Dialog({ title, onClose, children }: { title: string; onClose: () => void; children: ReactNode }) {
+export function Dialog({ title, onClose, children, wide = false }: { title: string; onClose: () => void; children: ReactNode; wide?: boolean }) {
   const titleId = useId();
   useEffect(() => {
     const onKey = (event: KeyboardEvent) => {
@@ -13,7 +13,7 @@ export function Dialog({ title, onClose, children }: { title: string; onClose: (
   }, [onClose]);
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4" onMouseDown={(event) => event.target === event.currentTarget && onClose()}>
-      <div role="dialog" aria-modal="true" aria-labelledby={titleId} className="w-full max-w-md rounded-card bg-card shadow-xl">
+      <div role="dialog" aria-modal="true" aria-labelledby={titleId} className={`w-full rounded-card bg-card shadow-xl ${wide ? "max-w-4xl" : "max-w-md"}`}>
         <div className="flex h-14 items-center justify-between px-5">
           <h2 id={titleId} className="text-title font-semibold text-foreground">
             {title}

@@ -14,6 +14,7 @@ import { ArtifactCards } from "./ArtifactCards";
 import { MentionChip, MentionText } from "./MentionChip";
 import { StepList } from "./StepList";
 import { TeamRoster } from "./TeamRoster";
+import { UserBubble } from "./UserMessage";
 
 type Bubble = Extract<ChatItem, { type: "bubble" }>;
 
@@ -159,19 +160,14 @@ export function GroupChat({ items, team, nameOf, pendingApprovals, cancelledAppr
         if (group.type === "roster") return <div key={group.key} className="space-y-2">{group.items.map((item) => <TeamRoster key={item.id} members={item.members} team={team} onOpenMember={onOpenMember} />)}</div>;
         if (group.type === "user") {
           return (
-            <div key={group.key} className="space-y-2">
+            <div key={group.key} className="space-y-9">
               {group.items.map((item) => (
-                <div key={item.id} data-testid="user-message" data-mentions={item.mentions.join(",") || undefined} className="flex justify-end">
-                  <div className="max-w-[85%]">
-                    {item.interrupt ? <p className="mb-1 text-right text-caption text-warning-700">已打断当前执行</p> : null}
-                    <div className="whitespace-pre-wrap break-words rounded-card rounded-tr-control bg-primary-100 px-4 py-2.5 text-body text-foreground">
-                      {item.mentions.filter((role) => !parseMentions(item.text, team.members).includes(role)).map((role) => (
-                        <MentionChip key={role} role={role} team={team} />
-                      ))}
-                      <MentionText text={item.text} team={team} />
-                    </div>
-                  </div>
-                </div>
+                <UserBubble key={item.id} text={item.text} interrupt={item.interrupt} mentions={item.mentions.join(",") || undefined}>
+                  {item.mentions.filter((role) => !parseMentions(item.text, team.members).includes(role)).map((role) => (
+                    <MentionChip key={role} role={role} team={team} />
+                  ))}
+                  <MentionText text={item.text} team={team} />
+                </UserBubble>
               ))}
             </div>
           );

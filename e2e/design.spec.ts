@@ -659,20 +659,19 @@ for (const viewport of VIEWPORTS) {
       await expect(chatGroups.first().getByTestId("chat-leader-tag")).toHaveText("领队");
       await expect(page.locator('[data-testid="chat-group"][data-role="member-2"]')).toHaveCount(0);
       await expect(page.locator('[data-testid="chat-bubble"][data-kind="assign"]')).toHaveCount(0);
-      // The members sit in one roster row under the leader's turn; a click opens that member's thread in the panel.
+      // The members sit in one row of chips under the leader's turn; a click opens that member's thread in the panel's 子智能体 tab.
       // Each user message starts a new roster: the first round had the researcher only, the one after the user's @ has both.
-      // A fresh load opens the panel on its home view (or leaves it closed): a member's thread only ever opens from a roster click.
+      // A fresh load opens the panel on its home view (or leaves it closed): a member's thread only ever opens from a chip click.
       await expect(page.getByTestId("panel-member")).toHaveCount(0);
       await expect(page.getByTestId("team-roster")).toHaveCount(2);
-      await expect(page.getByTestId("team-roster").first()).toContainText("1 位团队成员");
+      await expect(page.getByTestId("team-roster").first().getByTestId("roster-member")).toHaveCount(1);
+      await expect(page.getByTestId("team-roster").first().getByTestId("roster-status")).toHaveText("已完成");
       const roster = page.getByTestId("team-roster").last();
-      await expect(roster).toContainText("2 位团队成员");
-      await expect(page.getByTestId("roster-member")).toHaveCount(0);
-      await roster.getByRole("button").first().click();
-      await expect(page.getByTestId("roster-member")).toHaveCount(2);
-      await expect(page.locator('[data-testid="roster-member"][data-role="member-2"]')).toContainText("调研专家");
+      await expect(roster.getByTestId("roster-member")).toHaveCount(2);
+      await expect(roster.locator('[data-testid="roster-member"][data-role="member-2"]')).toContainText("调研专家");
       // Two members are working at once.
-      await expect(page.locator('[data-testid="roster-member"][data-status="running"]')).toHaveCount(2);
+      await expect(roster.locator('[data-testid="roster-member"][data-status="running"]')).toHaveCount(2);
+      await expect(roster.getByTestId("roster-status")).toHaveText("已开始工作");
       // The review of round one folds to one muted line, by the node's own number (or stays whole when it is the leader's last word).
       await expect(page.getByTestId("chat-review").first()).toContainText(/第 1 轮复盘|领队复盘 · 第 1 轮/);
       // The user's @ is a chip; the notice is quiet and centred.
@@ -680,20 +679,20 @@ for (const viewport of VIEWPORTS) {
       await expect(page.getByTestId("chat-system")).toContainText("3 跳上限");
 
       // The researcher's thread: the assignment folded behind 「下发任务详情」, then its work.
-      await page.locator('[data-testid="roster-member"][data-role="member-2"]').click();
+      await roster.locator('[data-testid="roster-member"][data-role="member-2"]').click();
       const thread = page.getByTestId("panel-member");
       await expect(thread).toContainText("调研专家");
       await expect(thread.getByTestId("thread-assignment")).toContainText("@调研专家，你有一条待处理任务，请查收");
       await expect(thread.getByTestId("thread-assignment-text").first()).toBeHidden();
       await thread.getByText("下发任务详情").first().click();
       await expect(thread.getByTestId("thread-assignment-text").first()).toBeVisible();
-      await expect(thread.getByText("已执行 1 个步骤").first()).toBeVisible();
+      await expect(thread.getByTestId("activity-row").first()).toHaveText("已调用 read_file");
       await expect(thread).toContainText("证书续期由运维负责");
       await page.getByRole("button", { name: "返回" }).click();
       if (phone) await page.keyboard.press("Escape"); // the panel is a drawer there: close it to reach the chat
-      await page.locator('[data-testid="roster-member"][data-role="member-3"]').click();
+      await roster.locator('[data-testid="roster-member"][data-role="member-3"]').click();
       await expect(page.getByTestId("panel-member")).toContainText("回滚步骤缺少数据库回退的验证。");
-      await expect(page.getByTestId("panel-member").getByText("正在执行步骤…")).toBeVisible();
+      await expect(page.getByTestId("panel-member").getByTestId("activity-row").first()).toHaveText("正在运行命令");
       await page.getByRole("button", { name: "返回" }).click();
 
       // The approval a member raised, inline, with the member's name.
@@ -708,6 +707,9 @@ for (const viewport of VIEWPORTS) {
       await expect(chip).toContainText("内容小队");
       await expect(chip).toHaveAttribute("title", "领队负责规划，成员按分工执行");
       await expect(chip.getByTestId("avatar")).toHaveCount(3);
+      // Back from a member's thread lands on the 子智能体 list; the developer view is on the 概览 tab.
+      if (phone && !(await page.getByRole("complementary", { name: "任务详情" }).isVisible())) await page.getByRole("button", { name: "展开详情" }).click();
+      await page.getByRole("complementary", { name: "任务详情" }).getByRole("button", { name: "概览" }).click();
       await openDeveloperView(page, phone);
 
       const panel = page.getByRole("complementary", { name: "任务详情" });
@@ -781,9 +783,8 @@ for (const viewport of VIEWPORTS) {
       await page.goto(`/tasks/${TASK_ID}`);
       if (phone) await expect(page.getByRole("complementary", { name: "任务详情" })).toBeHidden();
       await expect(page.getByTestId("chat-system")).toBeVisible();
-      // The roster expanded, so its longest content is on screen.
-      await page.getByTestId("team-roster").last().getByRole("button").first().click();
-      await expect(page.getByTestId("roster-member")).toHaveCount(2);
+      // The chips row, so its longest content is on screen.
+      await expect(page.getByTestId("team-roster").last().getByTestId("roster-member")).toHaveCount(2);
       await page.getByTestId("approval-item").scrollIntoViewIfNeeded();
       // Every bubble, notice, mention chip and card stays inside the viewport and the conversation column.
       const column = (await page.getByTestId("conversation-column").boundingBox())!;

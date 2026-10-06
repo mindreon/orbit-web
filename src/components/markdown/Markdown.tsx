@@ -10,9 +10,10 @@ import type { Element, ElementContent, Root as HastRoot, RootContent } from "has
 import { BlockedImage } from "./BlockedImage";
 import { CodeBlock } from "./CodeBlock";
 import { katexModule, useLazyModule } from "./lazy";
+import { normalizeMath } from "./math";
 import { MermaidBlock } from "./MermaidBlock";
 
-type MdNode = { type: string; value?: string; children?: MdNode[] };
+type MdNode = { type: string; value?: string; children?: MdNode[]; position?: { start: { offset?: number }; end: { offset?: number } }; data?: { hProperties?: Record<string, unknown> } };
 
 /** Raw HTML in model output is shown as literal text: it is never parsed, so it cannot run. */
 function remarkHtmlAsText() {
@@ -21,6 +22,29 @@ function remarkHtmlAsText() {
     node.children?.forEach(walk);
   };
   return (tree: MdNode) => walk(tree);
+}
+
+/**
+ * Marks each code block as `closed` (its closing fence was written) or `open` (the text ended inside it). Only an
+ * open block of a streaming message is still growing; Mermaid waits for `closed`, and the highlighter only throttles
+ * on `open`. The flag travels as a `data-fence` attribute on <code>, through sanitize, to the `pre` renderer.
+ */
+function remarkFenceState() {
+  return (tree: MdNode, file: { value: unknown }) => {
+    const source = typeof file.value === "string" ? file.value : "";
+    const walk = (node: MdNode) => {
+      const { start, end } = node.position ?? {};
+      if (node.type === "code" && start?.offset !== undefined && end?.offset !== undefined) {
+        const lines = source.slice(start.offset, end.offset).split("\n");
+        const open = lines[0].match(/^(`{3,}|~{3,})/);
+        const close = lines.length > 1 ? lines[lines.length - 1].match(/^[\s>]*(`{3,}|~{3,})\s*$/) : null;
+        const closed = !open || Boolean(close && close[1][0] === open[1][0] && close[1].length >= open[1].length);
+        node.data = { ...node.data, hProperties: { ...node.data?.hProperties, dataFence: closed ? "closed" : "open" } };
+      }
+      node.children?.forEach(walk);
+    };
+    walk(tree);
+  };
 }
 
 /**
@@ -38,7 +62,7 @@ const sanitizeSchema = {
   ...defaultSchema,
   attributes: {
     ...defaultSchema.attributes,
-    code: [["className", /^language-./, "math-inline", "math-display"]],
+    code: [["className", /^language-./, "math-inline", "math-display"], ["dataFence", "open", "closed"]],
   },
 };
 
@@ -85,11 +109,22 @@ function languageOf(node: Element) {
   return hit ? hit.slice("language-".length).toLowerCase() : "";
 }
 
-/** Whether the block is still being streamed. Read through context so finishing a block re-renders only Mermaid. */
+/** Whether the block is still being streamed. Read through context so finishing a block re-renders only what depends on it. */
 const StreamingContext = createContext(false);
 
-function StreamedMermaid({ code }: { code: string }) {
-  return <MermaidBlock code={code} streaming={useContext(StreamingContext)} />;
+function StreamedMermaid({ code, closed }: { code: string; closed: boolean }) {
+  return <MermaidBlock code={code} closed={closed} streaming={useContext(StreamingContext)} />;
+}
+
+function StreamedCode({ code, language, closed }: { code: string; language: string; closed: boolean }) {
+  return <CodeBlock code={code} language={language} live={useContext(StreamingContext) && !closed} />;
+}
+
+// Type scale (the six sizes only): h1 text-title semibold; h2 and h3 text-body semibold (h3 a step quieter in colour);
+// h4 text-body medium; h5 and h6 text-small medium, muted. Set in src/index.css under `.md`.
+
+function alignOf(align: unknown) {
+  return align === "center" ? "text-center" : align === "right" ? "text-right" : "text-left";
 }
 
 // One stable components map: swapping maps would give every custom element a new type and re-mount code blocks.
@@ -99,8 +134,11 @@ const components: Components = {
     if (!code) return <pre>{children}</pre>;
     const language = languageOf(code);
     const text = textOf(code).replace(/\n$/, "");
-    if (language === "mermaid") return <StreamedMermaid code={text} />;
-    return <CodeBlock code={text} language={language} />;
+    // Display math waits here as an ordinary block until KaTeX has loaded; show it as plain text, not as a code block.
+    if (language === "math") return <pre className="whitespace-pre-wrap font-mono text-small text-muted-foreground">{text}</pre>;
+    const closed = code.properties?.dataFence !== "open";
+    if (language === "mermaid") return <StreamedMermaid code={text} closed={closed} />;
+    return <StreamedCode code={text} language={language} closed={closed} />;
   },
   code({ node: _node, className, children, ...rest }) {
     return (
@@ -119,16 +157,33 @@ const components: Components = {
   img({ src, alt }) {
     return <BlockedImage src={typeof src === "string" ? src : undefined} alt={alt} />;
   },
+  // Full width inside a wrapper that scrolls sideways, so a wide table never widens the page.
   table({ node: _node, children, ...rest }) {
     return (
-      <div className="md-table-wrap">
-        <table {...rest}>{children}</table>
+      <div className="md-table-wrap my-3 max-w-full overflow-x-auto">
+        <table {...rest} className="w-full border-collapse text-small">
+          {children}
+        </table>
       </div>
     );
   },
+  thead({ node: _node, children }) {
+    return <thead className="bg-gray-100">{children}</thead>;
+  },
+  tr({ node: _node, children }) {
+    return <tr className="border-b border-border last:border-b-0">{children}</tr>;
+  },
+  // CJK text wraps at any character, so without a width floor a wide table squeezes into one-glyph columns instead of scrolling.
+  th({ node: _node, children, align }) {
+    return <th className={`min-w-24 max-w-md px-2.5 py-2 align-top font-semibold ${alignOf(align)}`}>{children}</th>;
+  },
+  td({ node: _node, children, align }) {
+    return <td className={`min-w-24 max-w-md px-2.5 py-2 align-top tabular-nums [overflow-wrap:break-word] ${alignOf(align)}`}>{children}</td>;
+  },
 };
 
-const remarkPlugins: Options["remarkPlugins"] = [remarkGfm, remarkMath, remarkHtmlAsText];
+const remarkPluginsBase: NonNullable<Options["remarkPlugins"]> = [remarkGfm, remarkHtmlAsText, remarkFenceState];
+const remarkPluginsMath: NonNullable<Options["remarkPlugins"]> = [remarkGfm, remarkMath, remarkHtmlAsText, remarkFenceState];
 
 const FENCE = /^ {0,3}(`{3,}|~{3,})/;
 
@@ -137,11 +192,11 @@ const FENCE = /^ {0,3}(`{3,}|~{3,})/;
  * continuation lines with their block. Earlier blocks of a streaming reply never change, so they render once.
  * Trade-off: reference-style link definitions only apply within their own block.
  */
-export function splitBlocks(text: string): string[] {
+export function splitBlocks(text: string, math = true): string[] {
   const blocks: string[] = [];
   let current: string[] = [];
   let fence: string | null = null;
-  let math = false;
+  let inMath = false;
   let pendingBreak = false;
   for (const line of text.split("\n")) {
     if (fence) {
@@ -150,9 +205,9 @@ export function splitBlocks(text: string): string[] {
       if (close && close[1][0] === fence[0] && close[1].length >= fence.length && line.trim() === close[1]) fence = null;
       continue;
     }
-    if (math) {
+    if (inMath) {
       current.push(line);
-      if (line.trim() === "$$") math = false;
+      if (line.trim() === "$$") inMath = false;
       continue;
     }
     if (!line.trim()) {
@@ -170,7 +225,7 @@ export function splitBlocks(text: string): string[] {
     current.push(line);
     const open = line.match(FENCE);
     if (open) fence = open[1];
-    else if (line.trim() === "$$") math = true;
+    else if (math && line.trim() === "$$") inMath = true;
   }
   if (current.length) blocks.push(current.join("\n"));
   return blocks;
@@ -178,7 +233,7 @@ export function splitBlocks(text: string): string[] {
 
 type KatexPlugin = NonNullable<typeof katexModule.current>;
 
-const MarkdownBlock = memo(function MarkdownBlock({ text, highlight, streaming, katex }: { text: string; highlight: string; streaming: boolean; katex: KatexPlugin | null }) {
+const MarkdownBlock = memo(function MarkdownBlock({ text, highlight, streaming, katex, math }: { text: string; highlight: string; streaming: boolean; katex: KatexPlugin | null; math: boolean }) {
   const rehypePlugins = useMemo<Options["rehypePlugins"]>(
     () => [
       rehypeDompurify,
@@ -191,7 +246,7 @@ const MarkdownBlock = memo(function MarkdownBlock({ text, highlight, streaming, 
   return (
     <div className="md-block">
       <StreamingContext.Provider value={streaming}>
-        <ReactMarkdown remarkPlugins={remarkPlugins} rehypePlugins={rehypePlugins} components={components}>
+        <ReactMarkdown remarkPlugins={math ? remarkPluginsMath : remarkPluginsBase} rehypePlugins={rehypePlugins} components={components}>
           {text}
         </ReactMarkdown>
       </StreamingContext.Provider>
@@ -202,10 +257,12 @@ const MarkdownBlock = memo(function MarkdownBlock({ text, highlight, streaming, 
 /**
  * Renders each top-level block on its own. While streaming only the last block is still growing, so it is the only
  * one that re-parses; finished blocks (including their diagrams) are never re-rendered or re-mounted.
+ * `math: false` is for text a person typed: `$` in a shell command must stay literal, so no math syntax is read at all.
  */
-export const Markdown = memo(function Markdown({ text, highlight = "", streaming = false }: { text: string; highlight?: string; streaming?: boolean }) {
-  const blocks = useMemo(() => splitBlocks(text), [text]);
-  const katex = useLazyModule(katexModule, text.includes("$"));
+export const Markdown = memo(function Markdown({ text, highlight = "", streaming = false, math = true }: { text: string; highlight?: string; streaming?: boolean; math?: boolean }) {
+  const source = useMemo(() => (math ? normalizeMath(text) : text), [text, math]);
+  const blocks = useMemo(() => splitBlocks(source, math), [source, math]);
+  const katex = useLazyModule(katexModule, math && source.includes("$"));
   const needle = highlight.trim();
   return (
     <div className="md">
@@ -215,7 +272,8 @@ export const Markdown = memo(function Markdown({ text, highlight = "", streaming
           text={block}
           highlight={needle && block.includes(needle) ? needle : ""}
           streaming={streaming && index === blocks.length - 1}
-          katex={block.includes("$") ? katex : null}
+          katex={math && block.includes("$") ? katex : null}
+          math={math}
         />
       ))}
     </div>

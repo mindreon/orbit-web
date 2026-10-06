@@ -168,7 +168,7 @@ export function Composer({ onSend, onControl, status, closed = false, attention 
               }}
             />
           </div>
-          <div className="flex items-center gap-2 px-2 pb-2">
+          <div className="flex flex-wrap items-center gap-2 px-2 pb-2">
             {config && catalog ? <ConfigMenu draft={config.draft} onChange={config.apply} catalog={catalog} disabled={closed || !config.ready} onAddFile={local.pick} /> : null}
             {config && catalog ? <ToolbarChips draft={config.draft} onChange={config.apply} catalog={catalog} /> : null}
             <PermissionChip />

@@ -91,14 +91,14 @@ export function Conversation({ turns, expertName, files, onOpenFile, onOpenAllFi
     >
       {/* 一行大约 40 个汉字：用户气泡、回复、产物卡片都在这一列里，眼睛不用来回找 */}
       <div className="px-4 py-6 sm:px-6">
-        <div ref={column} data-testid="conversation-column" className="mx-auto max-w-reading space-y-6 text-body">
+        <div ref={column} data-testid="conversation-column" className="mx-auto max-w-reading space-y-9 text-body">
           {custom ? custom.node : turns.map((turn, index) => {
             if (turn.kind === "user") return <UserMessage key={turn.id} turn={turn} />;
             // 产物属于产出它的那次尝试的最后一段；没有尝试归属的产物放在最后一条回复下面。
             const own = files.filter(
               (file) => (file.attemptId !== "" && file.attemptId === turn.attemptId && index === lastIndexOfAttempt[turn.attemptId]) || (file.attemptId === "" && index === lastAgentIndex),
             );
-            return <AgentMessage key={turn.id} turn={turn} expertName={expertName} files={own} totalFiles={totalFiles} onOpenFile={onOpenFile} onOpenAllFiles={onOpenAllFiles} speaker={roles[turn.nodeId]} nameOf={nameOf} />;
+            return <AgentMessage key={turn.id} turn={turn} expertName={expertName} files={own} totalFiles={totalFiles} onOpenFile={onOpenFile} onOpenAllFiles={onOpenAllFiles} speaker={roles[turn.nodeId]} nameOf={nameOf} last={index === lastAgentIndex} />;
           })}
           {children}
         </div>

@@ -1,30 +1,32 @@
-import { ArrowLeft, Bug, ChevronRight, Diff, FolderOpen, Globe, LayoutList, PanelRightClose, Terminal, X, type LucideIcon } from "lucide-react";
-import { fileKey, visibleArtifacts, type ArtifactFile } from "../../lib/artifacts";
-import type { ChatItem, ChatTeam } from "../../lib/chat";
+import { ArrowLeft, Bot, Bug, ChevronRight, Code2, Diff, File, FileImage, FileText, FolderOpen, Globe, LayoutList, Maximize2, Minimize2, PanelRightClose, Terminal, X, type LucideIcon } from "lucide-react";
+import { useEffect, useRef, useState, type CSSProperties } from "react";
+import { fileKey, fileKind, visibleArtifacts, type ArtifactFile, type FileKind } from "../../lib/artifacts";
+import type { ChatItem } from "../../lib/chat";
 import { cn } from "../../lib/cn";
 import { useDeveloperMode } from "../../lib/devMode";
 import type { NodeRole } from "../../lib/display";
 import type { AttemptView, BudgetAmounts, NodeState, ProfileSwitch, TeamStageView } from "../../lib/taskEvents";
 import type { TeamView } from "../../lib/taskConfig";
 import type { Plan, Task, TaskEvent } from "../../lib/tasks";
+import { clampPanelWidth, defaultPanelWidth, readPanelWidth, writePanelWidth } from "../../lib/panelWidth";
+import { BREAKPOINT, useMediaQuery } from "../../lib/useMediaQuery";
 import { ArtifactPreview } from "../conversation/ArtifactPreview";
-import { FileIcon } from "../conversation/ArtifactCards";
-import { memberTitle } from "../conversation/TeamRoster";
-import { Avatar } from "../TeamAvatars";
-import { mentionColor } from "../../lib/chat";
 import { AttemptTimeline } from "./AttemptTimeline";
 import { DeveloperInfo } from "./DeveloperInfo";
 import { EventLog } from "./EventLog";
 import { FileList, FileRows } from "./FileList";
-import { MemberThread } from "./MemberThread";
 import type { NodeActions } from "./NodeActions";
+import { PANEL_WIDTH_VAR, PanelResizeHandle } from "./PanelResizeHandle";
 import { PlanGraph } from "./PlanGraph";
+import { SubAgentsView } from "./SubAgentList";
 import { UsagePanel } from "./UsagePanel";
 
 export const OVERVIEW = "overview";
+/** 团队任务固定多一个「子智能体」标签；文件标签的 key 是 `清单/文件名`，不会撞上这两个。 */
+export const AGENTS = "agents";
 
-/** 概览标签里现在看的是哪一页：首页、全部产物、某位成员的任务，或（开发者模式下）调试信息。 */
-export type Overview = { readonly kind: "home" } | { readonly kind: "artifacts" } | { readonly kind: "member"; readonly role: string } | { readonly kind: "developer" };
+/** 概览标签里现在看的是哪一页：首页、全部产物，或（开发者模式下）调试信息。 */
+export type Overview = { readonly kind: "home" } | { readonly kind: "artifacts" } | { readonly kind: "developer" };
 export const HOME: Overview = { kind: "home" };
 
 interface TaskPanelProps {
@@ -44,6 +46,12 @@ interface TaskPanelProps {
   readonly overview: Overview;
   /** 完整的群聊（成员的任务从这里取）；单智能体任务没有。 */
   readonly chat: readonly ChatItem[] | null;
+  /** 「子智能体」标签里正在看哪位成员的任务；null 是成员列表。 */
+  readonly member: string | null;
+  readonly onMember: (role: string | null) => void;
+  /** 面板占满整个任务页（对话收起）；只在宽屏上有这个状态。 */
+  readonly maximized: boolean;
+  readonly onToggleMaximize: () => void;
   readonly onOverview: (overview: Overview) => void;
   /** 专家引用（id@版本）到显示名。 */
   readonly nameOf: (ref: string) => string;
@@ -57,9 +65,34 @@ interface TaskPanelProps {
   readonly onCollapse: () => void;
 }
 
-const TAB = "flex h-8 max-w-[10rem] items-center gap-1.5 rounded-control px-2.5 text-body";
+const TAB = "group flex h-7 min-w-0 max-w-[13rem] shrink-0 items-center gap-1.5 rounded-control px-2 text-body";
 const TAB_ON = "bg-card font-medium text-foreground shadow-sm";
 const TAB_OFF = "text-gray-600 hover:bg-gray-200";
+const TOOL = "flex h-7 w-7 shrink-0 items-center justify-center rounded-control text-gray-500 hover:bg-gray-200";
+
+const KIND_ICON: Record<FileKind, LucideIcon> = { image: FileImage, html: Code2, markdown: FileText, text: FileText, pdf: FileText, other: File };
+
+/** 一个标签：16px 图标加省略的名字；文件标签右边有关闭 ×，悬停、聚焦和当前标签上才露出来。 */
+function Tab({ label, title = label, Icon, active, onSelect, onClose }: { label: string; /** 悬停时看到的全名，文件标签里是完整路径。 */ title?: string; Icon: LucideIcon; active: boolean; onSelect: () => void; onClose?: () => void }) {
+  const ref = useRef<HTMLSpanElement>(null);
+  // 标签多了会横向滚动：选中的那个滚到看得见。
+  useEffect(() => {
+    if (active) ref.current?.scrollIntoView({ block: "nearest", inline: "nearest" });
+  }, [active]);
+  return (
+    <span ref={ref} className={cn(TAB, active ? TAB_ON : TAB_OFF)}>
+      <button type="button" aria-pressed={active} title={title} className="flex min-w-0 flex-1 items-center gap-1.5 outline-none" onClick={onSelect}>
+        <Icon aria-hidden="true" className="h-4 w-4 shrink-0" />
+        <span className="truncate">{label}</span>
+      </button>
+      {onClose ? (
+        <button type="button" aria-label={`关闭 ${label}`} className={cn("flex h-4 w-4 shrink-0 items-center justify-center rounded-control opacity-0 hover:bg-gray-200 focus-visible:opacity-100 group-focus-within:opacity-100 group-hover:opacity-100", active && "opacity-100")} onClick={onClose}>
+          <X aria-hidden="true" className="h-3.5 w-3.5" />
+        </button>
+      ) : null}
+    </span>
+  );
+}
 
 /** 还没有后端的入口：摆出来，灰着，标「即将」。 */
 const COMING: ReadonlyArray<{ label: string; Icon: LucideIcon }> = [
@@ -81,50 +114,57 @@ function SubHeader({ onBack, children }: { onBack: () => void; children: React.R
 }
 
 /**
- * 右侧详情面板：像浏览器标签页，第一个是概览，点产物会多开一个预览标签。概览里按点击的路径换页：首页（入口和产物）、
- * 某位成员的任务、全部产物，开发者模式下还有调试信息。
- * 宽屏时是并排的一列，灰底托着白卡片，不画边框；窄屏（<1024px）时是从右边滑出的抽屉，由页头的按钮打开。
+ * 右侧详情面板：像浏览器标签页，第一个是概览，团队任务第二个固定是「子智能体」，点产物会多开一个预览标签。
+ * 概览里按点击的路径换页：首页（入口和产物）、全部产物，开发者模式下还有调试信息；成员的任务在「子智能体」里。
+ * 宽屏时是并排的一列，灰底托着白卡片，不画边框，左边缘可以拖动调宽，也可以最大化占满整个任务页；
+ * 窄屏（<1024px）时是从右边滑出的抽屉，由页头的按钮打开。
  */
-export function TaskPanel({ plan, nodes, task, reserved, pendingSwitches, nodeActions, attempts, events, files, openFiles, active, overview, chat, onOverview, nameOf, roles, team, stageOf, onActivate, onOpenFile, onCloseFile, onCollapse }: TaskPanelProps) {
+export function TaskPanel({ plan, nodes, task, reserved, pendingSwitches, nodeActions, attempts, events, files, openFiles, active, overview, chat, member, onMember, maximized, onToggleMaximize, onOverview, nameOf, roles, team, stageOf, onActivate, onOpenFile, onCloseFile, onCollapse }: TaskPanelProps) {
   const developer = useDeveloperMode();
+  const wide = useMediaQuery(BREAKPOINT.lg);
+  const panel = useRef<HTMLElement>(null);
+  const [width, setWidth] = useState(() => readPanelWidth() ?? defaultPanelWidth());
+  const commitWidth = (next: number) => {
+    const clamped = clampPanelWidth(next);
+    setWidth(clamped);
+    writePanelWidth(clamped);
+  };
   const activeFile = openFiles.find((file) => fileKey(file) === active);
   const shown = visibleArtifacts(files);
   const page = overview.kind === "developer" && !developer ? HOME : overview;
   const back = () => onOverview(HOME);
-  const chatTeam: ChatTeam | null = team;
-  const member = page.kind === "member" ? team?.members.find((item) => item.role === page.role) : undefined;
+  const full = maximized && wide;
   return (
     <aside
+      ref={panel}
       aria-label="任务详情"
-      className="flex min-h-0 w-[26rem] shrink-0 flex-col bg-muted max-xl:w-[22rem] max-lg:fixed max-lg:inset-y-0 max-lg:right-0 max-lg:z-40 max-lg:w-[min(26rem,100vw)] max-lg:shadow-xl"
+      style={{ [PANEL_WIDTH_VAR]: `${width}px` } as CSSProperties}
+      className={cn("relative flex min-h-0 flex-col bg-muted max-lg:fixed max-lg:inset-y-0 max-lg:right-0 max-lg:z-40 max-lg:w-[min(26rem,100vw)] max-lg:shadow-xl", full ? "min-w-0 flex-1" : "w-[var(--task-panel-w)] shrink-0 lg:max-w-[min(60rem,70vw)]")}
     >
-      <div className="flex h-12 shrink-0 items-center gap-1 px-2">
-        <button type="button" aria-label="概览" aria-pressed={active === OVERVIEW} className={cn(TAB, "px-2", active === OVERVIEW ? TAB_ON : TAB_OFF)} onClick={() => onActivate(OVERVIEW)}>
-          <LayoutList aria-hidden="true" className="h-4 w-4" />
-          概览
-        </button>
-        <div className="flex min-w-0 flex-1 items-center gap-1 overflow-x-auto">
+      {wide && !full ? <PanelResizeHandle panel={panel} width={width} onCommit={commitWidth} onCollapse={onCollapse} /> : null}
+      <div className="flex h-10 shrink-0 items-center gap-1 px-2">
+        {/* 概览和子智能体钉在左边；只有文件标签在自己的区域里横向滚动。 */}
+        <Tab label="概览" Icon={LayoutList} active={active === OVERVIEW} onSelect={() => onActivate(OVERVIEW)} />
+        {team && chat ? <Tab label="子智能体" Icon={Bot} active={active === AGENTS} onSelect={() => onActivate(AGENTS)} /> : null}
+        <div data-testid="file-tabs" className="flex min-w-0 flex-1 items-center gap-1 overflow-x-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
           {openFiles.map((file) => {
             const key = fileKey(file);
-            return (
-              <span key={key} className={cn(TAB, "shrink-0", active === key ? TAB_ON : TAB_OFF)}>
-                <button type="button" className="flex min-w-0 items-center gap-1.5" onClick={() => onActivate(key)}>
-                  <FileIcon file={file} size="sm" />
-                  <span className="truncate">{file.name}</span>
-                </button>
-                <button type="button" aria-label={`关闭 ${file.name}`} className="rounded-control p-0.5 hover:bg-gray-100" onClick={() => onCloseFile(key)}>
-                  <X className="h-3.5 w-3.5" />
-                </button>
-              </span>
-            );
+            return <Tab key={key} label={file.name.slice(file.name.lastIndexOf("/") + 1)} title={file.name} Icon={KIND_ICON[fileKind(file.name, file.mediaType)]} active={active === key} onSelect={() => onActivate(key)} onClose={() => onCloseFile(key)} />;
           })}
         </div>
-        <button type="button" aria-label="收起详情" className="flex h-8 w-8 shrink-0 items-center justify-center rounded-control text-gray-500 hover:bg-gray-200" onClick={onCollapse}>
-          <PanelRightClose className="h-4 w-4" />
+        {wide ? (
+          <button type="button" aria-label={full ? "还原" : "最大化"} title={full ? "还原（Esc）" : "最大化"} className={TOOL} onClick={onToggleMaximize}>
+            {full ? <Minimize2 aria-hidden="true" className="h-4 w-4" /> : <Maximize2 aria-hidden="true" className="h-4 w-4" />}
+          </button>
+        ) : null}
+        <button type="button" aria-label="收起详情" className={TOOL} onClick={onCollapse}>
+          <PanelRightClose aria-hidden="true" className="h-4 w-4" />
         </button>
       </div>
       {activeFile ? (
         <ArtifactPreview key={fileKey(activeFile)} file={activeFile} />
+      ) : active === AGENTS && team && chat ? (
+        <SubAgentsView chat={chat} team={team} files={files} totalFiles={shown.length} role={member} onRole={onMember} onOpenFile={onOpenFile} onOpenAllFiles={() => onOverview({ kind: "artifacts" })} />
       ) : (
         <div className="min-h-0 flex-1 overflow-y-auto px-4 pb-4 pt-2">
           {page.kind === "home" ? (
@@ -162,26 +202,6 @@ export function TaskPanel({ plan, nodes, task, reserved, pendingSwitches, nodeAc
             <div data-testid="panel-artifacts">
               <SubHeader onBack={back}>全部产物</SubHeader>
               <FileList files={shown} onOpen={onOpenFile} />
-            </div>
-          ) : null}
-          {page.kind === "member" && chat && chatTeam ? (
-            <div data-testid="panel-member" data-role={page.role}>
-              <SubHeader onBack={back}>
-                {(() => {
-                  const { name, label } = memberTitle({ role: page.role, label: member?.label ?? "", name: member?.name ?? "" });
-                  return (
-                    <>
-                      <Avatar name={name} tone={mentionColor(page.role, chatTeam)} size="md" />
-                      <span className="min-w-0 truncate">
-                        {name}
-                        {label ? <span className="ml-1.5 font-normal text-muted-foreground">{label}</span> : null}
-                        <span className="font-normal"> 的任务</span>
-                      </span>
-                    </>
-                  );
-                })()}
-              </SubHeader>
-              <MemberThread items={chat} role={page.role} team={chatTeam} files={files} onOpenFile={onOpenFile} onOpenAllFiles={() => onOverview({ kind: "artifacts" })} totalFiles={shown.length} />
             </div>
           ) : null}
           {page.kind === "developer" ? (

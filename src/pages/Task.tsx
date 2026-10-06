@@ -12,7 +12,7 @@ import { executionChecklist } from "../lib/todos";
 import { useConfigCatalog } from "../lib/configCatalog";
 import { useTaskConfig } from "../lib/useTaskConfig";
 import { TaskHeader } from "../components/tasks/TaskHeader";
-import { HOME, OVERVIEW, TaskPanel, type Overview } from "../components/tasks/TaskPanel";
+import { AGENTS, HOME, OVERVIEW, TaskPanel, type Overview } from "../components/tasks/TaskPanel";
 import { Conversation } from "../components/conversation/Conversation";
 import { GroupChat } from "../components/conversation/GroupChat";
 import { buildChat, latestRosterStatus, mainChat, type ChatItem } from "../lib/chat";
@@ -26,6 +26,7 @@ import { completeTaskNode, controlTask, decideTaskApproval, grantTaskBudget, sen
 import { pendingSwitch, stageOfNode, totalReserved, type BudgetAmounts, type ProfileSwitch } from "../lib/taskEvents";
 import { useTasksStore } from "../lib/tasksStore";
 import { useTaskStream } from "../lib/useTaskStream";
+import { cn } from "../lib/cn";
 import { Alert } from "../ui/Alert";
 import { Skeleton } from "../ui/Skeleton";
 
@@ -69,8 +70,11 @@ function TaskView({ taskId }: { taskId: string }) {
     // 只记宽屏上的开合：窄屏的抽屉每次都从关着开始。
     if (window.matchMedia(BREAKPOINT.lg).matches) writePanelPref(open);
   }, []);
-  // 面板打开时看哪一页：默认首页；成员的任务只有点名册才会打开，不跨任务记。
+  // 面板打开时看哪一页：默认首页；「子智能体」里看哪位成员只有点名册才会打开，不跨任务记。
   const [overview, setOverview] = useState<Overview>(HOME);
+  const [member, setMember] = useState<string | null>(null);
+  // 最大化：面板占满整个任务页，对话藏起来（不卸载，输入框里的草稿还在）；只在宽屏上有，Esc 还原。
+  const [maximized, setMaximized] = useState(false);
   const [openFiles, setOpenFiles] = useState<readonly ArtifactFile[]>([]);
   const [active, setActive] = useState(OVERVIEW);
 
@@ -105,8 +109,20 @@ function TaskView({ taskId }: { taskId: string }) {
     setActive(OVERVIEW);
     setPanelOpen(true);
   }, [setPanelOpen]);
+  const showMember = useCallback((role: string) => {
+    setMember(role);
+    setActive(AGENTS);
+    setPanelOpen(true);
+  }, [setPanelOpen]);
   const stageOf = useCallback((nodeId: string) => stageOfNode(live, nodeId), [live]);
   const drawerOpen = panelOpen && !wide;
+  const full = maximized && panelOpen && wide;
+  useEffect(() => {
+    if (!full) return;
+    const onKey = (event: KeyboardEvent) => event.key === "Escape" && setMaximized(false);
+    document.addEventListener("keydown", onKey);
+    return () => document.removeEventListener("keydown", onKey);
+  }, [full]);
   useEffect(() => {
     if (!drawerOpen) return;
     const onKey = (event: KeyboardEvent) => event.key === "Escape" && setPanelOpen(false);
@@ -205,7 +221,7 @@ function TaskView({ taskId }: { taskId: string }) {
 
   return (
     <div className="flex min-h-0 flex-1">
-      <main className="flex min-h-0 min-w-0 flex-1 flex-col bg-card">
+      <main className={cn("flex min-h-0 min-w-0 flex-1 flex-col bg-card", full && "hidden")}>
         <TaskHeader task={task} onCancel={() => void act(() => controlTask(task.task_id, "cancel"))} onTakeover={() => void act(() => controlTask(task.task_id, "takeover"))} panelOpen={panelOpen} onOpenPanel={() => setPanelOpen(true)} />
         {failure ? <Alert className="mx-4 mt-3 sm:mx-6">{failure}</Alert> : null}
         {notice ? <Alert tone="info" className="mx-4 mt-3 sm:mx-6"><span data-testid="action-notice">{notice}</span></Alert> : null}
@@ -217,7 +233,7 @@ function TaskView({ taskId }: { taskId: string }) {
           pendingApprovals={pendingApprovals}
           roles={roles}
           nameOf={nameOf}
-          custom={chat && team ? { size: chat.reduce((sum, item) => sum + (item.type === "bubble" ? item.text.length + (item.work?.text.length ?? 0) + (item.work?.steps.length ?? 0) : item.type === "user" || item.type === "system" ? item.text.length : 1), chat.length), node: <GroupChat items={chat} team={team} files={files} onOpenFile={openFile} onOpenAllFiles={() => showOverview({ kind: "artifacts" })} onOpenMember={(role) => showOverview({ kind: "member", role })} pendingApprovals={pendingApprovals} cancelledApprovals={cancelledApprovals} approvalInfos={approvals} nodeTitles={nodeTitles} nameOf={nameOf} roleNameOf={roleNameOf} onDecide={(id, decision, always) => void act(() => decideTaskApproval(task.task_id, id, decision, always))} /> } : undefined}
+          custom={chat && team ? { size: chat.reduce((sum, item) => sum + (item.type === "bubble" ? item.text.length + (item.work?.text.length ?? 0) + (item.work?.steps.length ?? 0) : item.type === "user" || item.type === "system" ? item.text.length : 1), chat.length), node: <GroupChat items={chat} team={team} files={files} onOpenFile={openFile} onOpenAllFiles={() => showOverview({ kind: "artifacts" })} onOpenMember={showMember} pendingApprovals={pendingApprovals} cancelledApprovals={cancelledApprovals} approvalInfos={approvals} nodeTitles={nodeTitles} nameOf={nameOf} roleNameOf={roleNameOf} onDecide={(id, decision, always) => void act(() => decideTaskApproval(task.task_id, id, decision, always))} /> } : undefined}
           onOpenFile={openFile}
           onOpenAllFiles={() => showOverview({ kind: "artifacts" })}
         >
@@ -255,6 +271,10 @@ function TaskView({ taskId }: { taskId: string }) {
           active={active}
           overview={overview}
           chat={chat}
+          member={member}
+          onMember={setMember}
+          maximized={full}
+          onToggleMaximize={() => setMaximized((value) => !value)}
           onOverview={showOverview}
           nameOf={nameOf}
           roles={roles}
@@ -263,7 +283,10 @@ function TaskView({ taskId }: { taskId: string }) {
           onActivate={setActive}
           onOpenFile={openFile}
           onCloseFile={closeFile}
-          onCollapse={() => setPanelOpen(false)}
+          onCollapse={() => {
+            setMaximized(false);
+            setPanelOpen(false);
+          }}
         />
       ) : null}
     </div>

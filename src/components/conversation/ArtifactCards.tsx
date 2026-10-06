@@ -36,7 +36,7 @@ export function ArtifactCards({ files, total, onOpen, onOpenAll }: { files: read
   if (shown.length === 0) return null;
   return (
     <div>
-      <ul className="grid gap-2 sm:grid-cols-2">
+      <ul className="grid grid-cols-1 gap-2 sm:grid-cols-2">
         {shown.map((file) => (
           <li key={`${file.manifestId}/${file.name}`} className="flex items-center gap-1 rounded-card bg-secondary pr-2 hover:bg-gray-200">
             <button type="button" className="flex min-w-0 flex-1 items-center gap-3 px-3 py-3 text-left" onClick={() => onOpen(file)}>

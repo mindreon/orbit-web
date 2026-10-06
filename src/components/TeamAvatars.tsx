@@ -8,6 +8,7 @@ export const TONES = ["bg-primary-100 text-primary-700", "bg-success-100 text-su
 const SIZES = {
   sm: "h-5 w-5 text-caption",
   md: "h-7 w-7 text-caption",
+  lg: "h-8 w-8 text-body",
 } as const;
 
 /** A person-sized dot with the first character of a name: how a member (or an expert) is shown without a picture. */
