@@ -1,4 +1,4 @@
-import { Hammer, Link2, Sparkles, X, type LucideIcon } from "lucide-react";
+import { Cpu, Hammer, Link2, Sparkles, X, type LucideIcon } from "lucide-react";
 import type { ReactNode } from "react";
 import { TEAM_TOOLTIP, profileName } from "../../lib/display";
 import { effectiveConnectors, effectiveSkills, expertOf, type ConfigCatalog } from "../../lib/configCatalog";
@@ -47,6 +47,10 @@ export function ConfigChips({ draft, onChange, catalog }: ConfigChipsProps) {
   } else if (draft.expert) {
     const name = expert?.name ?? profileName(draft.expert, catalog.experts);
     chips.push({ key: "expert", label: name, icon: <ExpertAvatar name={name} />, remove: () => onChange({ ...draft, expert: "" }) });
+  }
+  if (draft.model) {
+    // 任务级模型覆盖；× 回到默认（专家的模型，再退到部署默认）。
+    chips.push({ key: "model", label: draft.model, icon: <ChipIcon Icon={Cpu} className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />, remove: () => onChange({ ...draft, model: "" }) });
   }
   for (const id of skills) {
     chips.push({

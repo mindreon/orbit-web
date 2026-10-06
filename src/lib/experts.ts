@@ -19,6 +19,8 @@ export type Expert = {
   /** bundle 的 mcp.json 里还没绑定到连接器的条目：绑定之前不加载。 */
   mcp_unbound?: McpUnbound[];
   created_at: string;
+  /** 从哪来（「agent:<id>」= 目录智能体导入，「persona:<id>」= 助理导入），手写的没有。 */
+  source?: string;
   /** 专家团才有：领队的角色名，和成员。 */
   leader?: string;
   members?: TeamMember[];

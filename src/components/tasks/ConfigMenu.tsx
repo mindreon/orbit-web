@@ -1,12 +1,14 @@
 import { Bot, ChevronRight, Link2, Paperclip, Plus, Sparkles, Wrench } from "lucide-react";
-import { useEffect, useRef, useState, type ReactNode } from "react";
+import { useRef, useState, type ReactNode } from "react";
 import { Link } from "react-router";
-import { TEAM_TOOLTIP, expertSummary, roleName } from "../../lib/display";
+import { TEAM_TOOLTIP } from "../../lib/display";
 import { isTeam, singleExperts, type Expert } from "../../lib/experts";
 import { effectiveConnectors, effectiveSkills, type ConfigCatalog } from "../../lib/configCatalog";
+import { usePopoverClose } from "../../lib/usePopoverClose";
+import { COARSE_POINTER, useMediaQuery } from "../../lib/useMediaQuery";
 import { cn } from "../../lib/cn";
 import { MODE_OPTIONS, type ConfigDraft, type ConfigMode } from "../../lib/taskConfig";
-import { Option } from "./ConfigOption";
+import { Option } from "../../ui/Option";
 import { SkillPicker } from "./SkillPicker";
 
 type Panel = "mode" | "expert" | "skills" | "connectors";
@@ -37,18 +39,9 @@ export function ConfigMenu({ draft, onChange, catalog, disabled = false, onAddFi
   const [open, setOpen] = useState(false);
   const [panel, setPanel] = useState<Panel>("mode");
   const box = useRef<HTMLDivElement>(null);
-
-  useEffect(() => {
-    if (!open) return;
-    const close = (event: MouseEvent) => !box.current?.contains(event.target as Node) && setOpen(false);
-    const onKey = (event: KeyboardEvent) => event.key === "Escape" && setOpen(false);
-    document.addEventListener("mousedown", close);
-    document.addEventListener("keydown", onKey);
-    return () => {
-      document.removeEventListener("mousedown", close);
-      document.removeEventListener("keydown", onKey);
-    };
-  }, [open]);
+  usePopoverClose(open, box, () => setOpen(false));
+  // 触摸屏上不做悬停切换：面板撑开把菜单顶到指针下面，会误切到别的面板，点选才是明确的。
+  const touch = useMediaQuery(COARSE_POINTER);
 
   return (
     <div ref={box} className="relative">
@@ -96,7 +89,7 @@ export function ConfigMenu({ draft, onChange, catalog, disabled = false, onAddFi
                 role="menuitem"
                 aria-expanded={panel === item.id}
                 className={cn("flex h-10 w-full items-center gap-2 rounded-control px-3 text-body text-foreground hover:bg-secondary", panel === item.id && "bg-secondary")}
-                onMouseEnter={() => setPanel(item.id)}
+                onMouseEnter={touch ? undefined : () => setPanel(item.id)}
                 onFocus={() => setPanel(item.id)}
                 onClick={() => setPanel(item.id)}
               >
@@ -128,7 +121,6 @@ function ModePanel({ draft, onChange }: Pick<ConfigMenuProps, "draft" | "onChang
     </>
   );
 }
-
 /** 选中一个专家团：任务会带着它的领队和成员（后端据专家团的引用展开）。 */
 const withTeam = (draft: ConfigDraft, team: Expert): ConfigDraft => ({
   ...draft,
@@ -137,21 +129,19 @@ const withTeam = (draft: ConfigDraft, team: Expert): ConfigDraft => ({
   teamName: team.name,
 });
 
-const teamHint = (team: Expert): string => `领队 ${team.members?.find((member) => member.role === team.leader)?.name ?? ""} · 成员 ${(team.members ?? []).map((member) => roleName(member.role, member.label, team.leader)).join("、")}`;
-
 function ExpertPanel({ draft, onChange, catalog }: Pick<ConfigMenuProps, "draft" | "onChange" | "catalog">) {
   const singles = singleExperts(catalog.experts);
   const teams = catalog.experts.filter(isTeam);
   const single = (ref: string): ConfigDraft => ({ ...draft, expert: ref, team: null, teamName: "" });
   return (
     <>
-      <Option kind="radio" checked={draft.expert === ""} label="默认智能体" hint="不指定专家" onClick={() => onChange(single(""))} />
+      <Option kind="radio" checked={draft.expert === ""} label="默认智能体" onClick={() => onChange(single(""))} />
       {singles.map((expert) => (
-        <Option key={expert.ref} kind="radio" checked={draft.expert === expert.ref} label={expert.name} hint={expertSummary(expert.instructions) || "没有指令"} onClick={() => onChange(single(expert.ref))} />
+        <Option key={expert.ref} kind="radio" checked={draft.expert === expert.ref} label={expert.name} onClick={() => onChange(single(expert.ref))} />
       ))}
       {teams.length > 0 ? <p className="px-3 pb-1 pt-2 text-caption font-medium text-muted-foreground">专家团</p> : null}
       {teams.map((team) => (
-        <Option key={team.ref} kind="radio" checked={draft.expert === team.ref} label={team.name} hint={teamHint(team)} title={TEAM_TOOLTIP} id={team.ref} onClick={() => onChange(withTeam(draft, team))} />
+        <Option key={team.ref} kind="radio" checked={draft.expert === team.ref} label={team.name} title={TEAM_TOOLTIP} id={team.ref} onClick={() => onChange(withTeam(draft, team))} />
       ))}
       {!catalog.loading && catalog.experts.length === 0 ? <p className="px-3 py-2 text-caption text-muted-foreground">还没有自己的专家。</p> : null}
       <Link to="/experts/new" className="mt-1 block rounded-control px-3 py-2 text-body text-primary-700 hover:bg-secondary">
@@ -167,7 +157,7 @@ function ConnectorsPanel({ draft, onChange, catalog }: Pick<ConfigMenuProps, "dr
   return (
     <>
       {catalog.connectors.map((connector) => (
-        <Option key={connector.id} kind="checkbox" checked={chosen.includes(connector.id)} label={connector.name} hint={connector.transport === "streamable_http" ? connector.url : connector.command} onClick={() => toggle(connector.id)} />
+        <Option key={connector.id} kind="checkbox" checked={chosen.includes(connector.id)} label={connector.name} onClick={() => toggle(connector.id)} />
       ))}
       {!catalog.loading && catalog.connectors.length === 0 ? <p className="px-3 py-2 text-caption text-muted-foreground">还没有连接器。</p> : null}
       <Link to="/experts/connectors/new" className="mt-1 block rounded-control px-3 py-2 text-body text-primary-700 hover:bg-secondary">

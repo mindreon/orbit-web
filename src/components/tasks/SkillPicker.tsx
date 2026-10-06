@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 import { describeFailure } from "../../lib/api";
 import { listSkills, type Skill } from "../../lib/catalog";
 import { Input } from "../../ui/fields";
-import { Option } from "./ConfigOption";
+import { Option } from "../../ui/Option";
 
 /** 技能目录很大（八万多条），所以按关键词搜索，只显示第一页。选中的由调用方保存。 */
 export function SkillPicker({ chosen, onToggle }: { chosen: readonly string[]; onToggle: (skill: Skill) => void }) {

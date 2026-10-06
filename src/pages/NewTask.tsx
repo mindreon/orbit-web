@@ -1,8 +1,9 @@
-import { ArrowUp } from "lucide-react";
+import { ArrowUp, Sparkles } from "lucide-react";
 import { useState } from "react";
 import { COARSE_POINTER, useMediaQuery } from "../lib/useMediaQuery";
 import { useNavigate } from "react-router";
 import { PermissionChip } from "../components/tasks/PermissionChip";
+import { ModelSelector } from "../components/tasks/ModelSelector";
 import { describeFailure } from "../lib/api";
 import { ConfigChips } from "../components/tasks/ConfigChips";
 import { FileChips, filesToAttachmentText, useLocalFiles } from "../components/tasks/LocalFiles";
@@ -92,6 +93,17 @@ export function NewTaskPage() {
             <ConfigMenu draft={draft} onChange={setDraft} catalog={catalog} onAddFile={local.pick} />
             <PermissionChip />
             <span className="ml-auto" />
+            {/* 提示词优化要一个改写输入的模型端点，后端还没有：先按 WorkBuddy 的样子占位。 */}
+            <button
+              type="button"
+              aria-label="提示词优化"
+              title="提示词优化（即将开放）"
+              disabled
+              className="flex h-8 w-8 items-center justify-center rounded-control text-gray-600 disabled:cursor-not-allowed disabled:opacity-50"
+            >
+              <Sparkles aria-hidden="true" className="h-4 w-4" />
+            </button>
+            <ModelSelector draft={draft} onChange={setDraft} catalog={catalog} />
             <button
               type="button"
               aria-label="开始任务"

@@ -1,8 +1,9 @@
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { useLocation, useNavigate, useParams } from "react-router";
+import { ConnectorChooser } from "../components/experts/ConnectorChooser";
+import { SkillChooser } from "../components/experts/SkillChooser";
 import { ExpertFiles } from "../components/experts/ExpertFiles";
 import { TeamFields } from "../components/experts/TeamFields";
-import { SkillPicker } from "../components/tasks/SkillPicker";
 import { describeFailure } from "../lib/api";
 import { listMcpConnectors, type McpConnector } from "../lib/catalog";
 import { createExpert, isTeam, listExperts, singleExperts, updateExpert, type Expert, type ExpertInput, type McpUnbound, type SkippedFile, type UnmatchedRefs } from "../lib/experts";
@@ -33,6 +34,7 @@ export function ExpertEditorPage() {
   const [model, setModel] = useState("");
   const [connectorIds, setConnectorIds] = useState<readonly string[]>([]);
   const [skillIds, setSkillIds] = useState<readonly string[]>([]);
+  const [skillLabels, setSkillLabels] = useState<Readonly<Record<string, string>>>({});
   const [connectors, setConnectors] = useState<readonly McpConnector[]>([]);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
@@ -82,6 +84,9 @@ export function ExpertEditorPage() {
     setRefused(null);
     setError("");
   };
+  const handleLabels = useCallback((records: Readonly<Record<string, string>>) => setSkillLabels((prev) => ({ ...prev, ...records })), []);
+  // 从系统预置导入的成员专家并进列表：校验认得它，下拉里也出现在「我的专家」。
+  const importExpert = (expert: Expert) => setExperts((prev) => (prev.some((item) => item.expert_id === expert.expert_id) ? prev : [...prev, expert]));
 
   const save = async () => {
     if (saving) return;
@@ -139,7 +144,7 @@ export function ExpertEditorPage() {
             </div>
           )}
           {kind === "team" ? (
-            <TeamFields form={team} onChange={editTeam} experts={singleExperts(experts)} problems={problems} />
+            <TeamFields form={team} onChange={editTeam} experts={singleExperts(experts)} problems={problems} onImported={importExpert} />
           ) : (
             <>
             <Field label="名称">
@@ -156,14 +161,8 @@ export function ExpertEditorPage() {
               <Input aria-label="模型" value={model} placeholder="留空使用默认模型" onChange={(event) => setModel(event.target.value)} />
             </Field>
             <fieldset>
-              <legend className="mb-1 p-0 text-small font-medium text-gray-700">默认连接器</legend>
-              {connectors.length === 0 ? <p className="text-body text-muted-foreground">还没有连接器。</p> : null}
-              {connectors.map((connector) => (
-                <label key={connector.id} className="flex items-center gap-2 py-1 text-body">
-                  <input type="checkbox" checked={connectorIds.includes(connector.id)} onChange={() => toggle(connectorIds, setConnectorIds, connector.id)} />
-                  {connector.name}
-                </label>
-              ))}
+              <legend className="mb-1 p-0 text-small font-medium text-gray-700">默认连接器（已选 {connectorIds.length}）</legend>
+              <ConnectorChooser chosen={connectorIds} connectors={connectors} onToggle={(id) => toggle(connectorIds, setConnectorIds, id)} />
               {mcpUnbound.length > 0 ? (
                 <div className="mt-2">
                   <Alert tone="warning">
@@ -175,7 +174,13 @@ export function ExpertEditorPage() {
             </fieldset>
             <fieldset>
               <legend className="mb-1 p-0 text-small font-medium text-gray-700">默认技能（已选 {skillIds.length}）</legend>
-              <SkillPicker chosen={skillIds} onToggle={(skill) => toggle(skillIds, setSkillIds, skill.id)} />
+              <SkillChooser
+                chosen={skillIds}
+                labels={skillLabels}
+                onLabels={handleLabels}
+                onToggle={(skill) => toggle(skillIds, setSkillIds, skill.id)}
+                onRemove={(id) => toggle(skillIds, setSkillIds, id)}
+              />
             </fieldset>
             {expertId ? <ExpertFiles expertId={expertId} /> : null}
             </>

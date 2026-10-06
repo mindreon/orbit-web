@@ -89,7 +89,7 @@ const expert = {
   version: 1,
   name: "文案专家",
   instructions: "---\nname: writer\ndescription: 写作助手\n---\n你是一名文案专家，擅长把复杂的信息写成一页能读完的摘要。",
-  model: "",
+  model: "test-model",
   connector_ids: [],
   skill_ids: [],
   created_at: NOW,
@@ -123,7 +123,7 @@ const AGENTS = [
   agent("神秘助手", { name: "神秘助手", description: "没有收录的框架标签不应该露出来。", framework: "weird-framework", catalogues: ["others"] }),
 ];
 
-async function mockBackend(page: Page, scenario: { events?: typeof events; plan?: typeof plan; task?: Record<string, unknown>; experts?: unknown[]; config?: Record<string, unknown>; refuseExpert?: Record<string, unknown> } = {}) {
+async function mockBackend(page: Page, scenario: { events?: typeof events; plan?: typeof plan; task?: Record<string, unknown>; experts?: unknown[]; config?: Record<string, unknown>; refuseExpert?: Record<string, unknown>; fromAgent?: Record<string, unknown> } = {}) {
   const feed = scenario.events ?? events;
   const shownPlan = scenario.plan ?? plan;
   const shownTask = { ...task, ...scenario.task };
@@ -152,8 +152,10 @@ async function mockBackend(page: Page, scenario: { events?: typeof events; plan?
     if (pathname.endsWith("/artifacts")) return json({ items: [{ manifest_id: "man_1", task_id: TASK_ID, attempt_id: "att_1", entries: [{ name: "风险摘要.md", media_type: "text/markdown", size_bytes: 2048, blob_ref: "sha256:x" }], created_at: NOW }] });
     if (pathname.endsWith("/config")) return json(scenario.config ?? { config_version: 1, expert: "writer@1", skills: null, connector_ids: null, mode: "default" });
     if (pathname === "/v1/experts" && route.request().method() === "POST" && scenario.refuseExpert) return route.fulfill({ status: 400, json: scenario.refuseExpert });
+    if (pathname === "/v1/experts/from-agent" && scenario.fromAgent) return json(scenario.fromAgent);
     if (pathname === "/v1/experts") return json({ items: scenario.experts ?? [expert] });
     if (pathname === "/v1/agents") return json({ items: AGENTS, total: AGENTS.length, page: 1, pageSize: 24 });
+    if (pathname === "/v1/skill-categories") return json({ items: [{ key: "writing", name: "写作", nameEn: "Writing", sortOrder: 1 }] });
     if (pathname === "/v1/skills") return json({ items: [{ id: "@a/s", handle: "@a", slug: "s", name: "周报写作", description: "把零散记录整理成周报。", descriptionEn: "", category: "", categoryName: "", tags: [], license: "", iconUrl: "", sourceUrl: "", downloads: 12, visits: 1, likes: 3, updatedAt: "0", source: "common" }], total: 1, page: 1, pageSize: 24, installedAt: NOW });
     if (pathname === "/v1/mcp-market") return json({ items: [{ id: "m1", name: "文档检索", summary: "搜索团队文档。", author: "示例团队", category: "dev", categoryName: "开发", categoryMore: 0, calls: 0, views: 10, stars: 2, verified: true, hosted: true, needsOnline: true, source: "modelscope" }], total: 1, stored: 1, page: 1, pageSize: 30 });
     return json({ items: [], total: 0 });
@@ -272,6 +274,17 @@ for (const viewport of VIEWPORTS) {
       if (phone) expect(hint + (placeholder ?? "")).not.toMatch(/Shift\+Enter/);
       else expect(placeholder).toContain("Shift+Enter");
       await check(page, "home");
+
+      // The toolbar model picker (WorkBuddy's ⚡ slot): the candidates are the models the experts use, and 默认模型
+      // defers to the expert's own model, then the deployment default.
+      await page.getByTestId("model-selector").click();
+      await page.getByRole("menuitemradio", { name: "test-model" }).click();
+      await expect(page.locator('[data-testid="config-chip"][data-chip="model"]')).toContainText("test-model");
+      await page.getByRole("button", { name: "移除 test-model" }).click();
+      await expect(page.getByTestId("config-chip")).toHaveCount(0);
+      await expect(page.getByTestId("model-selector")).toContainText("默认模型");
+      // 提示词优化 needs a prompt-rewriting model endpoint that control does not have yet: present, but off.
+      await expect(page.getByRole("button", { name: "提示词优化" })).toBeDisabled();
     });
 
     test("task page: conversation, plan and a waiting approval", async ({ page }) => {
@@ -507,9 +520,15 @@ for (const viewport of VIEWPORTS) {
       await expect(page.getByText("请填写这位成员的显示名。")).toBeVisible();
       await check(page, "team-editor-errors");
       await page.getByLabel("名称", { exact: true }).fill("内容小队");
-      await page.getByLabel("专家 1").selectOption("writer@1");
+      // The member's expert is a searchable dropdown: own experts and the catalog's presets, in one panel.
+      await page.getByLabel("专家 1").click();
+      await expect(page.getByRole("menuitemradio", { name: /文案专家/ })).toBeVisible();
+      await expect(page.getByText("系统预置")).toBeVisible();
+      await expect(page.getByRole("menuitemradio", { name: /财报分析师/ })).toBeVisible();
+      await page.getByRole("menuitemradio", { name: /文案专家/ }).click();
       await page.getByLabel("显示名 2").fill("研究员");
-      await page.getByLabel("专家 2").selectOption("research@1");
+      await page.getByLabel("专家 2").click();
+      await page.getByRole("menuitemradio", { name: /调研专家/ }).click();
       // The form is checked again after every change: a repeated id is flagged on the row that repeats it, and the flag
       // goes the moment the id is fixed (it used to stay until the next save).
       await page.getByTestId("team-member-advanced").nth(1).getByText("高级").click();
@@ -530,9 +549,11 @@ for (const viewport of VIEWPORTS) {
       await page.getByRole("tab", { name: "专家团" }).click();
       await page.getByRole("button", { name: "添加成员" }).click();
       await page.getByLabel("名称", { exact: true }).fill("内容小队");
-      await page.getByLabel("专家 1").selectOption("writer@1");
+      await page.getByLabel("专家 1").click();
+      await page.getByRole("menuitemradio", { name: /文案专家/ }).click();
       await page.getByLabel("显示名 2").fill("研究员");
-      await page.getByLabel("专家 2").selectOption("research@1");
+      await page.getByLabel("专家 2").click();
+      await page.getByRole("menuitemradio", { name: /调研专家/ }).click();
       await page.getByRole("button", { name: "保存" }).click();
       await expect(page.getByTestId("team-member-row").nth(1).getByText("这位成员的专家不存在，或不在你的空间里。")).toBeVisible();
       await expect(page.getByTestId("team-member-row").nth(0).getByText("这位成员的专家不存在")).toHaveCount(0);
@@ -540,7 +561,8 @@ for (const viewport of VIEWPORTS) {
       expect(await page.locator("body").innerText()).not.toContain("unknown team member expert");
       await check(page, "team-editor-refused");
       // Changing the form clears control's refusal.
-      await page.getByLabel("专家 2").selectOption("reviewer@1");
+      await page.getByLabel("专家 2").click();
+      await page.getByRole("menuitemradio", { name: /评审专家/ }).click();
       await expect(page.getByText("这位成员的专家不存在，或不在你的空间里。")).toHaveCount(0);
 
       // Editing keeps the kind: no type switch, the members are filled in and the leader is marked.
@@ -554,6 +576,58 @@ for (const viewport of VIEWPORTS) {
       await expect(page.getByLabel("角色 ID 2")).toHaveValue("member-2");
       await expect(page.getByLabel("第 1 位成员当领队")).toBeChecked();
       await check(page, "team-edit");
+    });
+
+    test("expert editor: default skills open in a searchable dropdown, chosen skills become removable chips", async ({ page }) => {
+      await page.goto("/experts/new");
+      // The catalog stays off the page until it is asked for: only the trigger is there.
+      await expect(page.getByRole("menuitemcheckbox", { name: /周报写作/ })).toHaveCount(0);
+      await page.getByRole("button", { name: "选择技能" }).click();
+      await expect(page.getByRole("menuitemcheckbox", { name: /周报写作/ })).toBeVisible();
+      await expect(page.getByLabel("按分类筛选")).toBeVisible();
+      await page.getByRole("menuitemcheckbox", { name: /周报写作/ }).click();
+      // Choosing keeps the panel open; 完成 closes it and the chip stays, then the chip can be removed.
+      await expect(page.getByRole("button", { name: "移除 周报写作" })).toBeVisible();
+      await page.getByRole("button", { name: "完成" }).click();
+      await expect(page.getByRole("menuitemcheckbox", { name: /周报写作/ })).toHaveCount(0);
+      await expect(page.getByRole("button", { name: "移除 周报写作" })).toBeVisible();
+      await page.getByRole("button", { name: "移除 周报写作" }).click();
+      await expect(page.getByRole("button", { name: "移除 周报写作" })).toHaveCount(0);
+      // Default connectors work the same way: chips plus a click-to-open list.
+      await page.route("**/v1/mcp-connectors", (route) => route.fulfill({ json: { items: [{ id: "mcp1", name: "文档检索", transport: "stdio", command: "search --docs", createdAt: NOW }] } }));
+      await page.reload();
+      await page.getByRole("button", { name: "选择连接器" }).click();
+      await page.getByRole("menuitemcheckbox", { name: /文档检索/ }).click();
+      await expect(page.getByRole("button", { name: "移除 文档检索" })).toBeVisible();
+      await page.getByRole("button", { name: "完成" }).click();
+      await expect(page.getByRole("menuitemcheckbox", { name: /文档检索/ })).toHaveCount(0);
+    });
+
+    test("teams: picking a preset agent imports it as your own expert exactly once", async ({ page }) => {
+      const imported = { ...expert, expert_id: "imported", ref: "imported@1", name: "财报分析师", source: `agent:${AGENTS[0].id}` };
+      await page.unroute("**/v1/**");
+      await mockBackend(page, { experts: [expert], fromAgent: { expert: imported, unmatched: { skills: [], connectors: [] } } });
+      const fromAgentCalls: string[] = [];
+      page.on("request", (request) => {
+        if (request.method() === "POST" && new URL(request.url()).pathname === "/v1/experts/from-agent") fromAgentCalls.push(request.url());
+      });
+      await page.goto("/experts/new");
+      await page.getByRole("tab", { name: "专家团" }).click();
+      await page.getByRole("button", { name: "专家 1" }).click();
+      await page.getByRole("menuitemradio", { name: /财报分析师/ }).click();
+      // The import takes a moment: the trigger keeps saying 请选择 until it lands.
+      await expect(page.getByRole("button", { name: "专家 1" })).toContainText("财报分析师");
+      await expect(fromAgentCalls).toHaveLength(1);
+      // Reopening the dropdown, the preset is marked as added; picking it again selects the imported expert, no second import.
+      await page.getByRole("button", { name: "专家 1" }).click();
+      await expect(page.getByText("已添加")).toBeVisible();
+      await page.getByRole("menuitemradio", { name: /已添加/ }).click();
+      await expect(fromAgentCalls).toHaveLength(1);
+      // The saved team pins the imported expert's versioned ref.
+      const savePost = page.waitForRequest((request) => request.method() === "POST" && new URL(request.url()).pathname === "/v1/experts");
+      await page.getByLabel("名称", { exact: true }).fill("内容小队");
+      await page.getByRole("button", { name: "保存" }).click();
+      expect((await savePost).postData() ?? "").toContain('"expert":"imported@1"');
     });
 
     test("teams: member replies carry the role, the plan groups by member, the team stage opens, a member's approval says who asks", async ({ page }) => {
@@ -640,9 +714,8 @@ for (const viewport of VIEWPORTS) {
       const option = page.getByRole("menuitemradio", { name: /内容小队/ });
       await expect(option).toBeVisible();
       await expect(option).toHaveAttribute("title", "领队负责规划，成员按分工执行");
-      await expect(option).toContainText("领队 文案专家");
-      // A team is not offered as a single expert: the single experts are listed on their own.
-      await expect(page.getByRole("menuitemradio", { name: /^文案专家 / })).toBeVisible();
+      // The rows carry the name only (the meaning lives in the tooltip); a team is not offered as a single expert.
+      await expect(page.getByRole("menuitemradio", { name: /^文案专家$/ })).toBeVisible();
       await check(page, "team-menu");
       await option.click();
       const chip = page.locator('[data-testid="config-chip"][data-chip="team"]');

@@ -14,7 +14,7 @@ describe("the configuration of a task with a team", () => {
   it("writes the team's own ref back as team_ref, not the leader's expert (C1)", () => {
     const draft = viewToDraft(view({ team, team_ref: "team_1@2" }));
     expect(draft).toMatchObject({ expert: "team_1@2", team });
-    expect(draftToInput({ ...draft, mode: "ask" })).toEqual({ team_ref: "team_1@2", skills: null, connector_ids: null, mode: "ask" });
+    expect(draftToInput({ ...draft, mode: "ask" })).toEqual({ team_ref: "team_1@2", model: "", skills: null, connector_ids: null, mode: "ask" });
   });
 
   it("reads the ref from the team when the view has no team_ref of its own (C1)", () => {
@@ -30,13 +30,13 @@ describe("the configuration of a task with a team", () => {
   it("reads a single expert without a team, and writes it as expert (C2)", () => {
     const draft = viewToDraft(view());
     expect(draft).toMatchObject({ expert: "lead_e@1", team: null });
-    expect(draftToInput(draft)).toEqual({ expert: "lead_e@1", skills: null, connector_ids: null, mode: "default" });
+    expect(draftToInput(draft)).toEqual({ expert: "lead_e@1", model: "", skills: null, connector_ids: null, mode: "default" });
     expect(viewToDraft(view({ team: null })).team).toBeNull();
   });
 
   it("sends a single expert chosen after a team as expert, with no team_ref (C3)", () => {
     const picked = { ...viewToDraft(view({ team, team_ref: "team_1@2" })), expert: "solo@1", team: null, teamName: "" };
-    expect(draftToInput(picked)).toEqual({ expert: "solo@1", skills: null, connector_ids: null, mode: "default" });
+    expect(draftToInput(picked)).toEqual({ expert: "solo@1", model: "", skills: null, connector_ids: null, mode: "default" });
   });
 
   it("is not the default draft, and differs from one with another expert (C3)", () => {
