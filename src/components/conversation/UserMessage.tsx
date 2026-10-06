@@ -8,7 +8,7 @@ export function UserBubble({ text, at, interrupt, mentions, children }: { text: 
     <div data-testid="user-message" data-mentions={mentions} className="group/msg relative flex flex-col items-end">
       <div className="max-w-[78%]">
         {interrupt ? <p className="mb-1 text-right text-caption text-warning-700">已打断当前执行</p> : null}
-        <div className="whitespace-pre-wrap break-words rounded-bubble bg-secondary px-4 py-2 text-body text-foreground">{children ?? text}</div>
+        <div data-testid="user-text" className="whitespace-pre-wrap break-words rounded-bubble bg-secondary px-4 py-2 text-body text-foreground">{children ?? text}</div>
       </div>
       <ActionRow testId="user-actions" align="end">
         <CopyButton text={text} label="复制消息" />

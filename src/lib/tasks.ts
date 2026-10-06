@@ -142,9 +142,12 @@ export function deleteTask(id: string): Promise<void> {
   return api<void>(`/v1/tasks/${encodeURIComponent(id)}`, { method: "DELETE" });
 }
 
-/** `always`: with approve, also allow what the approval offered for the rest of the task. */
-export function decideTaskApproval(id: string, approvalId: string, decision: "approve" | "reject", always = false) {
-  return api<Record<string, unknown>>(`/v1/tasks/${encodeURIComponent(id)}/approvals/${encodeURIComponent(approvalId)}`, { method: "POST", body: JSON.stringify({ decision, always }) });
+/**
+ * `always`: with approve, also allow what the approval offered for the rest of the task.
+ * `comment`: why it was refused or how to adjust; control keeps it on the decision (approval.decided) but the runtime does not hand it to the agent, so the page also sends it as a message.
+ */
+export function decideTaskApproval(id: string, approvalId: string, decision: "approve" | "reject", always = false, comment = "") {
+  return api<Record<string, unknown>>(`/v1/tasks/${encodeURIComponent(id)}/approvals/${encodeURIComponent(approvalId)}`, { method: "POST", body: JSON.stringify({ decision, always, ...(comment ? { comment } : {}) }) });
 }
 
 export type StreamState = "connected" | "reconnecting";

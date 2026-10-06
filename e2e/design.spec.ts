@@ -319,31 +319,29 @@ for (const viewport of VIEWPORTS) {
       const loud = await approval.evaluate((el) => ({ shadow: getComputedStyle(el).boxShadow, bg: getComputedStyle(el).backgroundColor }));
       expect(loud.shadow).not.toBe("none");
       expect(loud.bg).not.toBe("rgba(0, 0, 0, 0)");
-      await expect(page.getByRole("button", { name: "允许一次" })).toBeVisible();
+      await expect(page.getByRole("button", { name: "允许", exact: true })).toBeVisible();
 
-      // composer never overlaps what it follows
-      const composer = await page.getByPlaceholder("向任务发送消息").boundingBox();
+      // The approval is docked in the composer's slot: inside the viewport, the composer hidden (and inert) while it waits, a one-line marker left in the chat.
       const lastCard = await approval.boundingBox();
-      expect(composer!.y).toBeGreaterThanOrEqual(0);
-      expect(lastCard!.y + lastCard!.height, "approval card is above the composer when scrolled to").toBeLessThanOrEqual(composer!.y + 1);
+      expect(lastCard!.y + lastCard!.height, "approval card is inside the viewport").toBeLessThanOrEqual(viewport.height);
+      await expect(page.getByTestId("composer")).toBeHidden();
+      await expect(page.getByTestId("approval-marker")).toContainText("等待你确认");
 
       const header = page.locator("main header").first();
       await expect(header).not.toContainText("plan v");
 
       // Polish: one status per fact. The floating 「等待审批」 badge is gone while the card is shown,
-      // badges are caption size (12px) at every width, and the composer's stop button yields to the card's primary action.
+      // badges are caption size (12px) at every width.
       await expect(page.getByTestId("agent-message").last().getByText("等待审批")).toHaveCount(0);
       expect(await page.getByTestId("task-status").evaluate((el) => getComputedStyle(el).fontSize)).toBe("12px");
       const title = await header.locator("h2").evaluate((el) => Number.parseFloat(getComputedStyle(el).fontSize));
       expect(title).toBeGreaterThan(12);
-      const stop = await page.getByTestId("composer-action").evaluate((el) => getComputedStyle(el).backgroundColor);
-      const allow = await page.getByRole("button", { name: "允许一次" }).evaluate((el) => getComputedStyle(el).backgroundColor);
-      expect(stop, "composer action is not the primary blue while a card waits").not.toBe(allow);
       if (phone) {
         const hints = await page.locator("body").innerText();
         expect(hints).not.toMatch(/Shift\+Enter|⌘\/Ctrl/);
-        await expect(page.getByPlaceholder("向任务发送消息")).toBeVisible();
-        await expect(page.getByText("内容由 AI 生成，请核实重要信息。")).toBeVisible();
+        // The composer is mounted but hidden while the approval waits; its notice is still part of the page.
+        await expect(page.getByPlaceholder("向任务发送消息")).toBeAttached();
+        await expect(page.getByText("内容由 AI 生成，请核实重要信息。")).toBeAttached();
       }
 
       if (phone) {
@@ -416,14 +414,19 @@ for (const viewport of VIEWPORTS) {
       await mockBackend(page, { events: sopEvents as never, plan: sopPlan as never, task: { pending_approvals: ["apr_1", "apr_2"], profile: "default@1" } });
       await enableDeveloperMode(page);
       await page.goto(`/tasks/${TASK_ID}`);
-      await expect(page.getByTestId("approval-item")).toHaveCount(2);
+      // two waiting approvals queue in the dock, one card at a time; the chat keeps a one-line marker for each
+      await expect(page.getByTestId("approval-marker")).toHaveCount(2);
+      const card = page.getByTestId("approval-item");
+      await expect(page.getByTestId("dock-queue")).toContainText("1 / 2");
       // both approval kinds render with the summary as the title, a plain approve / reject, and the accent bar
-      const cards = page.getByTestId("approval-item");
-      await expect(cards.nth(0)).toContainText("Accept the result of step 3/3");
-      await expect(cards.nth(1)).toContainText("Ship the migration?");
-      await expect(cards.nth(1).getByRole("button", { name: "批准" })).toBeVisible();
-      await expect(cards.nth(1).getByTestId("attention-bar")).toBeVisible();
-      await expect(cards.nth(1)).not.toContainText("需要你的确认");
+      await expect(card).toContainText("Accept the result of step 3/3");
+      await expect(card.getByRole("button", { name: "批准" })).toBeVisible();
+      await page.getByRole("button", { name: "下一件待处理" }).click();
+      await expect(page.getByTestId("dock-queue")).toContainText("2 / 2");
+      await expect(card).toContainText("Ship the migration?");
+      await expect(card.getByRole("button", { name: "批准" })).toBeVisible();
+      await expect(card.getByTestId("attention-bar")).toBeVisible();
+      await expect(card).not.toContainText("需要你的确认");
 
       await openDeveloperView(page, phone);
       const panel = page.getByRole("complementary", { name: "任务详情" });
@@ -796,7 +799,10 @@ for (const viewport of VIEWPORTS) {
       }
       await check(page, "team-chat");
 
-      // The composer with the picker open.
+      // The composer is hidden while the member's approval waits; once it is decided the composer is back, with the picker open.
+      await page.unroute("**/v1/**");
+      await mockBackend(page, { events: teamEvents as never, plan: teamPlan as never, task: { profile: "writer@1", pending_approvals: [] }, experts: [expert, researcher, reviewer, team], config: teamConfig });
+      await page.reload();
       await page.getByPlaceholder("向任务发送消息").click();
       await page.getByPlaceholder("向任务发送消息").pressSequentially("@");
       const picker = page.getByTestId("mention-picker");

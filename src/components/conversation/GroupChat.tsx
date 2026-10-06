@@ -8,8 +8,8 @@ import { cn } from "../../lib/cn";
 import { StatusBadge } from "../../ui/StatusBadge";
 import { RichText } from "../markdown/RichText";
 import { Avatar } from "../TeamAvatars";
-import { ApprovalInbox } from "../tasks/ApprovalInbox";
-import type { ApprovalInfo } from "../../lib/approvals";
+import { ApprovalMarker } from "../tasks/ApprovalInbox";
+import { approvalState, type ApprovalInfo } from "../../lib/approvals";
 import { ArtifactCards } from "./ArtifactCards";
 import { MentionChip, MentionText } from "./MentionChip";
 import { StepList } from "./StepList";
@@ -27,12 +27,13 @@ interface GroupChatProps {
   /** 点名册里的一位成员：在右侧看他的任务。 */
   readonly onOpenMember: (role: string) => void;
   readonly pendingApprovals: readonly string[];
-  readonly cancelledApprovals: readonly string[];
+  /** 已有结果的审批怎么结束的（approval.decided）：对话里的标记据此写「已允许 / 已拒绝 / 已取消」。 */
+  readonly approvalOutcomes: Readonly<Record<string, string>>;
   readonly approvalInfos: Readonly<Record<string, ApprovalInfo>>;
-  readonly nodeTitles: Readonly<Record<string, string>>;
   readonly nameOf: (ref: string) => string;
   readonly roleNameOf: (role: string) => string;
-  readonly onDecide: (approvalId: string, decision: "approve" | "reject", always: boolean) => void;
+  /** 点「等待你确认」的标记：把停靠在输入框位置的那张卡翻出来。 */
+  readonly onFocusApproval: (approvalId: string) => void;
 }
 
 function Thinking({ text }: { text: string }) {
@@ -89,7 +90,7 @@ function BubbleBody({ bubble, team, files, finalId, developer, onOpenFile, onOpe
         </div>
       ) : null}
       {text !== "" || bubble.live ? (
-        <div className={cn("rounded-card rounded-tl-control px-4 py-2.5 text-body text-foreground", bubble.kind === "note" ? "bg-card ring-1 ring-border" : "bg-secondary")}>
+        <div data-testid="chat-text" className={cn("rounded-card rounded-tl-control px-4 py-2.5 text-body text-foreground", bubble.kind === "note" ? "bg-card ring-1 ring-border" : "bg-secondary")}>
           {bubble.kind === "review" && bubble.reviewRound ? (
             <p data-testid="chat-review" className="mb-1 flex items-center gap-1.5 text-small font-medium text-primary-700">
               <ClipboardCheck aria-hidden="true" className="h-4 w-4" />
@@ -149,7 +150,7 @@ function BubbleGroup({ group, nameOf, ...rest }: { group: Extract<ChatGroup, { t
  * 有专家团的任务的主对话：只有用户、领队和结论。成员的派活和回复不在这里，折成领队这一轮下面的一行名册，点成员到右侧看他的任务；
  * 一位发言者的连续气泡共用一个名字，头像在这一组的左下角。
  */
-export function GroupChat({ items, team, nameOf, pendingApprovals, cancelledApprovals, approvalInfos, nodeTitles, roleNameOf, onDecide, onOpenMember, ...rest }: GroupChatProps) {
+export function GroupChat({ items, team, nameOf, pendingApprovals, approvalOutcomes, approvalInfos, roleNameOf, onFocusApproval, onOpenMember, ...rest }: GroupChatProps) {
   const developer = useDeveloperMode();
   const main = useMemo(() => mainChat(items, team), [items, team]);
   const finalId = useMemo(() => finalAnswerId(main), [main]);
@@ -183,20 +184,19 @@ export function GroupChat({ items, team, nameOf, pendingApprovals, cancelledAppr
             </div>
           );
         }
-        // An approval asked in the middle of the chat stays where it was asked, with the member's name on it.
-        const shown = group.items.flatMap((item) => (item.type === "approval" ? [item.approvalId] : [])).filter((id) => pendingApprovals.includes(id) || cancelledApprovals.includes(id));
-        if (shown.length === 0) return null;
+        // An approval asked in the middle of the chat leaves a one-line marker where it was asked; the card to decide it is docked in the composer's place.
+        const asked = group.items.flatMap((item) => (item.type === "approval" ? [item.approvalId] : []));
+        const marked = asked.flatMap((id) => {
+          const state = approvalState(id, pendingApprovals, approvalOutcomes);
+          return state ? [{ id, state }] : [];
+        });
+        if (marked.length === 0) return null;
         return (
-          <ApprovalInbox
-            key={group.key}
-            approvals={shown.filter((id) => pendingApprovals.includes(id))}
-            cancelled={shown.filter((id) => cancelledApprovals.includes(id))}
-            infos={approvalInfos}
-            nodeTitles={nodeTitles}
-            nameOf={nameOf}
-            roleNameOf={roleNameOf}
-            onDecide={onDecide}
-          />
+          <div key={group.key} className="space-y-1">
+            {marked.map(({ id, state }) => (
+              <ApprovalMarker key={id} approvalId={id} info={approvalInfos[id]} state={state} nameOf={nameOf} roleNameOf={roleNameOf} onFocus={onFocusApproval} />
+            ))}
+          </div>
         );
       })}
     </>

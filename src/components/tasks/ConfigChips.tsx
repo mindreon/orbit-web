@@ -19,10 +19,10 @@ function ChipIcon({ Icon, className }: { Icon: LucideIcon; className?: string })
 
 function Chip({ chipKey, label, icon, title, onRemove }: { chipKey: string; label: string; icon: ReactNode; title?: string; onRemove: () => void }) {
   return (
-    <li key={chipKey} data-testid="config-chip" data-chip={chipKey} title={title} className="flex h-7 items-center gap-1.5 rounded-full bg-secondary pl-2.5 pr-1 text-caption text-foreground">
+    <li key={chipKey} data-testid="config-chip" data-chip={chipKey} title={title} className="flex h-7 min-w-0 shrink items-center gap-1.5 rounded-full bg-secondary pl-2.5 pr-1 text-caption text-foreground">
       {icon}
-      <span className="max-w-40 truncate">{label}</span>
-      <button type="button" aria-label={`移除 ${label}`} className="flex h-5 w-5 items-center justify-center rounded-full text-muted-foreground hover:bg-gray-200" onClick={onRemove}>
+      <span className="min-w-0 max-w-40 truncate">{label}</span>
+      <button type="button" aria-label={`移除 ${label}`} className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full text-muted-foreground hover:bg-gray-200" onClick={onRemove}>
         <X aria-hidden="true" className="h-3 w-3" />
       </button>
     </li>
@@ -108,7 +108,7 @@ export function ToolbarChips({ draft, onChange, catalog }: ChipsProps) {
   }
   if (chips.length === 0) return null;
   return (
-    <ul aria-label="已选择" className="flex flex-wrap items-center gap-1.5">
+    <ul aria-label="已选择" className="flex min-w-0 items-center gap-1.5">
       {chips}
     </ul>
   );

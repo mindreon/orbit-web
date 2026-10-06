@@ -183,6 +183,38 @@ body {
   .page-enter { animation: none; }
 }
 
+/* 「回到底部」按钮：亮色是卡片底、淡边；暗色里卡片和页面只差一点，所以抬高一档底色，边和图标也各深一档 */
+.scroll-fab {
+  background: hsl(var(--card));
+  border: 1px solid hsl(var(--border));
+  color: hsl(var(--gray-700));
+}
+.scroll-fab:hover { background: hsl(var(--gray-50)); color: hsl(var(--foreground)); }
+html[data-theme="dark"] .scroll-fab {
+  background: hsl(var(--gray-200));
+  border-color: hsl(var(--gray-400));
+  color: hsl(var(--gray-800));
+}
+html[data-theme="dark"] .scroll-fab:hover { background: hsl(var(--gray-300)); color: hsl(var(--gray-900)); }
+
+/* 「回到底部」按钮里的三个点：依次亮起，一轮 1.2s，每个晚 0.2s；减弱动态时不动 */
+@keyframes typing-dot {
+  0%, 55%, 100% { opacity: 0.5; }
+  25% { opacity: 1; }
+}
+.typing-dot {
+  width: 4px;
+  height: 4px;
+  border-radius: 9999px;
+  background: currentColor;
+  animation: typing-dot 1.2s ease-in-out infinite;
+}
+.typing-dot:nth-child(2) { animation-delay: 0.2s; }
+.typing-dot:nth-child(3) { animation-delay: 0.4s; }
+@media (prefers-reduced-motion: reduce) {
+  .typing-dot { animation: none; opacity: 1; }
+}
+
 /* ＋菜单从按钮方向弹出 */
 @keyframes menu-in {
   from { opacity: 0; transform: translateY(6px) scale(0.97); }
