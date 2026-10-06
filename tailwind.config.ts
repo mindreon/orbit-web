@@ -27,8 +27,8 @@ const config: Config = {
     },
     extend: {
       maxWidth: {
-        /** About 40 CJK characters per line; put it on an element whose font-size is text-body. */
-        reading: "40em",
+        /** The conversation and composer column: 48rem (768px), about 54 CJK characters per line at text-body. */
+        reading: "48rem",
       },
       fontFamily: {
         sans: [

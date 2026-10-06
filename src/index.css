@@ -20,7 +20,7 @@
  *         Section label = text-small font-medium text-muted-foreground; card title = text-body font-semibold text-foreground.
  * Radius  rounded-control 8px (buttons, fields, chips, rows) | rounded-card 12px (cards, panels, popovers) | rounded-full.
  * Space   Tailwind's 4px grid. Separate with spacing and background difference before reaching for a border.
- * Reading max-w-reading = 40em on a 14px element, about 40 CJK characters per line.
+ * Reading max-w-reading = 48rem (768px), about 54 CJK characters per line at text-body; the conversation and composer column.
  */
 :root,
 :host {

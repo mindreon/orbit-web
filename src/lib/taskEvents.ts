@@ -147,9 +147,19 @@ export interface ProfileSwitch {
 /** How an approval ended, from approval.decided. */
 export type ApprovalOutcome = "APPROVED" | "REJECTED" | "CANCELLED" | "TAKEN_OVER";
 
+/** One structured question of ask_user: a short chip label, the question and its options. */
+export interface AskQuestion {
+  readonly header: string;
+  readonly question: string;
+  readonly options: readonly { readonly label: string; readonly description?: string }[];
+  readonly multiSelect: boolean;
+}
+
 export interface AgentQuestion {
   readonly attemptId: string;
   readonly text: string;
+  /** Present when the agent asked with options; `text` is always the plain-text version. */
+  readonly questions?: readonly AskQuestion[];
 }
 
 /** The text one model round has streamed so far. */
@@ -202,6 +212,28 @@ const field = (payload: Record<string, unknown>, key: string): string => {
   const value = payload[key];
   return typeof value === "string" ? value : "";
 };
+
+/** The questions of an attempt.parked payload; a malformed entry is ignored. */
+function askQuestions(value: unknown): readonly AskQuestion[] {
+  if (!Array.isArray(value)) return [];
+  const out: AskQuestion[] = [];
+  for (const item of value.slice(0, 4)) {
+    if (!isRecord(item)) continue;
+    const question = typeof item.question === "string" ? item.question.trim() : "";
+    const options = (Array.isArray(item.options) ? item.options : []).flatMap((option) => {
+      if (!isRecord(option) || typeof option.label !== "string" || !option.label.trim()) return [];
+      return [{ label: option.label, ...(typeof option.description === "string" && option.description ? { description: option.description } : {}) }];
+    });
+    if (!question || options.length === 0) continue;
+    out.push({ header: typeof item.header === "string" ? item.header : "", question, options, multiSelect: item.multi_select === true });
+  }
+  return out;
+}
+
+function agentQuestion(attemptId: string, payload: Record<string, unknown>): AgentQuestion {
+  const questions = askQuestions(payload.questions);
+  return { attemptId, text: field(payload, "question"), ...(questions.length > 0 ? { questions } : {}) };
+}
 
 const withAttempt = (
   attempts: readonly AttemptView[],
@@ -411,7 +443,7 @@ function applyChange(state: TaskLiveState, event: TaskEvent): TaskLiveState {
         ...state,
         lastAttemptId: attemptId,
         attempts: withAttempt(state.attempts, attemptId, (a) => ({ ...a, status: isInput ? "parked_input" : "parked_approval" })),
-        question: isInput ? { attemptId, text: field(payload, "question") } : state.question,
+        question: isInput ? agentQuestion(attemptId, payload) : state.question,
       };
     }
     case "attempt.resumed":

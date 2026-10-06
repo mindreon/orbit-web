@@ -60,6 +60,17 @@ describe("attempt timeline folding", () => {
     expect(parked.attempts[0]?.status).toBe("parked_input");
     expect(parked.question).toEqual({ attemptId: "a1", text: "Which file?" });
 
+    const structured = fold([
+      event("attempt.parked", { attempt_id: "a1", reason: "input", question: "Pick", questions: [
+        { header: "公司", question: "公司名称？", options: [{ label: "迈能", description: "默认" }, { label: "其他公司" }], multi_select: true },
+        { header: "坏", question: "x", options: [] },
+        "junk",
+      ] }, { seq: 2, entity: ["attempt", "a1", 2] }),
+    ]);
+    expect(structured.question?.questions).toEqual([
+      { header: "公司", question: "公司名称？", options: [{ label: "迈能", description: "默认" }, { label: "其他公司" }], multiSelect: true },
+    ]);
+
     const resumed = fold([event("attempt.resumed", { attempt_id: "a1" }, { seq: 3, entity: ["attempt", "a1", 3] })], parked);
     expect(resumed.question).toBeNull();
   });

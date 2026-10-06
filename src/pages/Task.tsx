@@ -189,7 +189,7 @@ function TaskView({ taskId }: { taskId: string }) {
           {chat ? null : <ApprovalInbox approvals={pendingApprovals} cancelled={cancelledApprovals} infos={approvals} nodeTitles={nodeTitles} nameOf={nameOf} roleNameOf={roleNameOf} onDecide={(id, decision, always) => void act(() => decideTaskApproval(task.task_id, id, decision, always))} />}
           {task.status === "PAUSED_NEEDS_REVIEW" ? <ReviewNotice review={live.review} onResume={() => void act(() => controlTask(task.task_id, "resume"))} onGrantBudget={grantBudget} /> : null}
           {task.status === "TAKEN_OVER" ? <TakeoverNotice onHandback={() => void act(() => controlTask(task.task_id, "handback"))} /> : null}
-          {live.question ? <AgentQuestion question={live.question} onAnswer={(text) => message(text, "queue")} /> : null}
+          {live.question ? <AgentQuestion key={`${live.question.attemptId}:${live.question.text}`} question={live.question} onAnswer={(text) => message(text, "queue")} /> : null}
           {task.status === "PAUSED" ? <p className="text-center text-small text-muted-foreground">已停止，点击右下角的 ▶ 继续。</p> : null}
           {closed && turns.length > 0 ? (
             <p className="text-center text-small text-muted-foreground">
