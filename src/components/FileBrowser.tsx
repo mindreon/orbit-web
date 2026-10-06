@@ -10,6 +10,8 @@ const Markdown = lazy(() => import("./markdown/Markdown").then((module) => ({ de
 export interface BrowserFile {
   path: string;
   body: string;
+  /** 内容还没取回来时用它显示大小（字节）。 */
+  size?: number;
 }
 
 type TreeNode = { name: string; path: string; type: "dir" | "file"; size: number; children: TreeNode[] };
@@ -19,13 +21,21 @@ export function FileBrowser({
   files,
   emptyText = "目录快照没有文件文本",
   prefer = ["skill.md", "readme.md"],
+  onOpen,
+  loadingPath,
 }: {
   files: BrowserFile[];
   emptyText?: string;
   prefer?: string[];
+  /** 点开一个文件时通知调用方（内容按需取的场景）。 */
+  onOpen?: (path: string) => void;
+  /** 正在取内容的文件，预览里显示「正在读取」。 */
+  loadingPath?: string | null;
 }) {
-  const entries = useMemo(() => files.map((file) => ({ path: file.path, size: new TextEncoder().encode(file.body).length })), [files]);
+  const entries = useMemo(() => files.map((file) => ({ path: file.path, size: file.size ?? new TextEncoder().encode(file.body).length })), [files]);
   const tree = useMemo(() => buildTree(entries), [entries]);
+  // 只在文件列表变了时重置选中；按需取回内容只会改 body，不该把预览踢回文件树。
+  const pathsKey = entries.map((item) => item.path).join("\n");
   const bodies = useMemo(() => new Map(files.map((file) => [fileKey(file.path), file.body])), [files]);
   const [selected, setSelected] = useState<string | null>(null);
   const [open, setOpen] = useState<Set<string>>(() => new Set());
@@ -50,7 +60,7 @@ export function FileBrowser({
     }
     setOpen(ancestors);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [entries]);
+  }, [pathsKey]);
 
   if (entries.length === 0) {
     return <p className="flex h-[240px] items-center justify-center text-body text-muted-foreground">{emptyText}</p>;
@@ -58,7 +68,7 @@ export function FileBrowser({
   if (mode === "preview" && selected) {
     return (
       <div className="flex h-[70vh] flex-col overflow-hidden rounded-card bg-muted">
-        <FilePreview path={selected} body={bodies.get(fileKey(selected))} onBack={() => setMode("tree")} />
+        <FilePreview path={selected} body={bodies.get(fileKey(selected))} loading={loadingPath === selected} onBack={() => setMode("tree")} />
       </div>
     );
   }
@@ -84,6 +94,7 @@ export function FileBrowser({
             onSelect={(path) => {
               setSelected(path);
               setMode("preview");
+              onOpen?.(path);
             }}
           />
         ))}
@@ -204,7 +215,7 @@ function TreeRow({
   );
 }
 
-function FilePreview({ path, body, onBack }: { path: string; body?: string; onBack: () => void }) {
+function FilePreview({ path, body, loading, onBack }: { path: string; body?: string; loading?: boolean; onBack: () => void }) {
   const kind = previewKind(path);
   const text = body ? (kind === "markdown" ? stripFrontmatter(body) : body) : "";
   return (
@@ -218,7 +229,9 @@ function FilePreview({ path, body, onBack }: { path: string; body?: string; onBa
         </span>
       </div>
       <div className="flex-1 overflow-auto">
-        {!text ? (
+        {loading ? (
+          <p className="flex h-full min-h-[240px] items-center justify-center text-body text-muted-foreground">正在读取</p>
+        ) : !text ? (
           <p className="flex h-full min-h-[240px] items-center justify-center text-body text-muted-foreground">暂不支持预览此类型文件</p>
         ) : kind === "markdown" ? (
           <div className="p-4">

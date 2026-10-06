@@ -34,8 +34,9 @@ export function AgentDetailPage() {
     setUsing(true);
     setError("");
     try {
-      const { expert, unmatched } = await expertFromAgent(handle, slug);
-      navigate(`/experts/${encodeURIComponent(expert.expert_id)}/edit`, { state: { unmatched } });
+      const { expert, unmatched, skipped_files: skippedFiles } = await expertFromAgent(handle, slug);
+      // 需要配置的连接器（mcp_unbound）跟着专家走，编辑页读 expert.mcp_unbound 显示。
+      navigate(`/experts/${encodeURIComponent(expert.expert_id)}/edit`, { state: { unmatched, skippedFiles } });
     } catch (err) {
       setError(describeFailure("使用这位专家失败", err));
       setUsing(false);

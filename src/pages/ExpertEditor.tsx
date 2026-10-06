@@ -1,10 +1,11 @@
 import { useEffect, useMemo, useState } from "react";
 import { useLocation, useNavigate, useParams } from "react-router";
+import { ExpertFiles } from "../components/experts/ExpertFiles";
 import { TeamFields } from "../components/experts/TeamFields";
 import { SkillPicker } from "../components/tasks/SkillPicker";
 import { describeFailure } from "../lib/api";
 import { listMcpConnectors, type McpConnector } from "../lib/catalog";
-import { createExpert, isTeam, listExperts, singleExperts, updateExpert, type Expert, type ExpertInput, type UnmatchedRefs } from "../lib/experts";
+import { createExpert, isTeam, listExperts, singleExperts, updateExpert, type Expert, type ExpertInput, type McpUnbound, type SkippedFile, type UnmatchedRefs } from "../lib/experts";
 import { blankTeamForm, hasProblems, teamInput, teamProblemsFromRefusal, teamToForm, validateTeam, type TeamForm, type TeamProblems } from "../lib/team";
 import { Alert } from "../ui/Alert";
 import { Button } from "../ui/Button";
@@ -22,9 +23,13 @@ const KINDS = [
 export function ExpertEditorPage() {
   const { expertId } = useParams();
   const navigate = useNavigate();
-  const unmatched = (useLocation().state as { unmatched?: UnmatchedRefs } | null)?.unmatched;
+  const imported = (useLocation().state as { unmatched?: UnmatchedRefs; skippedFiles?: SkippedFile[] } | null) ?? null;
+  const unmatched = imported?.unmatched;
+  const skippedFiles = imported?.skippedFiles ?? [];
   const [name, setName] = useState("");
   const [instructions, setInstructions] = useState("");
+  const [soul, setSoul] = useState("");
+  const [mcpUnbound, setMcpUnbound] = useState<readonly McpUnbound[]>([]);
   const [model, setModel] = useState("");
   const [connectorIds, setConnectorIds] = useState<readonly string[]>([]);
   const [skillIds, setSkillIds] = useState<readonly string[]>([]);
@@ -57,6 +62,8 @@ export function ExpertEditorPage() {
         }
         setName(current.name);
         setInstructions(current.instructions);
+        setSoul(current.soul ?? "");
+        setMcpUnbound(current.mcp_unbound ?? []);
         setModel(current.model);
         setConnectorIds(current.connector_ids);
         setSkillIds(current.skill_ids);
@@ -102,7 +109,7 @@ export function ExpertEditorPage() {
     if (!name.trim()) return;
     setSaving(true);
     setError("");
-    const input: ExpertInput = { name: name.trim(), instructions, model: model.trim(), connector_ids: [...connectorIds], skill_ids: [...skillIds] };
+    const input: ExpertInput = { name: name.trim(), instructions, soul, model: model.trim(), connector_ids: [...connectorIds], skill_ids: [...skillIds] };
     try {
       await (expertId ? updateExpert(expertId, input) : createExpert(input));
       navigate("/experts/agents");
@@ -138,7 +145,11 @@ export function ExpertEditorPage() {
             <Field label="名称">
               <Input aria-label="名称" value={name} maxLength={100} onChange={(event) => setName(event.target.value)} />
             </Field>
-            <Field label="指令">
+            <Field label="人设（SOUL.md）">
+              <Textarea aria-label="人设" rows={4} value={soul} placeholder="例如：沉稳、爱用比喻，先给结论再解释" onChange={(event) => setSoul(event.target.value)} />
+              <span className="mt-1 block text-small text-muted-foreground">这位专家的人设和语气，会在指令之前加载。</span>
+            </Field>
+            <Field label="指令（AGENTS.md）">
               <Textarea aria-label="指令" rows={6} value={instructions} placeholder="这位专家的做事方式，会加到 Agent 的系统提示词里" onChange={(event) => setInstructions(event.target.value)} />
             </Field>
             <Field label="模型（可选）">
@@ -153,11 +164,20 @@ export function ExpertEditorPage() {
                   {connector.name}
                 </label>
               ))}
+              {mcpUnbound.length > 0 ? (
+                <div className="mt-2">
+                  <Alert tone="warning">
+                    需要配置的连接器：
+                    {mcpUnbound.map((item) => `${item.name}（${item.reason}）`).join("、")}
+                  </Alert>
+                </div>
+              ) : null}
             </fieldset>
             <fieldset>
               <legend className="mb-1 p-0 text-small font-medium text-gray-700">默认技能（已选 {skillIds.length}）</legend>
               <SkillPicker chosen={skillIds} onToggle={(skill) => toggle(skillIds, setSkillIds, skill.id)} />
             </fieldset>
+            {expertId ? <ExpertFiles expertId={expertId} /> : null}
             </>
           )}
           {error ? <Alert>{error}</Alert> : null}
@@ -167,6 +187,11 @@ export function ExpertEditorPage() {
               {unmatched.skills.length > 0 ? `技能「${unmatched.skills.join("、")}」` : ""}
               {unmatched.connectors.length > 0 ? `连接器「${unmatched.connectors.join("、")}」` : ""}
               。按名字没有对上，可以在下面自己选。
+            </Alert>
+          ) : null}
+          {kind === "expert" && skippedFiles.length > 0 ? (
+            <Alert tone="warning">
+              有 {skippedFiles.length} 个文件没有导入：{skippedFiles.map((file) => `${file.path}（${file.reason}）`).join("、")}。
             </Alert>
           ) : null}
           <div className="flex gap-2">
