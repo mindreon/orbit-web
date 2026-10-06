@@ -157,6 +157,7 @@ async function mockBackend(page: Page, scenario: { events?: typeof events; plan?
     if (pathname === "/v1/experts") return json({ items: scenario.experts ?? [expert] });
     if (pathname === "/v1/agents") return json({ items: AGENTS, total: AGENTS.length, page: 1, pageSize: 24 });
     if (pathname === "/v1/skill-categories") return json({ items: [{ key: "writing", name: "写作", nameEn: "Writing", sortOrder: 1 }] });
+    if (pathname === "/v1/models") return json({ items: ["test-model", "glm-5-flash"], default: "test-model" });
     if (pathname === "/v1/skills") return json({ items: [{ id: "@a/s", handle: "@a", slug: "s", name: "周报写作", description: "把零散记录整理成周报。", descriptionEn: "", category: "", categoryName: "", tags: [], license: "", iconUrl: "", sourceUrl: "", downloads: 12, visits: 1, likes: 3, updatedAt: "0", source: "common" }], total: 1, page: 1, pageSize: 24, installedAt: NOW });
     if (pathname === "/v1/mcp-market") return json({ items: [{ id: "m1", name: "文档检索", summary: "搜索团队文档。", author: "示例团队", category: "dev", categoryName: "开发", categoryMore: 0, calls: 0, views: 10, stars: 2, verified: true, hosted: true, needsOnline: true, source: "modelscope" }], total: 1, stored: 1, page: 1, pageSize: 30 });
     return json({ items: [], total: 0 });
@@ -276,13 +277,14 @@ for (const viewport of VIEWPORTS) {
       else expect(placeholder).toContain("Shift+Enter");
       await check(page, "home");
 
-      // The toolbar model picker (WorkBuddy's ⚡ slot): the candidates are the models the experts use, and 默认模型
-      // defers to the expert's own model, then the deployment default.
+      // The toolbar model picker (WorkBuddy's ⚡ slot) reads the deployment's catalog (/v1/models); 默认模型 defers
+      // to the expert's own model, then the deployment default. The choice lives on the trigger, not a chip.
       await page.getByTestId("model-selector").click();
+      await expect(page.getByRole("menuitemradio", { name: "glm-5-flash" })).toBeVisible();
       await page.getByRole("menuitemradio", { name: "test-model" }).click();
-      await expect(page.locator('[data-testid="config-chip"][data-chip="model"]')).toContainText("test-model");
-      await page.getByRole("button", { name: "移除 test-model" }).click();
-      await expect(page.getByTestId("config-chip")).toHaveCount(0);
+      await expect(page.getByTestId("model-selector")).toContainText("test-model");
+      await page.getByTestId("model-selector").click();
+      await page.getByRole("menuitemradio", { name: "默认模型" }).click();
       await expect(page.getByTestId("model-selector")).toContainText("默认模型");
       // 提示词优化 needs a prompt-rewriting model endpoint that control does not have yet: present, but off.
       await expect(page.getByRole("button", { name: "提示词优化" })).toBeDisabled();

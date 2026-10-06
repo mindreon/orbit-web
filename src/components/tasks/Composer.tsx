@@ -8,7 +8,8 @@ import { MentionChip } from "../conversation/MentionChip";
 import { COARSE_POINTER, useMediaQuery } from "../../lib/useMediaQuery";
 import type { ConfigCatalog } from "../../lib/configCatalog";
 import type { TaskConfigState } from "../../lib/useTaskConfig";
-import { ConfigChips } from "./ConfigChips";
+import { InputChips, ToolbarChips } from "./ConfigChips";
+import { ModelSelector } from "./ModelSelector";
 import { FileChips, filesToAttachmentText, useLocalFiles } from "./LocalFiles";
 import { ConfigMenu } from "./ConfigMenu";
 import { PermissionChip } from "./PermissionChip";
@@ -127,7 +128,7 @@ export function Composer({ onSend, onControl, status, closed = false, attention 
             </ul>
           ) : null}
           <div className="flex items-start">
-            {config && catalog ? <ConfigChips draft={config.draft} onChange={config.apply} catalog={catalog} /> : null}
+            {config && catalog ? <InputChips draft={config.draft} onChange={config.apply} catalog={catalog} /> : null}
             <FileChips files={local.files} onRemove={local.removeAt} />
             <textarea
               value={draft}
@@ -169,8 +170,10 @@ export function Composer({ onSend, onControl, status, closed = false, attention 
           </div>
           <div className="flex items-center gap-2 px-2 pb-2">
             {config && catalog ? <ConfigMenu draft={config.draft} onChange={config.apply} catalog={catalog} disabled={closed || !config.ready} onAddFile={local.pick} /> : null}
+            {config && catalog ? <ToolbarChips draft={config.draft} onChange={config.apply} catalog={catalog} /> : null}
             <PermissionChip />
             <span className="ml-auto" />
+            {config && catalog ? <ModelSelector draft={config.draft} onChange={config.apply} catalog={catalog} disabled={closed || !config.ready} /> : null}
             <button
               type="button"
               aria-label={label}
