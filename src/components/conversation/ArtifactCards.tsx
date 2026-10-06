@@ -1,5 +1,5 @@
 import { Code2, Download, File, FileImage, FileText } from "lucide-react";
-import { fileKind, type ArtifactFile, type FileKind } from "../../lib/artifacts";
+import { fileKind, keyArtifacts, visibleArtifacts, type ArtifactFile, type FileKind } from "../../lib/artifacts";
 import { formatSize } from "../../lib/time";
 import { getArtifactURL } from "../../lib/tasks";
 
@@ -27,13 +27,17 @@ export function downloadArtifact(file: Pick<ArtifactFile, "manifestId" | "name">
   void getArtifactURL(file.manifestId, file.name).then((url) => window.open(url, "_blank", "noopener,noreferrer"));
 }
 
-/** 回复末尾的产物卡片：点卡片在右侧预览，点右边的图标下载。 */
-export function ArtifactCards({ files, onOpen, onOpenAll }: { files: readonly ArtifactFile[]; onOpen: (file: ArtifactFile) => void; onOpenAll: () => void }) {
-  if (files.length === 0) return null;
+/**
+ * 回复末尾的产物卡片：最多三个要紧的文件（文档和网页优先，依赖和构建输出不算），点卡片在右侧预览，点右边的图标下载；
+ * 其余的在右侧「产物」里看。`total` 是整个任务的产物数，缺省时用这条消息自己的。
+ */
+export function ArtifactCards({ files, total, onOpen, onOpenAll }: { files: readonly ArtifactFile[]; total?: number; onOpen: (file: ArtifactFile) => void; onOpenAll: () => void }) {
+  const shown = keyArtifacts(files);
+  if (shown.length === 0) return null;
   return (
     <div>
       <ul className="grid gap-2 sm:grid-cols-2">
-        {files.map((file) => (
+        {shown.map((file) => (
           <li key={`${file.manifestId}/${file.name}`} className="flex items-center gap-1 rounded-card bg-secondary pr-2 hover:bg-gray-200">
             <button type="button" className="flex min-w-0 flex-1 items-center gap-3 px-3 py-3 text-left" onClick={() => onOpen(file)}>
               <FileIcon file={file} />
@@ -49,7 +53,7 @@ export function ArtifactCards({ files, onOpen, onOpenAll }: { files: readonly Ar
         ))}
       </ul>
       <button type="button" className="mt-2 text-small text-muted-foreground hover:text-foreground" onClick={onOpenAll}>
-        查看所有产物（{files.length}）›
+        查看所有产物 ({total ?? visibleArtifacts(files).length}) ›
       </button>
     </div>
   );

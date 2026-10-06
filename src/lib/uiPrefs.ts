@@ -19,9 +19,11 @@ type Prefs = {
   welcome: boolean;
   fileChanges: boolean;
   customPrompt: string;
+  /** 开发者模式：任务页右侧多出计划图、执行记录、事件日志等调试信息。 */
+  developer: boolean;
 };
 
-const DEFAULTS: Prefs = { fontSize: "默认", compact: false, tipSound: "灵动", linkOpen: "按需（默认）", clientNotice: true, theme: "浅色", tone: "默认", welcome: true, fileChanges: true, customPrompt: "" };
+const DEFAULTS: Prefs = { fontSize: "默认", compact: false, tipSound: "灵动", linkOpen: "按需（默认）", clientNotice: true, theme: "浅色", tone: "默认", welcome: true, fileChanges: true, customPrompt: "", developer: false };
 
 const STORAGE_KEY = "orbit.uiPrefs";
 

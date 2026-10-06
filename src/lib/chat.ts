@@ -2,6 +2,7 @@ import { buildTimeline, type Step, type StepState } from "./conversation";
 import { eventPosition, type AttemptStatus, type TaskLiveState } from "./taskEvents";
 import type { Task, TaskEvent } from "./tasks";
 import type { NodeRole } from "./display";
+import type { ArtifactFile } from "./artifacts";
 import { joinSplits, splitThinking } from "./thinking";
 
 /**
@@ -55,13 +56,29 @@ export type ChatItem =
       readonly live: boolean;
       readonly status?: AttemptStatus;
       readonly failure?: string;
-    };
+      /** When it was said (the message event's time); empty for a turn that has no message of its own. */
+      readonly at?: string;
+    }
+  | { readonly type: "roster"; readonly id: string; readonly pos: number; readonly members: readonly RosterMember[] };
+
+export type MemberStatus = "waiting" | "running" | "done" | "failed";
+
+/** One member under the leader's turn: who, and how its work stands. */
+export interface RosterMember {
+  readonly role: string;
+  readonly label: string;
+  readonly name: string;
+  readonly status: MemberStatus;
+}
+
+type BubbleItem = Extract<ChatItem, { type: "bubble" }>;
 
 export type ChatGroup =
   | { readonly type: "bubbles"; readonly key: string; readonly speaker: ChatSpeaker; readonly items: readonly Extract<ChatItem, { type: "bubble" }>[] }
   | { readonly type: "user"; readonly key: string; readonly items: readonly Extract<ChatItem, { type: "user" }>[] }
   | { readonly type: "system"; readonly key: string; readonly items: readonly Extract<ChatItem, { type: "system" }>[] }
-  | { readonly type: "approval"; readonly key: string; readonly items: readonly Extract<ChatItem, { type: "approval" }>[] };
+  | { readonly type: "approval"; readonly key: string; readonly items: readonly Extract<ChatItem, { type: "approval" }>[] }
+  | { readonly type: "roster"; readonly key: string; readonly items: readonly Extract<ChatItem, { type: "roster" }>[] };
 
 interface BuildInput {
   readonly task: Task;
@@ -267,6 +284,7 @@ export function buildChat(input: BuildInput): ChatItem[] {
           ...(reviewRound ? { reviewRound } : {}),
           ...(attached ? { work: attached } : {}),
           live: false,
+          at: event.occurred_at,
         });
         break;
       }
@@ -364,4 +382,120 @@ export function groupChat(items: readonly ChatItem[]): ChatGroup[] {
     }
   }
   return groups;
+}
+
+// ---- the main chat: the leader and summaries --------------------------------------------------------------------------------
+
+const toUser = (bubble: BubbleItem) => bubble.to.length === 0 || bubble.to.includes("user");
+
+/** What stays out of the main chat: the members' own bubbles and the leader's assignments (they live in the member's thread). */
+function isMemberTalk(bubble: BubbleItem): boolean {
+  if (!bubble.speaker.leader) return bubble.speaker.role !== "";
+  return bubble.kind === "assign" || (bubble.kind === "note" && !toUser(bubble));
+}
+
+/**
+ * The chat as the user reads it: their own messages, the leader's words to them, approvals and notices. A member's
+ * bubbles and the leader's assignments are replaced by one roster row at the first of them after each user message,
+ * saying who is on it and how each stands. The full items still feed the member's thread (`memberThread`).
+ */
+export function mainChat(items: readonly ChatItem[], team: ChatTeam): ChatItem[] {
+  const out: ChatItem[] = [];
+  type Segment = { at: number; status: Map<string, MemberStatus> };
+  let segment: Segment | null = null;
+  const segments: Segment[] = [];
+  const set = (status: Map<string, MemberStatus>, role: string, value: MemberStatus) => {
+    if (role && role !== team.leader) status.set(role, value);
+  };
+  for (const item of items) {
+    if (item.type === "user") segment = null;
+    if (item.type !== "bubble" || !isMemberTalk(item)) {
+      out.push(item);
+      continue;
+    }
+    if (!segment) {
+      segment = { at: out.length, status: new Map() };
+      segments.push(segment);
+      out.push({ type: "roster", id: `roster:${item.id}`, pos: item.pos, members: [] });
+    }
+    const { status } = segment;
+    if (item.kind === "assign") {
+      for (const role of item.to) set(status, role, "waiting");
+    } else if (item.live) {
+      set(status, item.speaker.role, "running");
+    } else if (item.status === "failed") {
+      set(status, item.speaker.role, "failed");
+    } else if (item.kind === "reply" || item.status === "completed") {
+      set(status, item.speaker.role, "done");
+    } else if (!status.has(item.speaker.role) || status.get(item.speaker.role) === "waiting") {
+      set(status, item.speaker.role, "running");
+    }
+  }
+  for (const { at, status } of segments) {
+    const roster = out[at] as Extract<ChatItem, { type: "roster" }>;
+    const members = team.members.filter((member) => status.has(member.role)).map((member): RosterMember => ({ role: member.role, label: member.label ?? "", name: member.name ?? "", status: status.get(member.role)! }));
+    out[at] = { ...roster, members };
+  }
+  // A roster nobody is on (an assignment the leader gave itself) is not drawn: the leader's own work is its turns in the chat.
+  return out.filter((item) => item.type !== "roster" || item.members.length > 0);
+}
+
+/** The leader's last word: it stays expanded, earlier reviews fold to a line. */
+export function finalAnswerId(items: readonly ChatItem[]): string {
+  for (let i = items.length - 1; i >= 0; i--) {
+    const item = items[i];
+    if (item.type === "bubble" && item.speaker.leader && (item.text !== "" || item.live)) return item.id;
+  }
+  return "";
+}
+
+/** The first sentence of a text, for the one line a folded review leaves. */
+export function firstSentence(text: string): string {
+  const flat = text.replace(/[#>*`]+/g, " ").replace(/\s+/g, " ").trim();
+  const end = flat.search(/[。！？!?]|\.(\s|$)/);
+  const sentence = end >= 0 ? flat.slice(0, end + 1) : flat;
+  return sentence.length > 80 ? `${sentence.slice(0, 80)}…` : sentence;
+}
+
+// ---- a member's thread ------------------------------------------------------------------------------------------------------
+
+/** One assignment of the leader to a member, and what the member did and said until the next one. */
+export interface ThreadSection {
+  readonly assign?: BubbleItem;
+  readonly bubbles: readonly BubbleItem[];
+  /** Seconds from the assignment to the member's last bubble; null while it is working or when times are missing. */
+  readonly seconds: number | null;
+}
+
+export function memberThread(items: readonly ChatItem[], role: string): ThreadSection[] {
+  const sections: Array<{ assign?: BubbleItem; bubbles: BubbleItem[] }> = [];
+  for (const item of items) {
+    if (item.type !== "bubble") continue;
+    if (item.kind === "assign" && item.to.includes(role)) sections.push({ assign: item, bubbles: [] });
+    else if (item.speaker.role === role && !item.speaker.leader) {
+      if (sections.length === 0) sections.push({ bubbles: [] });
+      sections[sections.length - 1].bubbles.push(item);
+    }
+  }
+  return sections.map((section) => {
+    const last = section.bubbles.at(-1);
+    const from = Date.parse(section.assign?.at ?? "");
+    const to = Date.parse(last?.at ?? "");
+    const done = last !== undefined && !last.live && last.kind !== "turn";
+    return { ...section, seconds: done && Number.isFinite(from) && Number.isFinite(to) && to >= from ? Math.round((to - from) / 1000) : null };
+  });
+}
+
+/** The files a bubble owns: the ones its message names, and (an answer or a review) what its attempt left. */
+export function bubbleFiles(bubble: BubbleItem, files: readonly ArtifactFile[]): readonly ArtifactFile[] {
+  const named = bubble.artifacts.flatMap((name) => files.filter((file) => file.name === name).slice(-1));
+  const ofAttempt = (bubble.kind === "reply" || bubble.kind === "review" || bubble.kind === "turn") && bubble.attemptId !== "" ? files.filter((file) => file.attemptId === bubble.attemptId) : [];
+  const seen = new Set<string>();
+  return [...named, ...ofAttempt].filter((file) => (seen.has(`${file.manifestId}/${file.name}`) ? false : (seen.add(`${file.manifestId}/${file.name}`), true)));
+}
+
+/** How each member of the latest roster stands: what the checklist reads, so it and the roster never disagree. */
+export function latestRosterStatus(main: readonly ChatItem[]): ReadonlyMap<string, MemberStatus> {
+  const last = [...main].reverse().find((item): item is Extract<ChatItem, { type: "roster" }> => item.type === "roster");
+  return new Map((last?.members ?? []).map((member) => [member.role, member.status]));
 }

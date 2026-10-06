@@ -12,6 +12,7 @@
  * card; once approved it applies from the node's next attempt, which says which expert it was switched from.
  */
 import { expect, test, type APIRequestContext } from "@playwright/test";
+import { enableDeveloperMode } from "../helpers";
 import { attemptIds, attemptRows, eventually, getPlan, getTask, openTask, planNodes, sql, taskStatus, waitForStatus } from "./tasks";
 
 const unique = (label: string) => `${label} ${Date.now()}`;
@@ -28,6 +29,9 @@ async function createWithBudget(request: APIRequestContext, title: string, goal:
   return (await response.json()).task_id as string;
 }
 
+// The plan graph, attempts and usage rows are developer-only: these tests run with developer mode on.
+test.beforeEach(async ({ page }) => enableDeveloperMode(page));
+
 test("E52 a task that spends its budget waits for a person, and more budget lets it go on", async ({ page, request }) => {
   test.setTimeout(240_000);
   const title = unique("E52");
@@ -39,8 +43,9 @@ test("E52 a task that spends its budget waits for a person, and more budget lets
   const notice = page.getByTestId("review-notice");
   await expect(notice).toHaveAttribute("data-kind", "budget");
   await expect(notice).toContainText("预算用尽");
+  await page.getByRole("button", { name: "开发者视图" }).click();
   await expect(page.getByTestId("attempt-failure").first()).toContainText("预算用尽");
-  // What it spent is shown, and the cost nobody priced is unknown, not zero.
+  // What it spent is shown in the developer view (the chat only has the compact line); the cost nobody priced is unknown there, not zero.
   await expect(page.getByTestId("usage-row").and(page.locator('[data-key="cost_usd_micros"]')).getByTestId("usage-used")).toHaveText("未知");
   await expect(page.getByTestId("usage-row").and(page.locator('[data-key="tokens"]'))).toContainText("上限 50");
 

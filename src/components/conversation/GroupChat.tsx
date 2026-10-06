@@ -1,7 +1,8 @@
 import { ChevronRight, ClipboardCheck } from "lucide-react";
-import type { ArtifactFile } from "../../lib/artifacts";
-import { latestByName } from "../../lib/artifacts";
-import { groupChat, mentionColor, parseMentions, type ChatGroup, type ChatItem, type ChatTeam } from "../../lib/chat";
+import { useMemo } from "react";
+import { visibleArtifacts, type ArtifactFile } from "../../lib/artifacts";
+import { bubbleFiles, finalAnswerId, firstSentence, groupChat, mainChat, mentionColor, parseMentions, type ChatGroup, type ChatItem, type ChatTeam } from "../../lib/chat";
+import { useDeveloperMode } from "../../lib/devMode";
 import { reviewLabel, roleName } from "../../lib/display";
 import { cn } from "../../lib/cn";
 import { StatusBadge } from "../../ui/StatusBadge";
@@ -12,6 +13,7 @@ import type { ApprovalInfo } from "../../lib/approvals";
 import { ArtifactCards } from "./ArtifactCards";
 import { MentionChip, MentionText } from "./MentionChip";
 import { StepList } from "./StepList";
+import { TeamRoster } from "./TeamRoster";
 
 type Bubble = Extract<ChatItem, { type: "bubble" }>;
 
@@ -21,6 +23,8 @@ interface GroupChatProps {
   readonly files: readonly ArtifactFile[];
   readonly onOpenFile: (file: ArtifactFile) => void;
   readonly onOpenAllFiles: () => void;
+  /** 点名册里的一位成员：在右侧看他的任务。 */
+  readonly onOpenMember: (role: string) => void;
   readonly pendingApprovals: readonly string[];
   readonly cancelledApprovals: readonly string[];
   readonly approvalInfos: Readonly<Record<string, ApprovalInfo>>;
@@ -28,15 +32,6 @@ interface GroupChatProps {
   readonly nameOf: (ref: string) => string;
   readonly roleNameOf: (role: string) => string;
   readonly onDecide: (approvalId: string, decision: "approve" | "reject", always: boolean) => void;
-}
-
-/** The files a bubble owns: the ones its message names, and (an answer or a review) what its attempt left. */
-function filesOf(bubble: Bubble, files: readonly ArtifactFile[]): readonly ArtifactFile[] {
-  const latest = latestByName(files);
-  const named = bubble.artifacts.flatMap((name) => latest.filter((file) => file.name === name));
-  const ofAttempt = (bubble.kind === "reply" || bubble.kind === "review" || bubble.kind === "turn") && bubble.attemptId !== "" ? files.filter((file) => file.attemptId === bubble.attemptId) : [];
-  const seen = new Set<string>();
-  return [...named, ...ofAttempt].filter((file) => (seen.has(`${file.manifestId}/${file.name}`) ? false : (seen.add(`${file.manifestId}/${file.name}`), true)));
 }
 
 function Thinking({ text }: { text: string }) {
@@ -51,18 +46,45 @@ function Thinking({ text }: { text: string }) {
   );
 }
 
-function BubbleBody({ bubble, team, files, onOpenFile, onOpenAllFiles }: { bubble: Bubble; team: ChatTeam } & Pick<GroupChatProps, "files" | "onOpenFile" | "onOpenAllFiles">) {
-  const own = filesOf(bubble, files);
+type BodyProps = { team: ChatTeam; finalId: string; developer: boolean } & Pick<GroupChatProps, "files" | "onOpenFile" | "onOpenAllFiles">;
+
+/** 早先几轮的复盘折成一行淡色的字，点开才看全文；最后一条领队的话不折。 */
+function FoldedReview({ bubble }: { bubble: Bubble }) {
+  const label = bubble.reviewRound ? `第 ${bubble.reviewRound} 轮复盘` : "复盘";
+  return (
+    <details data-testid="chat-review" data-folded="true" className="group rounded-card bg-muted text-small text-muted-foreground">
+      <summary className="flex cursor-pointer list-none items-center gap-2 px-3 py-1.5 hover:text-foreground [&::-webkit-details-marker]:hidden">
+        <ChevronRight aria-hidden="true" className="h-3.5 w-3.5 shrink-0 transition-transform group-open:rotate-90" />
+        <span className="min-w-0 truncate">
+          {label}：{firstSentence(bubble.text)}
+        </span>
+      </summary>
+      <div className="px-3 pb-3 pt-1 text-body text-foreground">
+        <RichText text={bubble.text} />
+      </div>
+    </details>
+  );
+}
+
+function BubbleBody({ bubble, team, files, finalId, developer, onOpenFile, onOpenAllFiles }: { bubble: Bubble } & BodyProps) {
+  if (bubble.kind === "review" && bubble.text !== "" && !bubble.live && bubble.id !== finalId) {
+    return (
+      <div data-testid="chat-bubble" data-kind={bubble.kind} data-status={bubble.status} data-node-id={bubble.nodeId || undefined}>
+        <FoldedReview bubble={bubble} />
+      </div>
+    );
+  }
+  const own = bubbleFiles(bubble, files);
   const text = bubble.text || bubble.work?.text || "";
   const mentions = parseMentions(text, team.members);
   // A reply says who it answers; an assignment, who it is for. The chips lead the text.
   const to = bubble.to.filter((role) => role !== "system" && !mentions.includes(role));
   return (
     <div data-testid="chat-bubble" data-kind={bubble.kind} data-live={bubble.live ? "true" : undefined} data-status={bubble.status} data-node-id={bubble.nodeId || undefined} className="space-y-2">
-      {bubble.work && (bubble.work.steps.length > 0 || bubble.work.thinking) ? (
+      {bubble.work && (bubble.work.steps.length > 0 || (developer && bubble.work.thinking)) ? (
         <div className="space-y-2" data-testid="chat-work">
           <StepList steps={bubble.work.steps} active={bubble.live} />
-          {bubble.work.thinking ? <Thinking text={bubble.work.thinking} /> : null}
+          {developer && bubble.work.thinking ? <Thinking text={bubble.work.thinking} /> : null}
         </div>
       ) : null}
       {text !== "" || bubble.live ? (
@@ -95,12 +117,13 @@ function BubbleBody({ bubble, team, files, onOpenFile, onOpenAllFiles }: { bubbl
           ) : null}
         </div>
       ) : null}
-      <ArtifactCards files={own} onOpen={onOpenFile} onOpenAll={onOpenAllFiles} />
+      <ArtifactCards files={own} total={visibleArtifacts(files).length} onOpen={onOpenFile} onOpenAll={onOpenAllFiles} />
     </div>
   );
 }
 
-function BubbleGroup({ group, team, nameOf, ...rest }: { group: Extract<ChatGroup, { type: "bubbles" }>; team: ChatTeam; nameOf: (ref: string) => string } & Pick<GroupChatProps, "files" | "onOpenFile" | "onOpenAllFiles">) {
+function BubbleGroup({ group, nameOf, ...rest }: { group: Extract<ChatGroup, { type: "bubbles" }>; nameOf: (ref: string) => string } & BodyProps) {
+  const { team } = rest;
   const { speaker } = group;
   const who = roleName(speaker.role, speaker.label, team.leader);
   const tone = mentionColor(speaker.role, team);
@@ -114,19 +137,26 @@ function BubbleGroup({ group, team, nameOf, ...rest }: { group: Extract<ChatGrou
           {speaker.leader ? <span data-testid="chat-leader-tag" className="rounded-control bg-primary-100 px-1.5 text-caption font-medium text-primary-700">领队</span> : null}
         </p>
         {group.items.map((bubble) => (
-          <BubbleBody key={bubble.id} bubble={bubble} team={team} {...rest} />
+          <BubbleBody key={bubble.id} bubble={bubble} {...rest} />
         ))}
       </div>
     </div>
   );
 }
 
-/** 有专家团的任务的主对话：像群聊。一位发言者的连续气泡共用一个名字，头像在这一组的左下角。 */
-export function GroupChat({ items, team, nameOf, pendingApprovals, cancelledApprovals, approvalInfos, nodeTitles, roleNameOf, onDecide, ...rest }: GroupChatProps) {
+/**
+ * 有专家团的任务的主对话：只有用户、领队和结论。成员的派活和回复不在这里，折成领队这一轮下面的一行名册，点成员到右侧看他的任务；
+ * 一位发言者的连续气泡共用一个名字，头像在这一组的左下角。
+ */
+export function GroupChat({ items, team, nameOf, pendingApprovals, cancelledApprovals, approvalInfos, nodeTitles, roleNameOf, onDecide, onOpenMember, ...rest }: GroupChatProps) {
+  const developer = useDeveloperMode();
+  const main = useMemo(() => mainChat(items, team), [items, team]);
+  const finalId = useMemo(() => finalAnswerId(main), [main]);
   return (
     <>
-      {groupChat(items).map((group) => {
-        if (group.type === "bubbles") return <BubbleGroup key={group.key} group={group} team={team} nameOf={nameOf} {...rest} />;
+      {groupChat(main).map((group) => {
+        if (group.type === "bubbles") return <BubbleGroup key={group.key} group={group} team={team} nameOf={nameOf} finalId={finalId} developer={developer} {...rest} />;
+        if (group.type === "roster") return <div key={group.key} className="space-y-2">{group.items.map((item) => <TeamRoster key={item.id} members={item.members} team={team} onOpenMember={onOpenMember} />)}</div>;
         if (group.type === "user") {
           return (
             <div key={group.key} className="space-y-2">
@@ -158,7 +188,7 @@ export function GroupChat({ items, team, nameOf, pendingApprovals, cancelledAppr
           );
         }
         // An approval asked in the middle of the chat stays where it was asked, with the member's name on it.
-        const shown = group.items.map((item) => item.approvalId).filter((id) => pendingApprovals.includes(id) || cancelledApprovals.includes(id));
+        const shown = group.items.flatMap((item) => (item.type === "approval" ? [item.approvalId] : [])).filter((id) => pendingApprovals.includes(id) || cancelledApprovals.includes(id));
         if (shown.length === 0) return null;
         return (
           <ApprovalInbox

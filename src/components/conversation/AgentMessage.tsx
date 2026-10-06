@@ -2,6 +2,7 @@ import { Check, ChevronRight, ClipboardCheck, Copy } from "lucide-react";
 import { useState } from "react";
 import type { ArtifactFile } from "../../lib/artifacts";
 import type { AgentTurn } from "../../lib/conversation";
+import { useDeveloperMode } from "../../lib/devMode";
 import { roleText, type NodeRole } from "../../lib/display";
 import { shortDateTime } from "../../lib/time";
 import { RichText } from "../markdown/RichText";
@@ -18,6 +19,8 @@ interface AgentMessageProps {
   readonly files: readonly ArtifactFile[];
   readonly onOpenFile: (file: ArtifactFile) => void;
   readonly onOpenAllFiles: () => void;
+  /** 整个任务的产物数，写在「查看所有产物」里。 */
+  readonly totalFiles?: number;
   /** Who the node of this reply belongs to: a member (shown above the reply), the leader's review (shown above it too), or the leader (no label: it is the main speaker). */
   readonly speaker?: NodeRole;
   readonly nameOf?: (ref: string) => string;
@@ -56,7 +59,8 @@ function Thinking({ text, open }: { text: string; open: boolean }) {
 }
 
 /** 一次尝试对应一条 Agent 回复：先是执行步骤，再是回复正文，最后是产物和脚注。 */
-export function AgentMessage({ turn, expertName, files, onOpenFile, onOpenAllFiles, speaker, nameOf }: AgentMessageProps) {
+export function AgentMessage({ turn, expertName, files, onOpenFile, onOpenAllFiles, totalFiles, speaker, nameOf }: AgentMessageProps) {
+  const developer = useDeveloperMode();
   const done = turn.status === "completed" || turn.status === "failed" || turn.status === "cancelled";
   const thinking = turn.status === "running" && turn.text === "" && turn.thinking === "" && turn.steps.length === 0;
   const labelled = speaker && speaker.kind !== "leader" ? speaker : undefined;
@@ -72,7 +76,7 @@ export function AgentMessage({ turn, expertName, files, onOpenFile, onOpenAllFil
       ) : null}
       <StepList steps={turn.steps} active={turn.status === "running"} />
       {thinking ? <p className="text-body text-muted-foreground">正在思考…</p> : null}
-      {turn.thinking !== "" ? <Thinking text={turn.thinking} open={turn.status === "running" && turn.text === ""} /> : null}
+      {developer && turn.thinking !== "" ? <Thinking text={turn.thinking} open={turn.status === "running" && turn.text === ""} /> : null}
       {turn.text !== "" ? (
         turn.streaming ? (
           <article data-testid="live-output">
@@ -99,7 +103,7 @@ export function AgentMessage({ turn, expertName, files, onOpenFile, onOpenAllFil
           ) : null}
         </p>
       ) : null}
-      <ArtifactCards files={files} onOpen={onOpenFile} onOpenAll={onOpenAllFiles} />
+      <ArtifactCards files={files} total={totalFiles} onOpen={onOpenFile} onOpenAll={onOpenAllFiles} />
       {done ? (
         <div className="flex items-center gap-2 text-caption text-muted-foreground">
           {turn.text ? <CopyButton text={turn.text} /> : null}

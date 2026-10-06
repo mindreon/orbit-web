@@ -1,6 +1,7 @@
-import { Check, ChevronRight, CircleSlash, Loader2, ShieldAlert, X } from "lucide-react";
+import { Check, ChevronRight, CircleSlash, ListChecks, Loader2, ShieldAlert, X } from "lucide-react";
 import { cn } from "../../lib/cn";
 import { toolLabel, type Step, type StepState } from "../../lib/conversation";
+import { isTodoStep } from "../../lib/todos";
 
 const STATE_ICON: Record<StepState, { Icon: typeof Check; className: string; label: string }> = {
   running: { Icon: Loader2, className: "animate-spin text-primary-700", label: "执行中" },
@@ -11,11 +12,16 @@ const STATE_ICON: Record<StepState, { Icon: typeof Check; className: string; lab
 };
 
 /** 已执行的步骤：默认折成一行，展开后看每一步的参数和结果。和 WorkBuddy 的"可展开中间步骤"一致。 */
-export function StepList({ steps, active }: { steps: readonly Step[]; active: boolean }) {
-  if (steps.length === 0) return null;
+export function StepList({ steps: all, active }: { steps: readonly Step[]; active: boolean }) {
+  // 清单的更新不算「步骤」：清单本身钉在输入框上方，这里只留一行淡色的提示。
+  const steps = all.filter((step) => !isTodoStep(step));
+  const todoUpdated = steps.length < all.length;
+  if (steps.length === 0) return todoUpdated ? <TodoUpdated /> : null;
   const running = steps.some((step) => step.state === "running");
   return (
-    <details className="group rounded-card bg-muted text-body">
+    <div className="space-y-2">
+      {todoUpdated ? <TodoUpdated /> : null}
+      <details className="group rounded-card bg-muted text-body">
       <summary className="flex cursor-pointer list-none items-center gap-2 px-3 py-2 text-muted-foreground hover:text-foreground [&::-webkit-details-marker]:hidden">
         <ChevronRight aria-hidden="true" className="h-4 w-4 transition-transform group-open:rotate-90" />
         {running && active ? "正在执行步骤…" : `已执行 ${steps.length} 个步骤`}
@@ -36,6 +42,16 @@ export function StepList({ steps, active }: { steps: readonly Step[]; active: bo
           );
         })}
       </ol>
-    </details>
+      </details>
+    </div>
+  );
+}
+
+function TodoUpdated() {
+  return (
+    <p data-testid="todo-updated" className="flex items-center gap-2 px-1 text-small text-muted-foreground">
+      <ListChecks aria-hidden="true" className="h-3.5 w-3.5" />
+      清单已更新
+    </p>
   );
 }

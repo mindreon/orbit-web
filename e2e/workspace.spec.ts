@@ -99,7 +99,7 @@ test("artifact cards open a preview tab; HTML runs in a sandbox", async ({ page 
 
   await page.getByRole("button", { name: "关闭 slides.html" }).click();
   await page.getByRole("button", { name: "关闭 report.md" }).click();
-  await expect(page.getByRole("region", { name: "计划图" })).toBeVisible();
+  await expect(page.getByTestId("panel-home")).toBeVisible();
 });
 
 test("embedded: the task list stays reachable without our sidebar", async ({ page }) => {

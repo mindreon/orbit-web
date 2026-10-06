@@ -50,3 +50,37 @@ export function fileKind(name: string, mediaType: string): FileKind {
 }
 
 export const fileKey = (file: Pick<ArtifactFile, "manifestId" | "name">) => `${file.manifestId}/${file.name}`;
+
+// ---- 对话和面板里该给人看的产物 -------------------------------------------------------------------------------------------
+
+/** 路径里出现这些目录，就是依赖或构建产物，不是人要看的成果。 */
+const NOISE_DIRS = new Set(["node_modules", ".venv", "venv", "__pycache__", ".git", "dist", "build", ".cache", ".next", "coverage", "site-packages"]);
+const LOCKFILES = new Set(["package-lock.json", "pnpm-lock.yaml", "yarn.lock", "uv.lock"]);
+
+/** 依赖目录、构建输出、缓存和锁文件：前端兜底过滤，后端没滤干净时也不会把上百个文件摆给人看。 */
+export function isNoiseArtifact(name: string): boolean {
+  const segments = name.split(/[\\/]/).filter(Boolean);
+  if (segments.some((segment) => NOISE_DIRS.has(segment))) return true;
+  return LOCKFILES.has(segments.at(-1) ?? "");
+}
+
+/** 任务里该展示的产物：同名只留最新，再去掉依赖和构建输出。 */
+export const visibleArtifacts = (files: readonly ArtifactFile[]): readonly ArtifactFile[] => latestByName(files).filter((file) => !isNoiseArtifact(file.name));
+
+const isHidden = (name: string) => name.split(/[\\/]/).some((segment) => segment.startsWith("."));
+
+/** 越小越靠前：文档和网页最先，其次是普通文件，隐藏文件（点开头）最后。 */
+function artifactRank(file: ArtifactFile): number {
+  if (isHidden(file.name)) return 2;
+  const kind = fileKind(file.name, file.mediaType);
+  return kind === "markdown" || kind === "html" || kind === "pdf" ? 0 : 1;
+}
+
+/** 一条消息下最多摆几个产物卡片：文档和网页优先，同一档里保持原来的顺序。 */
+export function keyArtifacts(files: readonly ArtifactFile[], max = 3): readonly ArtifactFile[] {
+  return visibleArtifacts(files)
+    .map((file, index) => ({ file, index }))
+    .sort((a, b) => artifactRank(a.file) - artifactRank(b.file) || a.index - b.index)
+    .slice(0, max)
+    .map((item) => item.file);
+}

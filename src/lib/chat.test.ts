@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { buildChat, groupChat, mentionColor, parseMentions, splitMentions, type ChatTeam } from "./chat";
+import { buildChat, finalAnswerId, firstSentence, groupChat, mainChat, memberThread, mentionColor, parseMentions, splitMentions, type ChatTeam } from "./chat";
 import { applyEvent, emptyLiveState } from "./taskEvents";
 import type { Task, TaskEvent } from "./tasks";
 
@@ -216,5 +216,67 @@ describe("mentions", () => {
     expect(mentionColor("member-2", team)).toBe(mentionColor("member-2", team));
     expect(new Set(team.members.map((m) => mentionColor(m.role, team))).size).toBe(3);
     expect(mentionColor("stranger", team)).toBeTypeOf("number");
+  });
+});
+
+describe("the main chat: the leader and summaries", () => {
+  const full = () =>
+    chat([
+      ev(1, "task.created", { goal: "写报告" }),
+      msg(2, "assign", "member-1", ["member-2"], "你是研究员，背景……共 5 项任务", { at: 1 }),
+      msg(3, "assign", "member-1", ["member-3"], "你是审校"),
+      msg(4, "reply", "member-2", ["member-1"], "调研完成"),
+      msg(5, "review", "member-1", [], "第一轮看了。还要补充数据。", { node_id: "n_r1" }),
+      msg(6, "assign", "member-1", ["member-2"], "补充数据"),
+      msg(7, "reply", "member-2", ["member-1"], "补好了"),
+      msg(8, "review", "member-1", [], "最终结论：完成。", { node_id: "n_r2" }),
+    ]);
+
+  it("hides assignments and member replies, leaving one roster after the user's message (M1)", () => {
+    const main = mainChat(full(), team);
+    expect(main.map((item) => item.type)).toEqual(["user", "roster", "bubble", "bubble"]);
+    expect(main.filter((item) => item.type === "bubble").map((item) => item.type === "bubble" && item.speaker.leader)).toEqual([true, true]);
+  });
+
+  it("lists each member once with how its work stands (M2)", () => {
+    const roster = mainChat(full(), team).find((item) => item.type === "roster");
+    expect(roster?.type === "roster" && roster.members.map((m) => [m.role, m.status])).toEqual([
+      ["member-2", "done"],
+      ["member-3", "waiting"],
+    ]);
+  });
+
+  it("a member that was given work again after replying is back at work, not done (M3)", () => {
+    const items = chat([msg(1, "assign", "member-1", ["member-2"], "a"), msg(2, "reply", "member-2", ["member-1"], "b"), msg(3, "assign", "member-1", ["member-2"], "c")]);
+    const roster = mainChat(items, team)[0];
+    expect(roster.type === "roster" && roster.members[0].status).toBe("waiting");
+  });
+
+  it("the leader's own work is not member work: its turns stay in the chat and an assignment to itself leaves no empty roster (M7)", () => {
+    const items = chat([msg(1, "assign", "member-1", ["member-1"], "我自己来"), msg(2, "reply", "member-1", [], "做完了")]);
+    expect(mainChat(items, team).map((item) => item.type)).toEqual(["bubble"]);
+  });
+
+  it("a new user message starts a new roster (M4)", () => {
+    const items = chat([msg(1, "assign", "member-1", ["member-2"], "a"), ev(2, "message.user", { text: "再来", mentions: [] }), msg(3, "assign", "member-1", ["member-3"], "b")]);
+    expect(mainChat(items, team).map((item) => item.type)).toEqual(["roster", "user", "roster"]);
+  });
+
+  it("the leader's last word is the final answer; folded review lines take the first sentence (M5)", () => {
+    const main = mainChat(full(), team);
+    const last = main.filter((item) => item.type === "bubble").at(-1)!;
+    expect(finalAnswerId(main)).toBe(last.id);
+    expect(firstSentence("## 复盘\n第一轮看了。还要补充数据。")).toBe("复盘 第一轮看了。");
+    expect(firstSentence("x".repeat(100))).toHaveLength(81);
+  });
+
+  it("a member's thread is its assignments with what it did after each, and the time it took (M6)", () => {
+    const items = chat([msg(1, "assign", "member-1", ["member-2"], "a", { }), msg(2, "reply", "member-2", ["member-1"], "b")].map((e, i) => ({ ...e, occurred_at: `2026-10-05T00:00:${i === 0 ? "00" : "42"}Z` })));
+    const sections = memberThread(items, "member-2");
+    expect(sections).toHaveLength(1);
+    expect(sections[0].assign?.text).toBe("a");
+    expect(sections[0].bubbles.map((b) => b.text)).toEqual(["b"]);
+    expect(sections[0].seconds).toBe(42);
+    expect(memberThread(items, "member-3")).toEqual([]);
   });
 });

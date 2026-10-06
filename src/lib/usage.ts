@@ -16,7 +16,7 @@ const num = (value: unknown): number | null => (typeof value === "number" && Num
 /** Micro-dollars as dollars. */
 export const formatCost = (micros: number): string => `$${(micros / 1_000_000).toFixed(4)}`;
 
-const formatSeconds = (seconds: number): string => (seconds >= 60 ? `${Math.floor(seconds / 60)} 分 ${seconds % 60} 秒` : `${seconds} 秒`);
+export const formatSeconds = (seconds: number): string => (seconds >= 60 ? `${Math.floor(seconds / 60)} 分 ${seconds % 60} 秒` : `${seconds} 秒`);
 
 const FORMAT: Record<UsageRow["key"], (value: number) => string> = {
   tokens: (value) => value.toLocaleString("en-US"),
@@ -112,4 +112,49 @@ export function usageLine(usage: Readonly<Record<string, unknown>> | undefined):
   const wall = num(usage.wall_s) ?? 0;
   const cost = num(usage.cost_usd_micros) ?? 0;
   return [tokens > 0 ? `令牌 ${FORMAT.tokens(tokens)}` : "", calls > 0 ? `工具 ${calls} 次` : "", wall > 0 ? formatSeconds(wall) : "", cost > 0 ? formatCost(cost) : ""].filter(Boolean).join(" · ");
+}
+
+// ---- 对话里给人看的费用一行 ------------------------------------------------------------------------------------------------
+
+/** 令牌数的口语写法：一万以上写成「约 169 万」，不到一万就写整数。 */
+function tokensText(tokens: number): string {
+  if (tokens < 10_000) return `${tokens.toLocaleString("en-US")} tokens`;
+  const wan = tokens / 10_000;
+  return `约 ${wan >= 100 ? Math.round(wan) : Number(wan.toFixed(1))} 万 tokens`;
+}
+
+/** 用时的口语写法：不到一分钟写秒，其余只写到分（至少 1 分）。 */
+const durationText = (seconds: number): string => (seconds < 60 ? `${Math.max(1, Math.round(seconds))} 秒` : `${Math.round(seconds / 60)} 分`);
+
+/**
+ * 「用时 23 分 · 约 169 万 tokens」，算过价才加「· $1.23」。什么都还没用时返回空串；没算过价的费用不出现（不写「未知」）。
+ */
+export function costSummary(usage: Record<string, unknown> | undefined): string {
+  const tokens = (num(usage?.tokens_in) ?? 0) + (num(usage?.tokens_out) ?? 0);
+  const wall = num(usage?.wall_s) ?? 0;
+  const cost = num(usage?.cost_usd_micros) ?? 0;
+  return [wall > 0 ? `用时 ${durationText(wall)}` : "", tokens > 0 ? tokensText(tokens) : "", cost > 0 ? `$${(cost / 1_000_000).toFixed(2)}` : ""].filter(Boolean).join(" · ");
+}
+
+export interface BudgetWarning {
+  readonly key: UsageRow["key"];
+  readonly over: boolean;
+  readonly text: string;
+}
+
+/** 设了上限的项用到 80% 以上就提醒，用完了写「已超出」。没设上限、没算过价的项不提醒。 */
+export function budgetWarnings(usage: Record<string, unknown> | undefined, budgets: Record<string, unknown> | undefined): BudgetWarning[] {
+  const used: Record<UsageRow["key"], number | null> = {
+    tokens: (num(usage?.tokens_in) ?? 0) + (num(usage?.tokens_out) ?? 0),
+    tool_calls: num(usage?.tool_calls) ?? 0,
+    wall_s: num(usage?.wall_s) ?? 0,
+    cost_usd_micros: num(usage?.cost_usd_micros),
+  };
+  return (Object.keys(LABEL) as UsageRow["key"][]).flatMap((key) => {
+    const limit = num(budgets?.[key]);
+    const value = used[key];
+    if (limit === null || limit <= 0 || value === null || value / limit < 0.8) return [];
+    const over = value >= limit;
+    return [{ key, over, text: `${LABEL[key]}${over ? "已超出预算上限" : "已接近预算上限"}（${FORMAT[key](value)} / ${FORMAT[key](limit)}）` }];
+  });
 }

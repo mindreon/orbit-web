@@ -21,6 +21,7 @@ import { mkdirSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import type { Page } from "@playwright/test";
 import { expect, test } from "@playwright/test";
+import { enableDeveloperMode, openDeveloperView } from "./helpers";
 
 const OUT = "e2e-artifacts/design";
 const TASK_ID = "task_01ARZ3NDEKTSV4RRFFQ69G5FAV";
@@ -301,7 +302,8 @@ for (const viewport of VIEWPORTS) {
       const column = await page.getByTestId("conversation-column").boundingBox();
       if (phone) expect(column?.width ?? 0, "conversation column on a phone").toBeGreaterThanOrEqual(300);
       else {
-        expect(column?.width ?? 0).toBeLessThanOrEqual(14 * 40 + 1);
+        // The reading column is max-w-reading (48rem): about 54 CJK characters at text-body.
+        expect(column?.width ?? 0).toBeLessThanOrEqual(48 * 16 + 1);
         expect(column?.width ?? 0).toBeGreaterThanOrEqual(480);
         for (const testId of ["user-message", "approval-item"]) {
           const box = await page.getByTestId(testId).first().boundingBox();
@@ -352,7 +354,9 @@ for (const viewport of VIEWPORTS) {
         await expect(page.getByTestId("panel-backdrop")).toBeVisible();
         const drawerBox = await drawer.boundingBox();
         expect(drawerBox!.x + drawerBox!.width).toBeLessThanOrEqual(viewport.width + 1);
-        await expect(drawer.getByText("理解目标并规划")).toBeVisible();
+        // Home: the not-yet-wired entries are disabled and say 即将; the plan graph is not here without developer mode.
+        await expect(drawer.getByRole("button", { name: /查看工作空间/ })).toBeDisabled();
+        await expect(drawer.getByText("理解目标并规划")).toHaveCount(0);
         await check(page, "task-drawer");
         await page.keyboard.press("Escape");
         await expect(drawer).toBeHidden();
@@ -360,11 +364,21 @@ for (const viewport of VIEWPORTS) {
         const panel = page.getByRole("complementary", { name: "任务详情" });
         await expect(panel).toBeVisible();
         await expect(page.getByTestId("panel-backdrop")).toHaveCount(0);
+        // Home: four entries without a backend yet, disabled with a 「即将」 tag; no plan, usage or event log for a plain viewer.
+        for (const entry of ["查看工作空间", "查看变更", "打开终端", "打开浏览器"]) {
+          await expect(panel.getByRole("button", { name: new RegExp(entry) })).toBeDisabled();
+          await expect(panel.getByRole("button", { name: new RegExp(entry) })).toContainText("即将");
+        }
+        await expect(panel.getByText("理解目标并规划")).toHaveCount(0);
+        await expect(panel.getByText(/用量与预算|事件日志|执行记录/)).toHaveCount(0);
+        await expect(panel.getByRole("button", { name: "开发者视图" })).toHaveCount(0);
+        // With ?debug=1 the developer view is reachable: plan graph, usage, event log; developer info is collapsed and holds the version and ids.
+        await page.goto(`/tasks/${TASK_ID}?debug=1`);
+        await openDeveloperView(page, false);
         await expect(panel.getByText("理解目标并规划")).toBeVisible();
         await expect(panel.getByText("Explore and plan")).toHaveCount(0);
         await expect(panel.getByTestId("usage-idle")).toContainText("暂无用量");
         await expect(panel.getByTestId("usage-row")).toHaveCount(0);
-        // developer info is collapsed next to the event log and holds the version and ids
         const dev = panel.getByTestId("developer-info");
         await expect(dev.getByText("plan v3")).toBeHidden();
         await dev.getByText("开发者信息").click();
@@ -398,6 +412,7 @@ for (const viewport of VIEWPORTS) {
       ];
       await page.unroute("**/v1/**");
       await mockBackend(page, { events: sopEvents as never, plan: sopPlan as never, task: { pending_approvals: ["apr_1", "apr_2"], profile: "default@1" } });
+      await enableDeveloperMode(page);
       await page.goto(`/tasks/${TASK_ID}`);
       await expect(page.getByTestId("approval-item")).toHaveCount(2);
       // both approval kinds render with the summary as the title, a plain approve / reject, and the accent bar
@@ -408,7 +423,7 @@ for (const viewport of VIEWPORTS) {
       await expect(cards.nth(1).getByTestId("attention-bar")).toBeVisible();
       await expect(cards.nth(1)).not.toContainText("需要你的确认");
 
-      if (phone) await page.getByRole("button", { name: "展开详情" }).click();
+      await openDeveloperView(page, phone);
       const panel = page.getByRole("complementary", { name: "任务详情" });
       const sop = panel.locator('[data-testid="plan-node"][data-sop="true"]');
       await expect(sop).toHaveCount(1);
@@ -632,32 +647,52 @@ for (const viewport of VIEWPORTS) {
 
     test("teams: member replies carry the role, the plan groups by member, the team stage opens, a member's approval says who asks", async ({ page }) => {
       await page.unroute("**/v1/**");
+      await enableDeveloperMode(page);
       await mockBackend(page, { events: teamEvents as never, plan: teamPlan as never, task: { profile: "writer@1", pending_approvals: ["apr_1"] }, experts: [expert, researcher, reviewer, team], config: teamConfig });
       await page.goto(`/tasks/${TASK_ID}`);
 
-      // The conversation is a group chat: a header per speaker (label · expert, the leader marked), bubbles stacked under it.
+      // The main chat is the leader and summaries: a header per speaker (label · expert, the leader marked), no member bubbles, no assignments.
       const chatGroups = page.getByTestId("chat-group");
       await expect(chatGroups.first().getByTestId("chat-speaker")).toHaveText("主编 · 文案专家");
       await expect(chatGroups.first().getByTestId("chat-leader-tag")).toHaveText("领队");
-      const researcherGroup = page.locator('[data-testid="chat-group"][data-role="member-2"]').first();
-      await expect(researcherGroup.getByTestId("chat-speaker")).toHaveText("研究员 · 调研专家");
-      // The assignment carries who it is for as a chip; the reply who it answers; the member's steps are folded under it.
-      await expect(page.locator('[data-testid="chat-bubble"][data-kind="assign"]').first().getByTestId("mention-chip").first()).toHaveText("@研究员");
-      await expect(researcherGroup.getByTestId("chat-to").first()).toContainText("@主编");
-      await expect(researcherGroup.getByText("已执行 1 个步骤")).toBeVisible();
-      // The review of round one, by the node's own number.
-      await expect(page.getByTestId("chat-review")).toHaveText("领队复盘 · 第 1 轮");
-      // The user's @ is a chip; a member's @ of another is a chip inside its note; the notice is quiet and centred.
+      await expect(page.locator('[data-testid="chat-group"][data-role="member-2"]')).toHaveCount(0);
+      await expect(page.locator('[data-testid="chat-bubble"][data-kind="assign"]')).toHaveCount(0);
+      // The members sit in one roster row under the leader's turn; a click opens that member's thread in the panel.
+      // Each user message starts a new roster: the first round had the researcher only, the one after the user's @ has both.
+      // A fresh load opens the panel on its home view (or leaves it closed): a member's thread only ever opens from a roster click.
+      await expect(page.getByTestId("panel-member")).toHaveCount(0);
+      await expect(page.getByTestId("team-roster")).toHaveCount(2);
+      await expect(page.getByTestId("team-roster").first()).toContainText("1 位团队成员");
+      const roster = page.getByTestId("team-roster").last();
+      await expect(roster).toContainText("2 位团队成员");
+      await expect(page.getByTestId("roster-member")).toHaveCount(0);
+      await roster.getByRole("button").first().click();
+      await expect(page.getByTestId("roster-member")).toHaveCount(2);
+      await expect(page.locator('[data-testid="roster-member"][data-role="member-2"]')).toContainText("调研专家");
+      // Two members are working at once.
+      await expect(page.locator('[data-testid="roster-member"][data-status="running"]')).toHaveCount(2);
+      // The review of round one folds to one muted line, by the node's own number (or stays whole when it is the leader's last word).
+      await expect(page.getByTestId("chat-review").first()).toContainText(/第 1 轮复盘|领队复盘 · 第 1 轮/);
+      // The user's @ is a chip; the notice is quiet and centred.
       await expect(page.getByTestId("user-message").getByTestId("mention-chip")).toHaveText("@研究员");
-      await expect(page.locator('[data-testid="chat-bubble"][data-kind="note"]').getByTestId("mention-chip").first()).toHaveText("@研究员");
       await expect(page.getByTestId("chat-system")).toContainText("3 跳上限");
-      // Two members are working at once: a bubble each, streaming into their own.
-      const live = page.locator('[data-testid="chat-bubble"][data-live="true"]');
-      await expect(live).toHaveCount(2);
-      await expect(page.locator('[data-testid="chat-group"][data-role="member-3"]').last()).toContainText("回滚步骤缺少数据库回退的验证。");
-      await expect(page.locator('[data-testid="chat-group"][data-role="member-2"]').last()).toContainText("证书续期由运维负责");
-      await expect(page.locator('[data-testid="chat-group"][data-role="member-3"]').last().getByText("正在执行步骤…")).toBeVisible();
-      await expect(page.locator('[data-testid="chat-group"][data-role="member-2"]').last().getByText(/已执行/)).toHaveCount(0);
+
+      // The researcher's thread: the assignment folded behind 「下发任务详情」, then its work.
+      await page.locator('[data-testid="roster-member"][data-role="member-2"]').click();
+      const thread = page.getByTestId("panel-member");
+      await expect(thread).toContainText("调研专家");
+      await expect(thread.getByTestId("thread-assignment")).toContainText("@调研专家，你有一条待处理任务，请查收");
+      await expect(thread.getByTestId("thread-assignment-text").first()).toBeHidden();
+      await thread.getByText("下发任务详情").first().click();
+      await expect(thread.getByTestId("thread-assignment-text").first()).toBeVisible();
+      await expect(thread.getByText("已执行 1 个步骤").first()).toBeVisible();
+      await expect(thread).toContainText("证书续期由运维负责");
+      await page.getByRole("button", { name: "返回" }).click();
+      if (phone) await page.keyboard.press("Escape"); // the panel is a drawer there: close it to reach the chat
+      await page.locator('[data-testid="roster-member"][data-role="member-3"]').click();
+      await expect(page.getByTestId("panel-member")).toContainText("回滚步骤缺少数据库回退的验证。");
+      await expect(page.getByTestId("panel-member").getByText("正在执行步骤…")).toBeVisible();
+      await page.getByRole("button", { name: "返回" }).click();
 
       // The approval a member raised, inline, with the member's name.
       const approval = page.getByTestId("approval-item");
@@ -671,7 +706,7 @@ for (const viewport of VIEWPORTS) {
       await expect(chip).toContainText("内容小队");
       await expect(chip).toHaveAttribute("title", "领队负责规划，成员按分工执行");
       await expect(chip.getByTestId("avatar")).toHaveCount(3);
-      if (phone) await page.getByRole("button", { name: "展开详情" }).click();
+      await openDeveloperView(page, phone);
 
       const panel = page.getByRole("complementary", { name: "任务详情" });
       await expect(panel.getByTestId("plan-node-role").first()).toContainText("主编 · 文案专家");
@@ -744,14 +779,13 @@ for (const viewport of VIEWPORTS) {
       await page.goto(`/tasks/${TASK_ID}`);
       if (phone) await expect(page.getByRole("complementary", { name: "任务详情" })).toBeHidden();
       await expect(page.getByTestId("chat-system")).toBeVisible();
-      // A step fold expanded, so the bubble's longest content is on screen.
-      const fold = page.locator('[data-testid="chat-group"][data-role="member-2"]').first().getByText("已执行 1 个步骤");
-      await fold.click();
-      await expect(page.getByTestId("step-row").first()).toBeVisible();
+      // The roster expanded, so its longest content is on screen.
+      await page.getByTestId("team-roster").last().getByRole("button").first().click();
+      await expect(page.getByTestId("roster-member")).toHaveCount(2);
       await page.getByTestId("approval-item").scrollIntoViewIfNeeded();
       // Every bubble, notice, mention chip and card stays inside the viewport and the conversation column.
       const column = (await page.getByTestId("conversation-column").boundingBox())!;
-      for (const testId of ["chat-bubble", "chat-system", "user-message", "approval-item", "mention-chip"]) {
+      for (const testId of ["chat-bubble", "chat-system", "user-message", "approval-item", "mention-chip", "team-roster"]) {
         for (const box of await page.getByTestId(testId).evaluateAll((nodes) => nodes.map((node) => { const r = node.getBoundingClientRect(); return { x: r.x, right: r.right, w: r.width }; }))) {
           expect(box.x, `${testId} left edge`).toBeGreaterThanOrEqual(0);
           expect(box.right, `${testId} right edge`).toBeLessThanOrEqual(Math.min(viewport.width, column.x + column.width) + 1);

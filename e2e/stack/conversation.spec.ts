@@ -20,6 +20,10 @@
  * (5 s, 30 s) is a constant of the workflow, so this one takes about a minute.
  */
 import { expect, test } from "@playwright/test";
+import { enableDeveloperMode } from "../helpers";
+
+// Reasoning blocks are developer-only: the whole file runs with developer mode on.
+test.beforeEach(async ({ page }) => enableDeveloperMode(page));
 import { attemptIds, attemptRows, createTask, eventually, getTask, openTask, planNodes, sql, taskStatus, waitForStatus } from "./tasks";
 
 const unique = (label: string) => `${label} ${Date.now()}`;
@@ -180,7 +184,7 @@ test("E48 the artifacts panel lists a file once, as it is now, while each reply 
 
   // Two replies, each with its own card; the panel has the file once.
   await expect(page.getByTestId("agent-message").getByRole("button", { name: /^note\.md/ })).toHaveCount(2);
-  await expect(page.getByLabel("成果物").getByText("note.md")).toHaveCount(1);
+  await expect(page.getByLabel("产物").getByText("note.md")).toHaveCount(1);
 });
 
 test("E49 reasoning that arrives in the model's own field is folded away too", async ({ page, request }) => {

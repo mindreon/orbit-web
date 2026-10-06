@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { emptyGrant, formatCost, isUsageIdle, parseGrant, usageLine, usageRows } from "./usage";
+import { budgetWarnings, costSummary, emptyGrant, formatCost, isUsageIdle, parseGrant, usageLine, usageRows } from "./usage";
 
 const row = (rows: ReturnType<typeof usageRows>, key: string) => rows.find((item) => item.key === key)!;
 
@@ -69,5 +69,30 @@ describe("usageLine", () => {
     expect(usageLine({ tokens_in: 0, tokens_out: 0, tool_calls: 0, wall_s: 0, cost_usd_micros: null })).toBe("");
     expect(usageLine(undefined)).toBe("");
     expect(usageLine({ cost_usd_micros: 1500 })).toBe("$0.0015");
+  });
+});
+
+describe("costSummary", () => {
+  it("says time and tokens, rounded the way a person says them", () => {
+    expect(costSummary({ tokens_in: 1_600_000, tokens_out: 90_000, wall_s: 1380 })).toBe("用时 23 分 · 约 169 万 tokens");
+    expect(costSummary({ tokens_in: 15_300, wall_s: 42 })).toBe("用时 42 秒 · 约 1.5 万 tokens");
+    expect(costSummary({ tokens_in: 800 })).toBe("800 tokens");
+  });
+
+  it("adds the cost only when it is priced, and never says 未知", () => {
+    expect(costSummary({ tokens_in: 800, cost_usd_micros: 1_234_000 })).toBe("800 tokens · $1.23");
+    expect(costSummary({ tokens_in: 800, cost_usd_micros: null })).toBe("800 tokens");
+    expect(costSummary({ tokens_in: 800, cost_usd_micros: 0 })).not.toContain("$");
+    expect(costSummary(undefined)).toBe("");
+  });
+});
+
+describe("budgetWarnings", () => {
+  it("warns near the limit and when over it, and says nothing for a task without a budget", () => {
+    expect(budgetWarnings({ tokens_in: 500 }, { tokens: 1000 })).toEqual([]);
+    expect(budgetWarnings({ tokens_in: 850 }, { tokens: 1000 })[0]).toMatchObject({ key: "tokens", over: false });
+    expect(budgetWarnings({ tokens_in: 1000 }, { tokens: 1000 })[0]).toMatchObject({ over: true });
+    expect(budgetWarnings({ tokens_in: 99999 }, {})).toEqual([]);
+    expect(budgetWarnings({ tokens_in: 5 }, { cost_usd_micros: 100 })).toEqual([]);
   });
 });
