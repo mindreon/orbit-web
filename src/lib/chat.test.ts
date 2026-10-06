@@ -165,6 +165,18 @@ describe("plan-level attempts", () => {
     expect(all[0].work?.steps).toHaveLength(1);
   });
 
+  it("puts what the leader did after the user's answer under that answer, not at the attempt's start (G1, G6)", () => {
+    const events = [
+      ev(1, "attempt.started", { attempt_id: "att_l", node_id: "n_lead", attempt_no: 1, profile: "w@1" }),
+      ev(2, "tool.call_started", { attempt_id: "att_l", tool_call_id: "ask", tool_name: "ask_user" }),
+      ev(3, "attempt.parked", { attempt_id: "att_l", reason: "input" }),
+      ev(4, "message.user", { text: "用 React" }),
+      ev(5, "tool.call_finished", { attempt_id: "att_l", tool_call_id: "w1", tool_name: "Write", state: "success" }),
+    ];
+    const order = chat(events, { roles }).map((i) => (i.type === "user" ? `user:${i.text}` : i.type === "bubble" ? `bubble:${i.work?.steps.map((s) => s.tool).join(",")}` : i.type));
+    expect(order).toEqual(["bubble:ask_user", "user:用 React", "bubble:Write"]);
+  });
+
   it("labels a review with its round from the node (G7)", () => {
     const reviewRoles = { n_r: { kind: "review" as const, role: "member-1", label: "主编", expert: "w@1", name: "撰稿专家", round: 2 } };
     const events = [...attempt(1, "att_r", "n_r", "还差一点"), msg(9, "review", "member-1", [], "还差一点", { node_id: "n_r", attempt_id: "att_r", round: 0 })];

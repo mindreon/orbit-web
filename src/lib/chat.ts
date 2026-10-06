@@ -279,11 +279,17 @@ export function buildChat(input: BuildInput): ChatItem[] {
   const plain = events.filter((event) => !attributed(event));
   const stageAttempts = new Set(Object.keys(live.teams));
   const taken = new Set<string>();
+  let before: ReturnType<typeof buildTimeline>[number] | undefined;
   for (const turn of buildTimeline(task, plain, live)) {
+    const previous = before;
+    before = turn;
     if (turn.kind !== "agent" || stageAttempts.has(turn.attemptId) || stageNodeIds.has(turn.nodeId)) continue;
     const role = roles[turn.nodeId];
     const speaker = role ? speakerOf(team, role.role, role.label, nameOf) : speakerOf(team, team.leader, "", nameOf);
-    const base = (startPos.get(turn.attemptId) ?? last) + turn.generation * 0.01;
+    // A later generation is what the attempt did after the answer that split it (conversation.ts puts that message.user
+    // right before it): it sits under that answer, not at the attempt's start.
+    const split = turn.generation > 0 && previous?.kind === "user" ? items.find((item) => item.type === "user" && item.id === previous.id) : undefined;
+    const base = split ? split.pos + 0.001 : (startPos.get(turn.attemptId) ?? last) + turn.generation * 0.01;
     const done = turn.status === "completed" || turn.status === "failed" || turn.status === "cancelled";
     const forTurn: ChatWork = { steps: turn.steps, thinking: turn.thinking, text: "" };
     // The message the workflow wrote for this node already says what the attempt said: the attempt only adds its steps.
