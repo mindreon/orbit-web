@@ -1,16 +1,18 @@
-import { Check, ChevronRight, ClipboardCheck, Copy } from "lucide-react";
-import { useState } from "react";
+import { ChevronRight, ClipboardCheck } from "lucide-react";
+import { useId, useState } from "react";
 import type { ArtifactFile } from "../../lib/artifacts";
 import type { AgentTurn } from "../../lib/conversation";
 import { useDeveloperMode } from "../../lib/devMode";
 import { roleText, type NodeRole } from "../../lib/display";
-import { shortDateTime } from "../../lib/time";
+import { replyTime } from "../../lib/activity";
 import { RichText } from "../markdown/RichText";
 import { StatusBadge } from "../../ui/StatusBadge";
 import { Avatar } from "../TeamAvatars";
 import { attemptStatusText, failureClassText, statusTone } from "../tasks/statusText";
+import { ActivityTimeline, useExpansion } from "./ActivityTimeline";
 import { ArtifactCards } from "./ArtifactCards";
-import { StepList } from "./StepList";
+import { ProcessHeader } from "./ProcessHeader";
+import { ActionRow, CopyButton, UsageButton } from "./ReplyActions";
 
 interface AgentMessageProps {
   readonly turn: AgentTurn;
@@ -24,25 +26,8 @@ interface AgentMessageProps {
   /** Who the node of this reply belongs to: a member (shown above the reply), the leader's review (shown above it too), or the leader (no label: it is the main speaker). */
   readonly speaker?: NodeRole;
   readonly nameOf?: (ref: string) => string;
-}
-
-function CopyButton({ text }: { text: string }) {
-  const [copied, setCopied] = useState(false);
-  return (
-    <button
-      type="button"
-      aria-label="复制回复"
-      className="flex h-7 w-7 items-center justify-center rounded-control text-gray-500 hover:bg-gray-100 hover:text-foreground"
-      onClick={() => {
-        void navigator.clipboard?.writeText(text).then(() => {
-          setCopied(true);
-          window.setTimeout(() => setCopied(false), 1500);
-        });
-      }}
-    >
-      {copied ? <Check className="h-4 w-4 text-success-700" /> : <Copy className="h-4 w-4" />}
-    </button>
-  );
+  /** The last reply of the conversation: its action row stays visible instead of waiting for the pointer. */
+  readonly last?: boolean;
 }
 
 /** 模型的推理（独立字段流出的，或写进回复里的）：默认折起，不和回复正文混在一起；正文开始前跟着流式展开。 */
@@ -58,41 +43,65 @@ function Thinking({ text, open }: { text: string; open: boolean }) {
   );
 }
 
-/** 一次尝试对应一条 Agent 回复：先是执行步骤，再是回复正文，最后是产物和脚注。 */
-export function AgentMessage({ turn, expertName, files, onOpenFile, onOpenAllFiles, totalFiles, speaker, nameOf }: AgentMessageProps) {
+/**
+ * 一次尝试对应一条 Agent 回复：先是一行「已处理 1m 41s」，下面是过程（每轮模型的话和工具调用，按发生的先后），
+ * 然后是最终回复、产物，最后是操作行。回复结束后过程默认折起，最终回复始终可见。
+ */
+export function AgentMessage({ turn, expertName, files, onOpenFile, onOpenAllFiles, totalFiles, speaker, nameOf, last = false }: AgentMessageProps) {
   const developer = useDeveloperMode();
+  const processId = useId();
+  const expansion = useExpansion();
+  const [override, setOverride] = useState<boolean | null>(null);
   const done = turn.status === "completed" || turn.status === "failed" || turn.status === "cancelled";
-  const thinking = turn.status === "running" && turn.text === "" && turn.thinking === "" && turn.steps.length === 0;
+  const active = turn.status === "running" || turn.status === "parked_approval" || turn.status === "parked_input";
+  const showThinking = developer && turn.thinking !== "";
+  const hasProcess = turn.segments.length > 0 || showThinking;
+  // 回复结束后过程默认折起；你点过之后以你的为准。
+  const open = override ?? !done;
   const labelled = speaker && speaker.kind !== "leader" ? speaker : undefined;
   // The footer names whoever answered: the member's expert, not the task's (the leader's).
   const footerName = speaker?.name || expertName;
   return (
-    <div data-testid="agent-message" data-status={turn.status} data-speaker={speaker?.kind} className="space-y-3">
+    <div data-testid="agent-message" data-status={turn.status} data-speaker={speaker?.kind} className="group/msg relative space-y-3">
       {labelled ? (
         <p data-testid="speaker" data-kind={labelled.kind} data-role={labelled.role} className="flex items-center gap-1.5 text-small font-medium text-gray-700">
           {labelled.kind === "review" ? <ClipboardCheck aria-hidden="true" className="h-4 w-4 shrink-0 text-primary-700" /> : <Avatar name={labelled.name || (nameOf ? nameOf(labelled.expert) : "")} tone={1} />}
           <span data-testid="speaker-label">{roleText(labelled, nameOf)}</span>
         </p>
       ) : null}
-      <StepList steps={turn.steps} active={turn.status === "running"} />
-      {thinking ? <p className="text-body text-muted-foreground">正在思考…</p> : null}
-      {developer && turn.thinking !== "" ? <Thinking text={turn.thinking} open={turn.status === "running" && turn.text === ""} /> : null}
-      {turn.text !== "" ? (
+      <ProcessHeader
+        status={turn.status}
+        startedAt={turn.at}
+        finishedAt={turn.finishedAt}
+        working={turn.segments.length > 0 || turn.answer !== ""}
+        expandable={hasProcess}
+        open={open}
+        onToggle={() => setOverride(!open)}
+        controls={processId}
+      />
+      {hasProcess && open ? (
+        <div id={processId} data-testid="process" className="space-y-2">
+          {showThinking ? <Thinking text={turn.thinking} open={turn.status === "running" && turn.answer === "" && turn.segments.length === 0} /> : null}
+          <ActivityTimeline segments={turn.segments} active={active} expansion={expansion} />
+        </div>
+      ) : null}
+      {turn.answer !== "" ? (
         turn.streaming ? (
           <article data-testid="live-output">
-            <p className="mb-1 text-caption text-muted-foreground">
-              {turn.status === "running" ? "正在输出…" : turn.status === "parked_approval" ? "等待你的确认" : "等待你的回答"}
-              {turn.truncated ? <span data-testid="truncated-badge" className="ml-2 rounded-control bg-warning-100 px-1.5 text-warning-700">已截断</span> : null}
-            </p>
-            <RichText text={turn.text} streaming={turn.status === "running"} />
+            {turn.truncated ? (
+              <p className="mb-1 text-caption text-muted-foreground">
+                <span data-testid="truncated-badge" className="rounded-control bg-warning-100 px-1.5 text-warning-700">已截断</span>
+              </p>
+            ) : null}
+            <RichText text={turn.answer} streaming={turn.status === "running"} />
           </article>
         ) : (
           <article data-testid="final-output">
-            <RichText text={turn.text} />
+            <RichText text={turn.answer} />
           </article>
         )
       ) : null}
-      {/* 等待审批/等待回复不再单独标一个徽章：下面的提示卡、页头状态和输入框已经说了同一件事 */}
+      {/* 等待审批/等待回复不再单独标一个徽章：开头那行、下面的提示卡、页头状态和输入框已经说了同一件事 */}
       {turn.status === "failed" || turn.status === "cancelled" ? (
         <p className="flex flex-wrap items-center gap-2">
           <StatusBadge tone={statusTone(turn.status)}>{attemptStatusText[turn.status]}</StatusBadge>
@@ -105,11 +114,12 @@ export function AgentMessage({ turn, expertName, files, onOpenFile, onOpenAllFil
       ) : null}
       <ArtifactCards files={files} total={totalFiles} onOpen={onOpenFile} onOpenAll={onOpenAllFiles} />
       {done ? (
-        <div className="flex items-center gap-2 text-caption text-muted-foreground">
-          {turn.text ? <CopyButton text={turn.text} /> : null}
+        <ActionRow testId="reply-actions" always={last}>
+          {turn.answer || turn.text ? <CopyButton text={turn.answer || turn.text} label="复制回复" /> : null}
+          <span className="tabular-nums">{replyTime(turn.finishedAt ?? turn.at)}</span>
           <span>{footerName}</span>
-          <span>{shortDateTime(turn.at)}</span>
-        </div>
+          {turn.usage ? <UsageButton usage={turn.usage} /> : null}
+        </ActionRow>
       ) : null}
     </div>
   );

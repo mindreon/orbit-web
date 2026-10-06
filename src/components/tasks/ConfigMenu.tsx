@@ -1,5 +1,5 @@
 import { Bot, ChevronRight, Link2, Paperclip, Plus, Sparkles, Wrench } from "lucide-react";
-import { useRef, useState, type ReactNode } from "react";
+import { useEffect, useRef, useState, type ReactNode } from "react";
 import { Link } from "react-router";
 import { TEAM_TOOLTIP } from "../../lib/display";
 import { isTeam, singleExperts, type Expert } from "../../lib/experts";
@@ -11,7 +11,7 @@ import { MODE_OPTIONS, type ConfigDraft, type ConfigMode } from "../../lib/taskC
 import { Option } from "../../ui/Option";
 import { SkillPicker } from "./SkillPicker";
 
-type Panel = "mode" | "expert" | "skills" | "connectors";
+export type Panel = "mode" | "expert" | "skills" | "connectors";
 
 const ITEMS: ReadonlyArray<{ id: Panel; label: string; icon: ReactNode }> = [
   { id: "mode", label: "模式", icon: <Sparkles aria-hidden="true" className="h-4 w-4" /> },
@@ -27,10 +27,12 @@ interface ConfigMenuProps {
   readonly disabled?: boolean;
   /** 提供后「添加文件」可用：打开调用方的文件选择框。 */
   readonly onAddFile?: () => void;
+  /** 从别处（输入框里的 / 命令）打开菜单并停在某个面板：`n` 每次加一，同一个面板也能再打开。 */
+  readonly request?: { readonly panel: Panel; readonly n: number } | null;
 }
 
 /** 输入框左下角的「+」：添加文件、模式、专家、技能、连接器。选中任意一项菜单就收起，加号转回原样。 */
-export function ConfigMenu({ draft, onChange, catalog, disabled = false, onAddFile }: ConfigMenuProps) {
+export function ConfigMenu({ draft, onChange, catalog, disabled = false, onAddFile, request = null }: ConfigMenuProps) {
   // 选中即关闭：包一层，所有面板的修改都走这里。
   const choose = (next: ConfigDraft) => {
     onChange(next);
@@ -40,6 +42,13 @@ export function ConfigMenu({ draft, onChange, catalog, disabled = false, onAddFi
   const [panel, setPanel] = useState<Panel>("mode");
   const box = useRef<HTMLDivElement>(null);
   usePopoverClose(open, box, () => setOpen(false));
+  useEffect(() => {
+    if (!request) return;
+    setPanel(request.panel);
+    setOpen(true);
+    // 只看请求的序号：同一个面板再被请求一次也要打开。
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [request?.n]);
   // 触摸屏上不做悬停切换：面板撑开把菜单顶到指针下面，会误切到别的面板，点选才是明确的。
   const touch = useMediaQuery(COARSE_POINTER);
 

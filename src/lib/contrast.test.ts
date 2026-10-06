@@ -77,7 +77,8 @@ describe("type scale, weights and radii (C4)", () => {
     const sizes = config.theme?.fontSize as Record<string, unknown>;
     expect(Object.keys(sizes)).toEqual(["caption", "small", "body", "title", "heading", "display"]);
     expect(config.theme?.fontWeight).toEqual({ normal: "400", medium: "500", semibold: "600" });
-    expect(Object.keys(config.theme?.borderRadius as object)).toEqual(["none", "control", "card", "full"]);
+    expect(Object.keys(config.theme?.borderRadius as object)).toEqual(["none", "control", "card", "bubble", "full"]);
+    expect((config.theme?.borderRadius as Record<string, string>).bubble).toBe("1.25rem");
     expect(Number.parseFloat(tokens["--radius-control"]) * 16).toBe(8);
     expect(Number.parseFloat(tokens["--radius-card"]) * 16).toBe(12);
   });

@@ -1,4 +1,5 @@
 import type { Config } from "tailwindcss";
+import plugin from "tailwindcss/plugin";
 
 /** A ramp is a set of CSS variables (`--gray-50`...) defined per theme in src/index.css. */
 const ramp = (name: string, steps: readonly number[]) => Object.fromEntries(steps.map((step) => [step, `hsl(var(--${name}-${step}) / <alpha-value>)`]));
@@ -23,9 +24,15 @@ const config: Config = {
       none: "0",
       control: "var(--radius-control)",
       card: "var(--radius-card)",
+      /** The user's message bubble (and the composer, which reuses it): 20px. Only these two surfaces round this far. */
+      bubble: "1.25rem",
       full: "9999px",
     },
     extend: {
+      keyframes: {
+        /** The sweep of `.shimmer-text`: a lighter band moves left to right through the letters of a running activity. */
+        shimmer: { "0%": { backgroundPosition: "100% 0" }, "100%": { backgroundPosition: "-100% 0" } },
+      },
       maxWidth: {
         /** The conversation and composer column: 48rem (768px), about 54 CJK characters per line at text-body. */
         reading: "48rem",
@@ -89,7 +96,29 @@ const config: Config = {
       },
     },
   },
-  plugins: [],
+  plugins: [
+    // Text of something that is running (正在读取 foo.ts, 正在思考): the letters carry a moving highlight. The gradient is built from
+    // ramp steps, so it flips with the theme. With reduced motion it is a plain muted line.
+    plugin(({ addBase, addUtilities, theme }) => {
+      // Emitted here rather than through an `animate-*` class: nothing in the markup uses one, so Tailwind would drop the keyframe.
+      addBase({ "@keyframes shimmer": theme("keyframes.shimmer") });
+      addUtilities({
+        ".shimmer-text": {
+          backgroundImage: "linear-gradient(90deg, hsl(var(--gray-500)) 0%, hsl(var(--gray-500)) 35%, hsl(var(--gray-900)) 50%, hsl(var(--gray-500)) 65%, hsl(var(--gray-500)) 100%)",
+          backgroundSize: "200% 100%",
+          backgroundClip: "text",
+          WebkitBackgroundClip: "text",
+          color: "transparent",
+          animation: "shimmer 2.4s linear infinite",
+          "@media (prefers-reduced-motion: reduce)": {
+            animation: "none",
+            backgroundImage: "none",
+            color: "hsl(var(--gray-500))",
+          },
+        },
+      });
+    }),
+  ],
 };
 
 export default config;

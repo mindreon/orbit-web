@@ -12,6 +12,17 @@ export interface Step {
   readonly state: StepState;
 }
 
+/** One piece of what an agent did in a reply, in the order it happened: words of a model round, or a tool call. */
+export type Segment =
+  | { readonly kind: "text"; readonly id: string; readonly text: string }
+  | { readonly kind: "step"; readonly step: Step };
+
+/** What an attempt used up (attempt.finished `usage`); only the numbers the contract reports. */
+export interface TurnUsage {
+  readonly tokensIn: number;
+  readonly tokensOut: number;
+}
+
 export interface UserTurn {
   readonly kind: "user";
   readonly id: string;
@@ -31,7 +42,19 @@ export interface AgentTurn {
   readonly attemptNo: number;
   readonly status: AttemptStatus;
   readonly steps: readonly Step[];
-  /** 最终回复；还没有时是正在流出的文字。模型写进回复里的推理已经拆出去，不在这里。 */
+  /**
+   * 这一段回复里先后发生的事：每一轮模型的话和这一轮的工具调用，按事件流里出现的先后排。
+   * 最终回复不在里面（它在 `answer`，永远排在最后）；开头之后的步骤也在这里，所以 `steps` 是它的子集。
+   */
+  readonly segments: readonly Segment[];
+  /** 最终回复：最后一轮模型的话，只要它后面没有再跟工具调用（有 agent_final 时一定是它）。没有时为空。 */
+  readonly answer: string;
+  /**
+   * 事件流里每个 block / 步骤第一次出现的顺序：`t:<block_id>`、`s:<step id>`。文字和工具事件
+   * 在流里的先后就是它们发生的先后，`segments` 据此排序。只在折叠事件时用。
+   */
+  readonly order: readonly string[];
+  /** 全部几轮模型的话连在一起（含工具调用之间的话和最终回复；模型写进回复里的推理已经拆出去）。 */
   readonly text: string;
   /** 模型写进回复里的推理，折叠显示。 */
   readonly thinking: string;
@@ -40,7 +63,12 @@ export interface AgentTurn {
   readonly resumed: number;
   /** 失败时的原因分类（已失败的那段回复才有）。 */
   readonly failure?: AttemptFailure;
+  /** 这段回复开始的时间：尝试开始，或者你的上一条消息到达。 */
   readonly at: string;
+  /** 这段回复结束的时间：尝试结束，或者你的下一条消息把它截断；还没结束时没有。 */
+  readonly finishedAt?: string;
+  /** 这次尝试的用量，挂在它的最后一段回复上；事件里没有（或全是 0）时没有。 */
+  readonly usage?: TurnUsage;
 }
 
 export type Turn = UserTurn | AgentTurn;
@@ -62,8 +90,22 @@ function updateAgent(turns: readonly Turn[], attemptId: string, change: (turn: A
   return turns.map((turn, i) => (i === index && turn.kind === "agent" ? change(turn) : turn));
 }
 
+/** 同一个调用的 started / finished 合成一步；结束事件里常常没有入参（只有 TodoWrite 带），已有的入参不被空的盖掉。 */
 function upsertStep(steps: readonly Step[], step: Step): readonly Step[] {
-  return steps.some((item) => item.id === step.id) ? steps.map((item) => (item.id === step.id ? { ...item, ...step } : item)) : [...steps, step];
+  return steps.some((item) => item.id === step.id) ? steps.map((item) => (item.id === step.id ? { ...item, ...step, args: step.args || item.args } : item)) : [...steps, step];
+}
+
+/** 把 block / 步骤第一次出现的位置记下来（已记过的不动）。 */
+const noted = (order: readonly string[], key: string): readonly string[] => (order.includes(key) ? order : [...order, key]);
+
+const count = (value: unknown): number => (typeof value === "number" && Number.isFinite(value) && value > 0 ? value : 0);
+
+/** 契约里的用量里的输入/输出 token；两个都是 0 说明没有记（默认值），不当成用量。 */
+function usageOf(value: unknown): TurnUsage | undefined {
+  if (typeof value !== "object" || value === null) return undefined;
+  const raw = value as Record<string, unknown>;
+  const usage = { tokensIn: count(raw.tokens_in), tokensOut: count(raw.tokens_out) };
+  return usage.tokensIn + usage.tokensOut > 0 ? usage : undefined;
 }
 
 function fold(turns: readonly Turn[], event: TaskEvent): readonly Turn[] {
@@ -81,6 +123,7 @@ function fold(turns: readonly Turn[], event: TaskEvent): readonly Turn[] {
       if (!open) return [...turns, userTurn];
       const closed: AgentTurn = {
         ...target,
+        finishedAt: event.occurred_at,
         steps: target.steps.map((step) =>
           step.tool === "ask_user" && step.state === "running" ? { ...step, state: "success", result: `用户回答：${text}` } : step,
         ),
@@ -90,6 +133,11 @@ function fold(turns: readonly Turn[], event: TaskEvent): readonly Turn[] {
         id: `${target.attemptId}#${target.generation + 1}`,
         generation: target.generation + 1,
         steps: [],
+        segments: [],
+        answer: "",
+        order: [],
+        finishedAt: undefined,
+        usage: undefined,
         text: "",
         thinking: "",
         streaming: false,
@@ -110,6 +158,9 @@ function fold(turns: readonly Turn[], event: TaskEvent): readonly Turn[] {
           attemptNo: Number(payload.attempt_no ?? 1),
           status: "running",
           steps: [],
+          segments: [],
+          answer: "",
+          order: [],
           text: "",
           thinking: "",
           streaming: false,
@@ -129,7 +180,14 @@ function fold(turns: readonly Turn[], event: TaskEvent): readonly Turn[] {
         result: str(payload, "result_preview"),
         state: finished ? ((["success", "error", "denied", "interrupted"].includes(state) ? state : "success") as StepState) : "running",
       };
-      return updateAgent(turns, str(payload, "attempt_id"), (turn) => ({ ...turn, steps: upsertStep(turn.steps, step) }));
+      return updateAgent(turns, str(payload, "attempt_id"), (turn) => ({ ...turn, steps: upsertStep(turn.steps, step), order: noted(turn.order, `s:${step.id}`) }));
+    }
+    case "agent.token_delta": {
+      // 文字本身取自折叠好的实时状态；这里只记下每个 block 第一次出现在事件流里的位置。
+      const key = `t:${str(payload, "block_id")}`;
+      const index = lastAgentIndexOf(turns, str(payload, "attempt_id"));
+      const turn = turns[index];
+      return turn?.kind === "agent" && !turn.order.includes(key) ? updateAgent(turns, turn.attemptId, (item) => ({ ...item, order: [...item.order, key] })) : turns;
     }
     case "attempt.parked":
       return updateAgent(turns, str(payload, "attempt_id"), (turn) => ({
@@ -141,11 +199,34 @@ function fold(turns: readonly Turn[], event: TaskEvent): readonly Turn[] {
     case "attempt.finished": {
       const outcome = str(payload, "outcome");
       const status: AttemptStatus = outcome === "completed" ? "completed" : outcome === "cancelled" ? "cancelled" : "failed";
-      return updateAgent(turns, str(payload, "attempt_id"), (turn) => ({ ...turn, status }));
+      const usage = usageOf(payload.usage);
+      return updateAgent(turns, str(payload, "attempt_id"), (turn) => ({ ...turn, status, finishedAt: event.occurred_at, ...(usage ? { usage } : {}) }));
     }
     default:
       return turns;
   }
+}
+
+/**
+ * 一段回复里先后发生的事：每个 block 的正文（拆掉推理标签）和每个工具调用，按 `order`（事件流里第一次出现的先后）排。
+ * 排不出位置的 block（事件流里没有它的增量，比如刷新后只剩 agent_final）排在所有步骤前面，不去猜。
+ * 最终回复拿出来单独放：有 agent_final 时是最后一个 block（回放时它没有位置）；没有时是排在最后的那段话，只要它后面没有再跟工具调用。
+ */
+function arrange(turn: AgentTurn, blocks: readonly LiveBlock[], hasFinal: boolean): { readonly segments: readonly Segment[]; readonly answer: string } {
+  const parts = blocks.map((block) => ({ id: block.id, text: splitThinking(block.text).answer.trim() }));
+  const closing = hasFinal ? parts[parts.length - 1] : undefined;
+  const placed: { pos: number; segment: Segment }[] = [];
+  parts.forEach((part, index) => {
+    if (part === closing || part.text === "") return;
+    const at = turn.order.indexOf(`t:${part.id}`);
+    placed.push({ pos: at >= 0 ? at : -1 + index / 1000, segment: { kind: "text", id: part.id, text: part.text } });
+  });
+  for (const step of turn.steps) placed.push({ pos: turn.order.indexOf(`s:${step.id}`), segment: { kind: "step", step } });
+  placed.sort((a, b) => a.pos - b.pos);
+  const segments = placed.map((item) => item.segment);
+  if (closing) return { segments, answer: closing.text };
+  const last = segments[segments.length - 1];
+  return last?.kind === "text" ? { segments: segments.slice(0, -1), answer: last.text } : { segments, answer: "" };
 }
 
 /**
@@ -186,20 +267,20 @@ export function buildTimeline(task: Task, events: readonly TaskEvent[], live: Ta
     const thinking = [streamed.map((block) => block.text).filter((text) => text !== "").join("\n\n"), tagged]
       .filter((text) => text !== "")
       .join("\n\n");
+    const { segments, answer: finalAnswer } = arrange(turn, blocks, isLast && attempt?.finalText !== undefined);
     return {
       ...turn,
       status: isLast ? attempt?.status ?? turn.status : "completed",
       resumed: isLast ? attempt?.resumed ?? 0 : 0,
       failure: isLast ? attempt?.failure : undefined,
+      // 用量是整次尝试的，只挂在它的最后一段回复上。
+      usage: isLast ? turn.usage : undefined,
+      segments,
+      answer: finalAnswer,
       text: answer,
       thinking,
-      streaming: isLast && attempt?.finalText === undefined && blocks.some((block) => block.text !== ""),
+      streaming: isLast && attempt?.finalText === undefined && finalAnswer !== "",
       truncated: isLast && Boolean(live.truncated[turn.attemptId]),
     };
   });
 }
-
-const TOOL_TEXT: Readonly<Record<string, string>> = { TaskList: "查看任务计划" };
-
-/** 工具名的中文说明；没收录的显示原名。 */
-export const toolLabel = (tool: string) => TOOL_TEXT[tool] ?? tool;

@@ -183,6 +183,38 @@ body {
   .page-enter { animation: none; }
 }
 
+/* 「回到底部」按钮：亮色是卡片底、淡边；暗色里卡片和页面只差一点，所以抬高一档底色，边和图标也各深一档 */
+.scroll-fab {
+  background: hsl(var(--card));
+  border: 1px solid hsl(var(--border));
+  color: hsl(var(--gray-700));
+}
+.scroll-fab:hover { background: hsl(var(--gray-50)); color: hsl(var(--foreground)); }
+html[data-theme="dark"] .scroll-fab {
+  background: hsl(var(--gray-200));
+  border-color: hsl(var(--gray-400));
+  color: hsl(var(--gray-800));
+}
+html[data-theme="dark"] .scroll-fab:hover { background: hsl(var(--gray-300)); color: hsl(var(--gray-900)); }
+
+/* 「回到底部」按钮里的三个点：依次亮起，一轮 1.2s，每个晚 0.2s；减弱动态时不动 */
+@keyframes typing-dot {
+  0%, 55%, 100% { opacity: 0.5; }
+  25% { opacity: 1; }
+}
+.typing-dot {
+  width: 4px;
+  height: 4px;
+  border-radius: 9999px;
+  background: currentColor;
+  animation: typing-dot 1.2s ease-in-out infinite;
+}
+.typing-dot:nth-child(2) { animation-delay: 0.2s; }
+.typing-dot:nth-child(3) { animation-delay: 0.4s; }
+@media (prefers-reduced-motion: reduce) {
+  .typing-dot { animation: none; opacity: 1; }
+}
+
 /* ＋菜单从按钮方向弹出 */
 @keyframes menu-in {
   from { opacity: 0; transform: translateY(6px) scale(0.97); }
@@ -203,37 +235,33 @@ body {
 .md-block { display: contents; }
 .md > .md-block:first-child > :first-child { margin-top: 0; }
 .md > .md-block:last-child > :last-child { margin-bottom: 0; }
-.md p, .md ul, .md ol, .md blockquote, .md .md-table-wrap, .md .md-code, .md .md-mermaid, .md .katex-display { margin: 0.6em 0; }
-.md h1, .md h2, .md h3, .md h4 { margin: 1.1em 0 0.5em; font-weight: 600; line-height: 1.4; }
-.md h1 { font-size: var(--text-heading); }
-.md h2 { font-size: var(--text-title); }
-.md h3, .md h4 { font-size: var(--text-body); }
+.md p, .md ul, .md ol, .md blockquote, .md .md-code, .md .md-mermaid, .md .katex-display { margin: 0.6em 0; }
+/* Headings sit on the six-size scale: h1 title/600; h2, h3 body/600 (h3 quieter); h4 body/500; h5, h6 small/500 muted. */
+.md h1, .md h2, .md h3, .md h4, .md h5, .md h6 { margin: 1.2em 0 0.5em; font-weight: 600; line-height: 1.5; }
+.md h1 { font-size: var(--text-title); }
+.md h2 { font-size: var(--text-body); }
+.md h3 { font-size: var(--text-body); color: hsl(var(--gray-700)); margin-top: 1em; }
+.md h4 { font-size: var(--text-body); font-weight: 500; margin-top: 1em; }
+.md h5, .md h6 { font-size: var(--text-small); font-weight: 500; color: hsl(var(--muted-foreground)); margin-top: 1em; }
 .md ul { list-style: disc; padding-left: 1.4em; }
 .md ol { list-style: decimal; padding-left: 1.6em; }
-.md li + li { margin-top: 0.2em; }
-.md li > ul, .md li > ol { margin: 0.2em 0; }
+.md li::marker { color: hsl(var(--gray-500)); }
+.md li + li { margin-top: 0.25em; }
+.md li > ul, .md li > ol { margin: 0.25em 0; }
+.md li > p { margin: 0.25em 0; }
 .md li:has(> input[type="checkbox"]) { list-style: none; margin-left: -1.2em; }
 .md input[type="checkbox"] { margin-right: 0.4em; vertical-align: -1px; }
 .md a { color: hsl(var(--primary-700)); text-decoration: underline; text-underline-offset: 2px; }
-.md blockquote { border-left: 3px solid hsl(var(--border)); padding-left: 0.9em; color: hsl(var(--muted-foreground)); }
-.md hr { border: 0; border-top: 1px solid hsl(var(--border)); margin: 1.2em 0; }
+.md blockquote { border-left: 3px solid hsl(var(--gray-300)); padding: 0.1em 0 0.1em 0.9em; color: hsl(var(--gray-600)); }
+.md blockquote > :first-child { margin-top: 0; }
+.md blockquote > :last-child { margin-bottom: 0; }
+.md hr { border: 0; border-top: 1px solid hsl(var(--border)); margin: 1.4em 0; }
 .md strong { font-weight: 600; }
-.md .md-inline-code { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size: var(--text-small); background: hsl(var(--secondary)); border-radius: var(--radius-control); padding: 0.1em 0.4em; }
-.md .md-table-wrap { overflow-x: auto; }
-.md table { border-collapse: collapse; font-size: var(--text-small); min-width: 50%; }
-/* CJK text wraps at any character, so without a floor a wide table squeezes into one-glyph columns instead of scrolling. */
-.md th, .md td { padding: 0.35em 0.7em; text-align: left; vertical-align: top; min-width: 5.5em; max-width: 28em; overflow-wrap: break-word; }
-.md th { border-bottom: 1px solid hsl(var(--border)); font-weight: 600; }
-.md tr:nth-child(2n) td { background: hsl(var(--muted)); }
+.md .md-inline-code { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size: var(--text-small); font-variant-ligatures: none; background: hsl(var(--gray-100)); border-radius: var(--radius-control); padding: 0.1em 0.4em; }
 .md .katex-display { overflow-x: auto; overflow-y: hidden; padding: 0.2em 0; }
 .md-mark { background: hsl(var(--warning-100)); color: hsl(var(--warning-700)); border-radius: var(--radius-control); }
 
-.md-code { border-radius: var(--radius-control); overflow: hidden; background: hsl(var(--secondary)); }
-.md-code-bar { display: flex; align-items: center; justify-content: space-between; padding: 2px 6px 2px 12px; font-size: var(--text-caption); color: hsl(var(--muted-foreground)); background: hsl(var(--border)); }
-.md-code pre { margin: 0; padding: 10px 12px; overflow-x: auto; font-size: var(--text-small); line-height: 1.6; }
-.md-code code { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; background: none; padding: 0; }
-.md-code code, .md .md-inline-code { font-variant-ligatures: none; }
-.md-mermaid { border-radius: var(--radius-control); padding: 12px; overflow-x: auto; background: hsl(var(--muted)); }
+.md-mermaid { border-radius: var(--radius-card); padding: 12px; overflow-x: auto; background: hsl(var(--muted)); }
 .md-mermaid svg { max-width: 100%; height: auto; margin: 0 auto; display: block; }
 .md-image-blocked { display: inline-flex; align-items: center; gap: 8px; max-width: 100%; margin: 4px 0; padding: 6px 8px; border: 1px dashed hsl(var(--border)); border-radius: var(--radius-control); background: hsl(var(--muted)); vertical-align: middle; }
 

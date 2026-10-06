@@ -1,18 +1,18 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { Link, useParams } from "react-router";
-import { AgentQuestion } from "../components/tasks/AgentQuestion";
 import { ReviewNotice } from "../components/tasks/ReviewNotice";
 import { TakeoverNotice } from "../components/tasks/TakeoverNotice";
 import type { NodeActions } from "../components/tasks/NodeActions";
-import { ApprovalInbox } from "../components/tasks/ApprovalInbox";
+import { ApprovalMarker } from "../components/tasks/ApprovalInbox";
 import { Composer } from "../components/tasks/Composer";
 import { TaskStats } from "../components/tasks/TaskStats";
-import { TodoChecklist } from "../components/tasks/TodoChecklist";
+import { PlanPill } from "../components/tasks/PlanPill";
+import { PromptDock } from "../components/tasks/PromptDock";
 import { executionChecklist } from "../lib/todos";
 import { useConfigCatalog } from "../lib/configCatalog";
 import { useTaskConfig } from "../lib/useTaskConfig";
 import { TaskHeader } from "../components/tasks/TaskHeader";
-import { HOME, OVERVIEW, TaskPanel, type Overview } from "../components/tasks/TaskPanel";
+import { AGENTS, HOME, OVERVIEW, TaskPanel, type Overview } from "../components/tasks/TaskPanel";
 import { Conversation } from "../components/conversation/Conversation";
 import { GroupChat } from "../components/conversation/GroupChat";
 import { buildChat, latestRosterStatus, mainChat, type ChatItem } from "../lib/chat";
@@ -20,12 +20,13 @@ import { describeFailure } from "../lib/api";
 import { nodeRoles, nodeTitle, profileName, roleName } from "../lib/display";
 import { BREAKPOINT, useMediaQuery } from "../lib/useMediaQuery";
 import { fileKey, flattenArtifacts, type ArtifactFile } from "../lib/artifacts";
-import { approvalInfos } from "../lib/approvals";
+import { approvalInfos, approvalState } from "../lib/approvals";
 import { buildTimeline } from "../lib/conversation";
 import { completeTaskNode, controlTask, decideTaskApproval, grantTaskBudget, sendTaskMessage, switchNodeProfile } from "../lib/tasks";
 import { pendingSwitch, stageOfNode, totalReserved, type BudgetAmounts, type ProfileSwitch } from "../lib/taskEvents";
 import { useTasksStore } from "../lib/tasksStore";
 import { useTaskStream } from "../lib/useTaskStream";
+import { cn } from "../lib/cn";
 import { Alert } from "../ui/Alert";
 import { Skeleton } from "../ui/Skeleton";
 
@@ -60,6 +61,9 @@ function TaskView({ taskId }: { taskId: string }) {
   const catalog = useConfigCatalog();
   const upsert = useTasksStore((state) => state.upsert);
   const [actionError, setActionError] = useState<string | null>(null);
+  // 停靠在输入框位置上的提问可以收起成胶囊：记下收起的是哪一个（换了一个新提问就不算收起）；对话里的审批标记被点时让停靠区翻到那一条。
+  const [minimizedQuestion, setMinimizedQuestion] = useState("");
+  const [approvalFocus, setApprovalFocus] = useState<{ id: string; tick: number } | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
   // Wide screens open with the details column beside the conversation; narrower ones keep it as a drawer, closed until asked for.
   const wide = useMediaQuery(BREAKPOINT.lg);
@@ -69,8 +73,11 @@ function TaskView({ taskId }: { taskId: string }) {
     // 只记宽屏上的开合：窄屏的抽屉每次都从关着开始。
     if (window.matchMedia(BREAKPOINT.lg).matches) writePanelPref(open);
   }, []);
-  // 面板打开时看哪一页：默认首页；成员的任务只有点名册才会打开，不跨任务记。
+  // 面板打开时看哪一页：默认首页；「子智能体」里看哪位成员只有点名册才会打开，不跨任务记。
   const [overview, setOverview] = useState<Overview>(HOME);
+  const [member, setMember] = useState<string | null>(null);
+  // 最大化：面板占满整个任务页，对话藏起来（不卸载，输入框里的草稿还在）；只在宽屏上有，Esc 还原。
+  const [maximized, setMaximized] = useState(false);
   const [openFiles, setOpenFiles] = useState<readonly ArtifactFile[]>([]);
   const [active, setActive] = useState(OVERVIEW);
 
@@ -83,7 +90,6 @@ function TaskView({ taskId }: { taskId: string }) {
   const turns = useMemo(() => (task ? buildTimeline(task, events, live) : []), [task, events, live]);
   // 事件比任务快照先到：已有结果的审批立刻离开待确认；被取消的留一张说明。
   const pendingApprovals = (task?.pending_approvals ?? []).filter((id) => live.approvals[id] === undefined);
-  const cancelledApprovals = Object.keys(live.approvals).filter((id) => live.approvals[id] === "CANCELLED");
 
   const nameOf = useCallback((ref: string) => profileName(ref, catalog.experts), [catalog.experts]);
   // Who each node belongs to (the leader, a member, the leader's review): the plan says which expert runs a node, the task's team says who that is.
@@ -105,8 +111,20 @@ function TaskView({ taskId }: { taskId: string }) {
     setActive(OVERVIEW);
     setPanelOpen(true);
   }, [setPanelOpen]);
+  const showMember = useCallback((role: string) => {
+    setMember(role);
+    setActive(AGENTS);
+    setPanelOpen(true);
+  }, [setPanelOpen]);
   const stageOf = useCallback((nodeId: string) => stageOfNode(live, nodeId), [live]);
   const drawerOpen = panelOpen && !wide;
+  const full = maximized && panelOpen && wide;
+  useEffect(() => {
+    if (!full) return;
+    const onKey = (event: KeyboardEvent) => event.key === "Escape" && setMaximized(false);
+    document.addEventListener("keydown", onKey);
+    return () => document.removeEventListener("keydown", onKey);
+  }, [full]);
   useEffect(() => {
     if (!drawerOpen) return;
     const onKey = (event: KeyboardEvent) => event.key === "Escape" && setPanelOpen(false);
@@ -134,6 +152,19 @@ function TaskView({ taskId }: { taskId: string }) {
       return describeFailure("操作失败", err);
     }
   }, []);
+
+  // 拒绝时写了理由：控制面把它记在这次决定上（approval.decided 的 comment），但运行时不会把它交给 Agent，
+  // 所以决定之后再把理由作为一条排队的消息发出去，Agent 才知道该怎么调整。
+  const decide = useCallback(
+    (approvalId: string, decision: "approve" | "reject", always: boolean, reason: string) =>
+      void act(async () => {
+        await decideTaskApproval(taskId, approvalId, decision, always, reason);
+        if (reason) await sendTaskMessage(taskId, reason, "queue");
+      }),
+    [act, taskId],
+  );
+  const answerQuestion = useCallback((text: string) => act(() => sendTaskMessage(taskId, text, "queue")), [act, taskId]);
+  const focusApproval = useCallback((id: string) => setApprovalFocus((current) => ({ id, tick: (current?.tick ?? 0) + 1 })), []);
 
   const openFile = useCallback((file: ArtifactFile) => {
     setOpenFiles((current) => (current.some((item) => fileKey(item) === fileKey(file)) ? current : [...current, file]));
@@ -198,14 +229,21 @@ function TaskView({ taskId }: { taskId: string }) {
       }
     },
   };
-  // 「需要你」的提示卡在场：审批、复核、接管、Agent 提问。
-  const attention = pendingApprovals.length > 0 || task.status === "PAUSED_NEEDS_REVIEW" || task.status === "TAKEN_OVER" || Boolean(live.question);
+  // 输入框的位置上停着等你处理的卡片：审批，或者没收起的 Agent 提问；输入框藏起来（不卸载），清单胶囊也让位。
+  const question = live.question;
+  const questionKey = question ? `${question.attemptId}:${question.text}` : "";
+  const questionMinimized = questionKey !== "" && minimizedQuestion === questionKey;
+  const docked = pendingApprovals.length > 0 || (question !== null && !questionMinimized);
+  // 复核和接管的提示留在对话里：它们在场时输入框的停止/继续退成次要按钮。
+  const attention = task.status === "PAUSED_NEEDS_REVIEW" || task.status === "TAKEN_OVER";
+  // 单个智能体的对话里：每条问过的审批留一行标记（等你的、你决定了的）；专家团的在 GroupChat 里按它被问到的位置放。
+  const askedApprovals = [...new Set([...Object.keys(approvals), ...pendingApprovals])];
   const grantBudget = (delta: BudgetAmounts) => attempt(() => grantTaskBudget(task.task_id, delta));
   const message = (text: string, delivery: "queue" | "interrupt", mentions: readonly string[] = []) => act(() => sendTaskMessage(task.task_id, text, delivery, mentions));
 
   return (
     <div className="flex min-h-0 flex-1">
-      <main className="flex min-h-0 min-w-0 flex-1 flex-col bg-card">
+      <main className={cn("flex min-h-0 min-w-0 flex-1 flex-col bg-card", full && "hidden")}>
         <TaskHeader task={task} onCancel={() => void act(() => controlTask(task.task_id, "cancel"))} onTakeover={() => void act(() => controlTask(task.task_id, "takeover"))} panelOpen={panelOpen} onOpenPanel={() => setPanelOpen(true)} />
         {failure ? <Alert className="mx-4 mt-3 sm:mx-6">{failure}</Alert> : null}
         {notice ? <Alert tone="info" className="mx-4 mt-3 sm:mx-6"><span data-testid="action-notice">{notice}</span></Alert> : null}
@@ -214,17 +252,22 @@ function TaskView({ taskId }: { taskId: string }) {
           turns={turns}
           expertName={nameOf(task.profile)}
           files={files}
-          pendingApprovals={pendingApprovals}
           roles={roles}
           nameOf={nameOf}
-          custom={chat && team ? { size: chat.reduce((sum, item) => sum + (item.type === "bubble" ? item.text.length + (item.work?.text.length ?? 0) + (item.work?.steps.length ?? 0) : item.type === "user" || item.type === "system" ? item.text.length : 1), chat.length), node: <GroupChat items={chat} team={team} files={files} onOpenFile={openFile} onOpenAllFiles={() => showOverview({ kind: "artifacts" })} onOpenMember={(role) => showOverview({ kind: "member", role })} pendingApprovals={pendingApprovals} cancelledApprovals={cancelledApprovals} approvalInfos={approvals} nodeTitles={nodeTitles} nameOf={nameOf} roleNameOf={roleNameOf} onDecide={(id, decision, always) => void act(() => decideTaskApproval(task.task_id, id, decision, always))} /> } : undefined}
+          custom={chat && team ? { size: chat.reduce((sum, item) => sum + (item.type === "bubble" ? item.text.length + (item.work?.text.length ?? 0) + (item.work?.steps.length ?? 0) : item.type === "user" || item.type === "system" ? item.text.length : 1), chat.length), node: <GroupChat items={chat} team={team} files={files} onOpenFile={openFile} onOpenAllFiles={() => showOverview({ kind: "artifacts" })} onOpenMember={showMember} pendingApprovals={pendingApprovals} approvalOutcomes={live.approvals} approvalInfos={approvals} nameOf={nameOf} roleNameOf={roleNameOf} onFocusApproval={focusApproval} /> } : undefined}
           onOpenFile={openFile}
           onOpenAllFiles={() => showOverview({ kind: "artifacts" })}
         >
-          {chat ? null : <ApprovalInbox approvals={pendingApprovals} cancelled={cancelledApprovals} infos={approvals} nodeTitles={nodeTitles} nameOf={nameOf} roleNameOf={roleNameOf} onDecide={(id, decision, always) => void act(() => decideTaskApproval(task.task_id, id, decision, always))} />}
+          {chat ? null : askedApprovals.length > 0 ? (
+            <div className="space-y-1">
+              {askedApprovals.flatMap((id) => {
+                const state = approvalState(id, pendingApprovals, live.approvals);
+                return state ? [<ApprovalMarker key={id} approvalId={id} info={approvals[id]} state={state} nameOf={nameOf} roleNameOf={roleNameOf} onFocus={focusApproval} />] : [];
+              })}
+            </div>
+          ) : null}
           {task.status === "PAUSED_NEEDS_REVIEW" ? <ReviewNotice review={live.review} onResume={() => void act(() => controlTask(task.task_id, "resume"))} onGrantBudget={grantBudget} /> : null}
           {task.status === "TAKEN_OVER" ? <TakeoverNotice onHandback={() => void act(() => controlTask(task.task_id, "handback"))} /> : null}
-          {live.question ? <AgentQuestion key={`${live.question.attemptId}:${live.question.text}`} question={live.question} onAnswer={(text) => message(text, "queue")} /> : null}
           {task.status === "PAUSED" ? <p className="text-center text-small text-muted-foreground">已停止，点击右下角的 ▶ 继续。</p> : null}
           {closed && turns.length > 0 ? (
             <p className="text-center text-small text-muted-foreground">
@@ -235,9 +278,23 @@ function TaskView({ taskId }: { taskId: string }) {
             </p>
           ) : null}
         </Conversation>
-        <TodoChecklist todos={todos ?? []} />
+        <PlanPill todos={todos ?? []} idle={!["CREATED", "PLANNING", "RUNNING", "WAITING"].includes(task.status)} suppressed={docked} />
         <TaskStats usage={task.usage} budgets={task.budgets} />
-        <Composer onSend={message} onControl={(action) => void act(() => controlTask(task.task_id, action))} status={task.status} closed={closed} attention={attention} config={config} catalog={catalog} team={team} />
+        <PromptDock
+          approvals={pendingApprovals}
+          infos={approvals}
+          nodeTitles={nodeTitles}
+          nameOf={nameOf}
+          roleNameOf={roleNameOf}
+          onDecide={decide}
+          question={question}
+          onAnswer={answerQuestion}
+          minimized={questionMinimized}
+          onMinimize={() => setMinimizedQuestion(questionKey)}
+          onRestore={() => setMinimizedQuestion("")}
+          focusRequest={approvalFocus}
+        />
+        <Composer onSend={message} onControl={(action) => void act(() => controlTask(task.task_id, action))} status={task.status} closed={closed} attention={attention} docked={docked} config={config} catalog={catalog} team={team} />
       </main>
       {drawerOpen ? <div aria-hidden="true" data-testid="panel-backdrop" className="fixed inset-0 z-30 bg-black/40" onClick={() => setPanelOpen(false)} /> : null}
       {panelOpen ? (
@@ -255,6 +312,10 @@ function TaskView({ taskId }: { taskId: string }) {
           active={active}
           overview={overview}
           chat={chat}
+          member={member}
+          onMember={setMember}
+          maximized={full}
+          onToggleMaximize={() => setMaximized((value) => !value)}
           onOverview={showOverview}
           nameOf={nameOf}
           roles={roles}
@@ -263,7 +324,10 @@ function TaskView({ taskId }: { taskId: string }) {
           onActivate={setActive}
           onOpenFile={openFile}
           onCloseFile={closeFile}
-          onCollapse={() => setPanelOpen(false)}
+          onCollapse={() => {
+            setMaximized(false);
+            setPanelOpen(false);
+          }}
         />
       ) : null}
     </div>

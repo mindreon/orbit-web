@@ -5,7 +5,7 @@ import { useNavigate } from "react-router";
 import { PermissionChip } from "../components/tasks/PermissionChip";
 import { ModelSelector } from "../components/tasks/ModelSelector";
 import { describeFailure } from "../lib/api";
-import { ConfigChips } from "../components/tasks/ConfigChips";
+import { InputChips, ToolbarChips } from "../components/tasks/ConfigChips";
 import { FileChips, filesToAttachmentText, useLocalFiles } from "../components/tasks/LocalFiles";
 import { ConfigMenu } from "../components/tasks/ConfigMenu";
 import { useConfigCatalog } from "../lib/configCatalog";
@@ -71,7 +71,7 @@ export function NewTaskPage() {
           {local.input}
           {/* 已选的技能/专家内嵌在输入行里，和 WorkBuddy 一致 */}
           <div className="flex items-start">
-            <ConfigChips draft={draft} onChange={setDraft} catalog={catalog} />
+            <InputChips draft={draft} onChange={setDraft} catalog={catalog} />
             <FileChips files={local.files} onRemove={local.removeAt} />
             <textarea
               value={goal}
@@ -91,6 +91,7 @@ export function NewTaskPage() {
           </div>
           <div className="flex items-center gap-2 px-2 pb-2 pt-1">
             <ConfigMenu draft={draft} onChange={setDraft} catalog={catalog} onAddFile={local.pick} />
+            <ToolbarChips draft={draft} onChange={setDraft} catalog={catalog} />
             <PermissionChip />
             <span className="ml-auto" />
             {/* 提示词优化要一个改写输入的模型端点，后端还没有：先按 WorkBuddy 的样子占位。 */}

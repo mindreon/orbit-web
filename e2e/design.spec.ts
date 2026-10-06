@@ -157,6 +157,7 @@ async function mockBackend(page: Page, scenario: { events?: typeof events; plan?
     if (pathname === "/v1/experts") return json({ items: scenario.experts ?? [expert] });
     if (pathname === "/v1/agents") return json({ items: AGENTS, total: AGENTS.length, page: 1, pageSize: 24 });
     if (pathname === "/v1/skill-categories") return json({ items: [{ key: "writing", name: "写作", nameEn: "Writing", sortOrder: 1 }] });
+    if (pathname === "/v1/models") return json({ items: ["test-model", "glm-5-flash"], default: "test-model" });
     if (pathname === "/v1/skills") return json({ items: [{ id: "@a/s", handle: "@a", slug: "s", name: "周报写作", description: "把零散记录整理成周报。", descriptionEn: "", category: "", categoryName: "", tags: [], license: "", iconUrl: "", sourceUrl: "", downloads: 12, visits: 1, likes: 3, updatedAt: "0", source: "common" }], total: 1, page: 1, pageSize: 24, installedAt: NOW });
     if (pathname === "/v1/mcp-market") return json({ items: [{ id: "m1", name: "文档检索", summary: "搜索团队文档。", author: "示例团队", category: "dev", categoryName: "开发", categoryMore: 0, calls: 0, views: 10, stars: 2, verified: true, hosted: true, needsOnline: true, source: "modelscope" }], total: 1, stored: 1, page: 1, pageSize: 30 });
     return json({ items: [], total: 0 });
@@ -276,13 +277,14 @@ for (const viewport of VIEWPORTS) {
       else expect(placeholder).toContain("Shift+Enter");
       await check(page, "home");
 
-      // The toolbar model picker (WorkBuddy's ⚡ slot): the candidates are the models the experts use, and 默认模型
-      // defers to the expert's own model, then the deployment default.
+      // The toolbar model picker (WorkBuddy's ⚡ slot) reads the deployment's catalog (/v1/models); 默认模型 defers
+      // to the expert's own model, then the deployment default. The choice lives on the trigger, not a chip.
       await page.getByTestId("model-selector").click();
+      await expect(page.getByRole("menuitemradio", { name: "glm-5-flash" })).toBeVisible();
       await page.getByRole("menuitemradio", { name: "test-model" }).click();
-      await expect(page.locator('[data-testid="config-chip"][data-chip="model"]')).toContainText("test-model");
-      await page.getByRole("button", { name: "移除 test-model" }).click();
-      await expect(page.getByTestId("config-chip")).toHaveCount(0);
+      await expect(page.getByTestId("model-selector")).toContainText("test-model");
+      await page.getByTestId("model-selector").click();
+      await page.getByRole("menuitemradio", { name: "默认模型" }).click();
       await expect(page.getByTestId("model-selector")).toContainText("默认模型");
       // 提示词优化 needs a prompt-rewriting model endpoint that control does not have yet: present, but off.
       await expect(page.getByRole("button", { name: "提示词优化" })).toBeDisabled();
@@ -317,31 +319,29 @@ for (const viewport of VIEWPORTS) {
       const loud = await approval.evaluate((el) => ({ shadow: getComputedStyle(el).boxShadow, bg: getComputedStyle(el).backgroundColor }));
       expect(loud.shadow).not.toBe("none");
       expect(loud.bg).not.toBe("rgba(0, 0, 0, 0)");
-      await expect(page.getByRole("button", { name: "允许一次" })).toBeVisible();
+      await expect(page.getByRole("button", { name: "允许", exact: true })).toBeVisible();
 
-      // composer never overlaps what it follows
-      const composer = await page.getByPlaceholder("向任务发送消息").boundingBox();
+      // The approval is docked in the composer's slot: inside the viewport, the composer hidden (and inert) while it waits, a one-line marker left in the chat.
       const lastCard = await approval.boundingBox();
-      expect(composer!.y).toBeGreaterThanOrEqual(0);
-      expect(lastCard!.y + lastCard!.height, "approval card is above the composer when scrolled to").toBeLessThanOrEqual(composer!.y + 1);
+      expect(lastCard!.y + lastCard!.height, "approval card is inside the viewport").toBeLessThanOrEqual(viewport.height);
+      await expect(page.getByTestId("composer")).toBeHidden();
+      await expect(page.getByTestId("approval-marker")).toContainText("等待你确认");
 
       const header = page.locator("main header").first();
       await expect(header).not.toContainText("plan v");
 
       // Polish: one status per fact. The floating 「等待审批」 badge is gone while the card is shown,
-      // badges are caption size (12px) at every width, and the composer's stop button yields to the card's primary action.
+      // badges are caption size (12px) at every width.
       await expect(page.getByTestId("agent-message").last().getByText("等待审批")).toHaveCount(0);
       expect(await page.getByTestId("task-status").evaluate((el) => getComputedStyle(el).fontSize)).toBe("12px");
       const title = await header.locator("h2").evaluate((el) => Number.parseFloat(getComputedStyle(el).fontSize));
       expect(title).toBeGreaterThan(12);
-      const stop = await page.getByTestId("composer-action").evaluate((el) => getComputedStyle(el).backgroundColor);
-      const allow = await page.getByRole("button", { name: "允许一次" }).evaluate((el) => getComputedStyle(el).backgroundColor);
-      expect(stop, "composer action is not the primary blue while a card waits").not.toBe(allow);
       if (phone) {
         const hints = await page.locator("body").innerText();
         expect(hints).not.toMatch(/Shift\+Enter|⌘\/Ctrl/);
-        await expect(page.getByPlaceholder("向任务发送消息")).toBeVisible();
-        await expect(page.getByText("内容由 AI 生成，请核实重要信息。")).toBeVisible();
+        // The composer is mounted but hidden while the approval waits; its notice is still part of the page.
+        await expect(page.getByPlaceholder("向任务发送消息")).toBeAttached();
+        await expect(page.getByText("内容由 AI 生成，请核实重要信息。")).toBeAttached();
       }
 
       if (phone) {
@@ -414,14 +414,19 @@ for (const viewport of VIEWPORTS) {
       await mockBackend(page, { events: sopEvents as never, plan: sopPlan as never, task: { pending_approvals: ["apr_1", "apr_2"], profile: "default@1" } });
       await enableDeveloperMode(page);
       await page.goto(`/tasks/${TASK_ID}`);
-      await expect(page.getByTestId("approval-item")).toHaveCount(2);
+      // two waiting approvals queue in the dock, one card at a time; the chat keeps a one-line marker for each
+      await expect(page.getByTestId("approval-marker")).toHaveCount(2);
+      const card = page.getByTestId("approval-item");
+      await expect(page.getByTestId("dock-queue")).toContainText("1 / 2");
       // both approval kinds render with the summary as the title, a plain approve / reject, and the accent bar
-      const cards = page.getByTestId("approval-item");
-      await expect(cards.nth(0)).toContainText("Accept the result of step 3/3");
-      await expect(cards.nth(1)).toContainText("Ship the migration?");
-      await expect(cards.nth(1).getByRole("button", { name: "批准" })).toBeVisible();
-      await expect(cards.nth(1).getByTestId("attention-bar")).toBeVisible();
-      await expect(cards.nth(1)).not.toContainText("需要你的确认");
+      await expect(card).toContainText("Accept the result of step 3/3");
+      await expect(card.getByRole("button", { name: "批准" })).toBeVisible();
+      await page.getByRole("button", { name: "下一件待处理" }).click();
+      await expect(page.getByTestId("dock-queue")).toContainText("2 / 2");
+      await expect(card).toContainText("Ship the migration?");
+      await expect(card.getByRole("button", { name: "批准" })).toBeVisible();
+      await expect(card.getByTestId("attention-bar")).toBeVisible();
+      await expect(card).not.toContainText("需要你的确认");
 
       await openDeveloperView(page, phone);
       const panel = page.getByRole("complementary", { name: "任务详情" });
@@ -657,20 +662,19 @@ for (const viewport of VIEWPORTS) {
       await expect(chatGroups.first().getByTestId("chat-leader-tag")).toHaveText("领队");
       await expect(page.locator('[data-testid="chat-group"][data-role="member-2"]')).toHaveCount(0);
       await expect(page.locator('[data-testid="chat-bubble"][data-kind="assign"]')).toHaveCount(0);
-      // The members sit in one roster row under the leader's turn; a click opens that member's thread in the panel.
+      // The members sit in one row of chips under the leader's turn; a click opens that member's thread in the panel's 子智能体 tab.
       // Each user message starts a new roster: the first round had the researcher only, the one after the user's @ has both.
-      // A fresh load opens the panel on its home view (or leaves it closed): a member's thread only ever opens from a roster click.
+      // A fresh load opens the panel on its home view (or leaves it closed): a member's thread only ever opens from a chip click.
       await expect(page.getByTestId("panel-member")).toHaveCount(0);
       await expect(page.getByTestId("team-roster")).toHaveCount(2);
-      await expect(page.getByTestId("team-roster").first()).toContainText("1 位团队成员");
+      await expect(page.getByTestId("team-roster").first().getByTestId("roster-member")).toHaveCount(1);
+      await expect(page.getByTestId("team-roster").first().getByTestId("roster-status")).toHaveText("已完成");
       const roster = page.getByTestId("team-roster").last();
-      await expect(roster).toContainText("2 位团队成员");
-      await expect(page.getByTestId("roster-member")).toHaveCount(0);
-      await roster.getByRole("button").first().click();
-      await expect(page.getByTestId("roster-member")).toHaveCount(2);
-      await expect(page.locator('[data-testid="roster-member"][data-role="member-2"]')).toContainText("调研专家");
+      await expect(roster.getByTestId("roster-member")).toHaveCount(2);
+      await expect(roster.locator('[data-testid="roster-member"][data-role="member-2"]')).toContainText("调研专家");
       // Two members are working at once.
-      await expect(page.locator('[data-testid="roster-member"][data-status="running"]')).toHaveCount(2);
+      await expect(roster.locator('[data-testid="roster-member"][data-status="running"]')).toHaveCount(2);
+      await expect(roster.getByTestId("roster-status")).toHaveText("已开始工作");
       // The review of round one folds to one muted line, by the node's own number (or stays whole when it is the leader's last word).
       await expect(page.getByTestId("chat-review").first()).toContainText(/第 1 轮复盘|领队复盘 · 第 1 轮/);
       // The user's @ is a chip; the notice is quiet and centred.
@@ -678,20 +682,20 @@ for (const viewport of VIEWPORTS) {
       await expect(page.getByTestId("chat-system")).toContainText("3 跳上限");
 
       // The researcher's thread: the assignment folded behind 「下发任务详情」, then its work.
-      await page.locator('[data-testid="roster-member"][data-role="member-2"]').click();
+      await roster.locator('[data-testid="roster-member"][data-role="member-2"]').click();
       const thread = page.getByTestId("panel-member");
       await expect(thread).toContainText("调研专家");
       await expect(thread.getByTestId("thread-assignment")).toContainText("@调研专家，你有一条待处理任务，请查收");
       await expect(thread.getByTestId("thread-assignment-text").first()).toBeHidden();
       await thread.getByText("下发任务详情").first().click();
       await expect(thread.getByTestId("thread-assignment-text").first()).toBeVisible();
-      await expect(thread.getByText("已执行 1 个步骤").first()).toBeVisible();
+      await expect(thread.getByTestId("activity-row").first()).toHaveText("已调用 read_file");
       await expect(thread).toContainText("证书续期由运维负责");
       await page.getByRole("button", { name: "返回" }).click();
       if (phone) await page.keyboard.press("Escape"); // the panel is a drawer there: close it to reach the chat
-      await page.locator('[data-testid="roster-member"][data-role="member-3"]').click();
+      await roster.locator('[data-testid="roster-member"][data-role="member-3"]').click();
       await expect(page.getByTestId("panel-member")).toContainText("回滚步骤缺少数据库回退的验证。");
-      await expect(page.getByTestId("panel-member").getByText("正在执行步骤…")).toBeVisible();
+      await expect(page.getByTestId("panel-member").getByTestId("activity-row").first()).toHaveText("正在运行命令");
       await page.getByRole("button", { name: "返回" }).click();
 
       // The approval a member raised, inline, with the member's name.
@@ -706,6 +710,9 @@ for (const viewport of VIEWPORTS) {
       await expect(chip).toContainText("内容小队");
       await expect(chip).toHaveAttribute("title", "领队负责规划，成员按分工执行");
       await expect(chip.getByTestId("avatar")).toHaveCount(3);
+      // Back from a member's thread lands on the 子智能体 list; the developer view is on the 概览 tab.
+      if (phone && !(await page.getByRole("complementary", { name: "任务详情" }).isVisible())) await page.getByRole("button", { name: "展开详情" }).click();
+      await page.getByRole("complementary", { name: "任务详情" }).getByRole("button", { name: "概览" }).click();
       await openDeveloperView(page, phone);
 
       const panel = page.getByRole("complementary", { name: "任务详情" });
@@ -779,9 +786,8 @@ for (const viewport of VIEWPORTS) {
       await page.goto(`/tasks/${TASK_ID}`);
       if (phone) await expect(page.getByRole("complementary", { name: "任务详情" })).toBeHidden();
       await expect(page.getByTestId("chat-system")).toBeVisible();
-      // The roster expanded, so its longest content is on screen.
-      await page.getByTestId("team-roster").last().getByRole("button").first().click();
-      await expect(page.getByTestId("roster-member")).toHaveCount(2);
+      // The chips row, so its longest content is on screen.
+      await expect(page.getByTestId("team-roster").last().getByTestId("roster-member")).toHaveCount(2);
       await page.getByTestId("approval-item").scrollIntoViewIfNeeded();
       // Every bubble, notice, mention chip and card stays inside the viewport and the conversation column.
       const column = (await page.getByTestId("conversation-column").boundingBox())!;
@@ -793,7 +799,10 @@ for (const viewport of VIEWPORTS) {
       }
       await check(page, "team-chat");
 
-      // The composer with the picker open.
+      // The composer is hidden while the member's approval waits; once it is decided the composer is back, with the picker open.
+      await page.unroute("**/v1/**");
+      await mockBackend(page, { events: teamEvents as never, plan: teamPlan as never, task: { profile: "writer@1", pending_approvals: [] }, experts: [expert, researcher, reviewer, team], config: teamConfig });
+      await page.reload();
       await page.getByPlaceholder("向任务发送消息").click();
       await page.getByPlaceholder("向任务发送消息").pressSequentially("@");
       const picker = page.getByTestId("mention-picker");

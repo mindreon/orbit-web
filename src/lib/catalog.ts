@@ -73,6 +73,11 @@ export function listSkillCategories() {
   return api<{ items: SkillCategory[] | null }>("/v1/skill-categories");
 }
 
+/** 部署的模型目录（ORBIT_MODELS）：任务创建页的模型选择器从这里读。default 是部署默认（ORBIT_MODEL_NAME）。 */
+export function listModels() {
+  return api<{ items: string[] | null; default: string }>("/v1/models");
+}
+
 export interface SkillTextFile {
   path: string;
   body: string;

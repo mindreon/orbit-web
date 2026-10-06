@@ -36,7 +36,8 @@ Rows that mix sizes (title and badge, title and "编辑") use `items-baseline`, 
 
 ## Shape and space
 
-- Radius: `rounded-control` 8px (buttons, fields, chips, rows), `rounded-card` 12px (cards, panels, popovers), `rounded-full`.
+- Radius: `rounded-control` 8px (buttons, fields, chips, rows), `rounded-card` 12px (cards, panels, popovers),
+  `rounded-bubble` 20px (the user's message bubble and the composer, nothing else), `rounded-full`.
 - Spacing is Tailwind's 4px grid.
 - Separate with spacing and background difference (white card on a gray page) before reaching for a border.
   Borders stay on form controls, outline buttons, popovers, and the one rule under a table header or the task header.
@@ -70,10 +71,23 @@ at the group's bottom-left, @mentions as chips coloured by the member's place in
 quiet centred line, the member's steps folded under its bubble. A plan node as 「<角色> · <专家名>」; a member's approval is
 「成员 <显示名> 请求确认」; the review cap is an `<Attention>` card with the same 「继续」 as any other wait for a person.
 
+## Conversation
+
+An agent reply is a timeline (`src/lib/activity.ts`, `ActivityTimeline`): under a quiet header line (`text-small`, muted, hairline
+below: 正在思考 / 正在处理 12s / 已处理 1m 41s) come the words of each model round and its tool calls in the order they happened,
+then the final answer, which is always last and always visible. A tool call is one row: min height 28px, a 16px icon, `text-body`
+in `text-gray-600` (foreground on hover), one line with an ellipsis and the whole text in `title`. A call that is running reads
+正在读取 foo.ts with the `shimmer-text` utility (a moving highlight through the letters; plain muted text under reduced motion).
+Consecutive reads/searches/lists/edits/commands with no words between them fold into one group row (已读取 3 个文件 · 已运行 1 个命令),
+which opens under a `border-l` guide line. Every row opens to its arguments and result in a muted mono block (`max-h-64`).
+The wording of every tool lives in `activity.ts`, next to the rest of the display language.
+Under a settled reply a row of actions (copy, time, expert, token usage when the events report it) shows on hover and focus, always on
+the last reply and on touch screens. The user's message is a `rounded-bubble` `bg-secondary` bubble, `max-w-[78%]`, `px-4 py-2`.
+
 ## Lint
 
 `eslint-rules/design-tokens.js` (rule `orbit/design-tokens`) fails on arbitrary font sizes, retired Tailwind sizes,
-opacity-built semantic colours, bare semantic text colours, weights outside 400/500/600 and off-scale radii.
+opacity-built semantic colours, bare semantic text colours, weights outside 400/500/600 and off-scale radii (`rounded-bubble` is on the scale).
 A legitimate exception takes `// eslint-disable-next-line orbit/design-tokens -- reason`.
 
 ## Checks
@@ -83,3 +97,6 @@ A legitimate exception takes `// eslint-disable-next-line orbit/design-tokens --
   only the six font sizes, conversation column width, drawers, sidebar spacing, and the team surfaces (team card, editor,
   member labels, grouped plan, team stage, review cap). Screenshots go to
   `e2e-artifacts/design/` (git-ignored).
+- `pnpm exec playwright test e2e/activity.spec.ts`: the reply timeline (order of narration and calls, groups, shimmer and reduced
+  motion, row detail, plan rows, the 已处理 header, the action row and user bubble, light and dark, both widths). Screenshots go to
+  `e2e-artifacts/activity/` (git-ignored).

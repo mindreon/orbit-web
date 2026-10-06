@@ -17,7 +17,8 @@ export const isTodoStep = (step: Pick<Step, "tool">): boolean => step.tool === T
 
 const STATUSES: readonly string[] = ["pending", "in_progress", "completed"];
 
-function parseTodos(argsPreview: string): readonly TodoItem[] | null {
+/** 一次 TodoWrite 调用的清单；入参不是完整 JSON（流式中被截断的预览）时为 null。 */
+export function parseTodos(argsPreview: string): readonly TodoItem[] | null {
   let input: unknown;
   try {
     input = JSON.parse(argsPreview);

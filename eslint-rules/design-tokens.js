@@ -3,7 +3,7 @@
  *   - font sizes come from the six named tokens, never `text-[13px]` or a retired Tailwind size (`text-sm`);
  *   - a shade is a ramp step (`bg-primary-100`), never opacity on a semantic colour (`bg-primary/10`);
  *   - semantic text uses the 700 step (`text-danger-700`), not the bare colour (`text-destructive`);
- *   - weights are 400/500/600, radii are control / card / full.
+ *   - weights are 400/500/600, radii are control / card / bubble (the message bubble and the composer only) / full.
  * Legitimate exceptions get `// eslint-disable-next-line orbit/design-tokens -- why` right above the line.
  */
 const SEMANTIC = "primary|secondary|accent|muted|destructive|success|warning|danger|foreground|card|background|gray|sidebar|border|input|ring";
@@ -19,9 +19,9 @@ const RULES = [
   ],
   [new RegExp(`${BEFORE}text-(?:primary|success|warning|destructive|danger)${AFTER}`), "Bare semantic text colour. Text uses the 700 step (text-primary-700, text-danger-700)."],
   [new RegExp(`${BEFORE}font-(?:thin|extralight|light|bold|extrabold|black)${AFTER}`), "Only font-normal (400), font-medium (500) and font-semibold (600) exist."],
-  [new RegExp(`${BEFORE}rounded(?:-[trbl]{1,2})?-(?:sm|md|lg|xl|2xl|3xl)${AFTER}`), "Retired radius. Use rounded-control (8px), rounded-card (12px) or rounded-full."],
-  [new RegExp(`${BEFORE}rounded(?:-[trbl]{1,2})?-\\[`), "Arbitrary radius. Use rounded-control (8px), rounded-card (12px) or rounded-full."],
-  [new RegExp(`${BEFORE}rounded${AFTER}`), "Bare rounded is not in the scale. Use rounded-control (8px), rounded-card (12px) or rounded-full."],
+  [new RegExp(`${BEFORE}rounded(?:-[trbl]{1,2})?-(?:sm|md|lg|xl|2xl|3xl)${AFTER}`), "Retired radius. Use rounded-control (8px), rounded-card (12px), rounded-bubble (20px, message bubbles and the composer) or rounded-full."],
+  [new RegExp(`${BEFORE}rounded(?:-[trbl]{1,2})?-\\[`), "Arbitrary radius. Use rounded-control (8px), rounded-card (12px), rounded-bubble (20px, message bubbles and the composer) or rounded-full."],
+  [new RegExp(`${BEFORE}rounded${AFTER}`), "Bare rounded is not in the scale. Use rounded-control (8px), rounded-card (12px), rounded-bubble (20px, message bubbles and the composer) or rounded-full."],
 ];
 
 /** @type {import("eslint").Rule.RuleModule} */
