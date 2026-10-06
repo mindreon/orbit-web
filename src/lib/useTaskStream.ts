@@ -29,15 +29,24 @@ export function useTaskStream(taskId: string | null): TaskStream {
     setTask(null); setPlan(null); setArtifacts([]); setEvents([]); setGaps(0); setError(null);
     if (!taskId) return;
     let active = true;
-    // Every durable event starts a refresh, and responses can come back out of order: only the newest one may land.
-    let latest = 0;
+    // Every durable event asks for a refresh, and the stream replays the whole history on connect (hundreds of events for a long task).
+    // One refresh at a time: asks that arrive while it is in flight collapse into a single follow-up, which also keeps responses in order.
+    let inFlight = false;
+    let again = false;
     const fail = (err: unknown) => { if (active) setError(describeFailure("读取任务失败", err)); };
     const refresh = () => {
-      const mine = ++latest;
-      const current = () => active && mine === latest;
-      void getTask(taskId).then((next) => current() && setTask(next)).catch(fail);
-      void getPlan(taskId).then((next) => current() && setPlan(next)).catch(fail);
-      void listTaskArtifacts(taskId).then((next) => current() && setArtifacts(next)).catch(() => undefined);
+      if (!active) return;
+      if (inFlight) { again = true; return; }
+      inFlight = true;
+      again = false;
+      void Promise.all([
+        getTask(taskId).then((next) => active && setTask(next)).catch(fail),
+        getPlan(taskId).then((next) => active && setPlan(next)).catch(fail),
+        listTaskArtifacts(taskId).then((next) => active && setArtifacts(next)).catch(() => undefined),
+      ]).then(() => {
+        inFlight = false;
+        if (again && active) refresh();
+      });
     };
     refresh();
     const close = subscribeTaskEvents(
