@@ -10,6 +10,8 @@ export type Expert = {
   ref: string;
   version: number;
   name: string;
+  /** 一句话职能（agent.json 的 description）：领队按它决定把活派给谁；旧数据和手写的可能没有。 */
+  description?: string;
   instructions: string;
   /** 人设（SOUL.md），在指令之前加载；旧数据可能没有。 */
   soul?: string;
@@ -33,6 +35,8 @@ export type McpUnbound = { name: string; reason: string };
 
 export type ExpertInput = {
   name: string;
+  /** 一句话职能（≤300 字）；留空就沿用上一个版本的。 */
+  description?: string;
   instructions?: string;
   /** 人设（SOUL.md）；留空就没有这个文件。 */
   soul?: string;

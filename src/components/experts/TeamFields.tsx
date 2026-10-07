@@ -73,7 +73,7 @@ export function TeamFields({ form, onChange, experts, problems, onImported }: Te
                 </div>
                 <div className="mt-3">
                   <Field label="一句话职责" error={row?.description}>
-                    <Input aria-label={`职责 ${n}`} value={member.description} maxLength={TEAM_DESCRIPTION_MAX + 50} placeholder="领队会按这句话把活派给它" onChange={(event) => update(member.key, { description: event.target.value })} />
+                    <Input aria-label={`职责 ${n}`} value={member.description} maxLength={TEAM_DESCRIPTION_MAX + 50} placeholder={experts.find((expert) => expert.ref === member.expert)?.description?.trim() ? "留空就用这位专家自己的职能" : "领队会按这句话把活派给它"} onChange={(event) => update(member.key, { description: event.target.value })} />
                   </Field>
                 </div>
                 {/* 角色 ID 是给程序用的，自动生成；出了问题（或想自己起名）时才需要看。有错时展开，让人看得到错在哪。 */}

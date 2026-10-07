@@ -7,7 +7,7 @@ import { TeamFields } from "../components/experts/TeamFields";
 import { describeFailure } from "../lib/api";
 import { listMcpConnectors, type McpConnector } from "../lib/catalog";
 import { createExpert, isTeam, listExperts, singleExperts, updateExpert, type Expert, type ExpertInput, type McpUnbound, type SkippedFile, type UnmatchedRefs } from "../lib/experts";
-import { blankTeamForm, hasProblems, teamInput, teamProblemsFromRefusal, teamToForm, validateTeam, type TeamForm, type TeamProblems } from "../lib/team";
+import { TEAM_DESCRIPTION_MAX, blankTeamForm, hasProblems, teamInput, teamProblemsFromRefusal, teamToForm, validateTeam, type TeamForm, type TeamProblems } from "../lib/team";
 import { Alert } from "../ui/Alert";
 import { Button } from "../ui/Button";
 import { Field, Input, Textarea } from "../ui/fields";
@@ -28,6 +28,7 @@ export function ExpertEditorPage() {
   const unmatched = imported?.unmatched;
   const skippedFiles = imported?.skippedFiles ?? [];
   const [name, setName] = useState("");
+  const [description, setDescription] = useState("");
   const [instructions, setInstructions] = useState("");
   const [soul, setSoul] = useState("");
   const [mcpUnbound, setMcpUnbound] = useState<readonly McpUnbound[]>([]);
@@ -63,6 +64,7 @@ export function ExpertEditorPage() {
           return;
         }
         setName(current.name);
+        setDescription(current.description ?? "");
         setInstructions(current.instructions);
         setSoul(current.soul ?? "");
         setMcpUnbound(current.mcp_unbound ?? []);
@@ -114,7 +116,7 @@ export function ExpertEditorPage() {
     if (!name.trim()) return;
     setSaving(true);
     setError("");
-    const input: ExpertInput = { name: name.trim(), instructions, soul, model: model.trim(), connector_ids: [...connectorIds], skill_ids: [...skillIds] };
+    const input: ExpertInput = { name: name.trim(), description: description.trim(), instructions, soul, model: model.trim(), connector_ids: [...connectorIds], skill_ids: [...skillIds] };
     try {
       await (expertId ? updateExpert(expertId, input) : createExpert(input));
       navigate("/experts/agents");
@@ -149,6 +151,10 @@ export function ExpertEditorPage() {
             <>
             <Field label="名称">
               <Input aria-label="名称" value={name} maxLength={100} onChange={(event) => setName(event.target.value)} />
+            </Field>
+            <Field label="职能（一句话）">
+              <Input aria-label="职能" value={description} maxLength={TEAM_DESCRIPTION_MAX} placeholder="例如：React/TypeScript 前端开发，负责页面和组件" onChange={(event) => setDescription(event.target.value)} />
+              <span className="mt-1 block text-small text-muted-foreground">写给领队看：它按这句话决定把活派给谁。拉进专家团时，成员不写职责就用这一句。</span>
             </Field>
             <Field label="人设（SOUL.md）">
               <Textarea aria-label="人设" rows={4} value={soul} placeholder="例如：沉稳、爱用比喻，先给结论再解释" onChange={(event) => setSoul(event.target.value)} />
