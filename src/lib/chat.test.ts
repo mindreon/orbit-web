@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { buildChat, finalAnswerId, firstSentence, groupChat, mainChat, memberThread, mentionColor, parseMentions, splitMentions, type ChatTeam } from "./chat";
+import { buildChat, bubbleFiles, fileOwners, finalAnswerId, firstSentence, groupChat, mainChat, memberThread, mentionColor, parseMentions, splitMentions, type ChatTeam } from "./chat";
 import { applyEvent, emptyLiveState } from "./taskEvents";
 import type { Task, TaskEvent } from "./tasks";
 
@@ -97,9 +97,11 @@ describe("stream attribution", () => {
     expect(live.map((b) => b.type === "bubble" && b.speaker.role).sort()).toEqual(["member-2", "member-3"]);
     const researcher = live.find((b) => b.type === "bubble" && b.speaker.role === "member-2")!;
     const editor = live.find((b) => b.type === "bubble" && b.speaker.role === "member-3")!;
-    expect(researcher.type === "bubble" && researcher.work).toMatchObject({ text: "我在查", thinking: "先看来源" });
+    // The words before a call stay in order with it (segments); only the words after the last step are the bubble's own text.
+    expect(researcher.type === "bubble" && researcher.work).toMatchObject({ text: "", thinking: "先看来源" });
+    expect(researcher.type === "bubble" && researcher.work?.segments.map((g) => (g.kind === "text" ? g.text : g.step.tool))).toEqual(["我在查", "Read"]);
     expect(researcher.type === "bubble" && researcher.work?.steps.map((s) => [s.tool, s.state])).toEqual([["Read", "success"]]);
-    expect(editor.type === "bubble" && editor.work?.text).toBe("我在改");
+    expect(editor.type === "bubble" && editor.work?.segments.map((g) => (g.kind === "text" ? g.text : g.step.tool))).toEqual(["我在改", "Write"]);
     expect(editor.type === "bubble" && editor.work?.steps.map((s) => [s.tool, s.state])).toEqual([["Write", "running"]]);
   });
 
@@ -300,5 +302,37 @@ describe("the main chat: the leader and summaries", () => {
     expect(sections[0].bubbles.map((b) => b.text)).toEqual(["b"]);
     expect(sections[0].seconds).toBe(42);
     expect(memberThread(items, "member-3")).toEqual([]);
+  });
+});
+
+describe("a leader's turn keeps the order of its words and calls", () => {
+  const leaderRole = { n_plan: { role: "member-1", label: "主编", kind: "leader" } } as never;
+  const at = (seq: number, type: string, payload: Record<string, unknown>) => ev(seq, type, { attempt_id: "att_plan", node_id: "n_plan", ...payload });
+  const events = () => [
+    at(1, "attempt.started", { attempt_no: 1 }),
+    eph(1, "agent.token_delta", { attempt_id: "att_plan", block_id: "b1", text: "让我来制定开发计划" }),
+    eph(1, "tool.call_started", { attempt_id: "att_plan", tool_call_id: "c1", tool_name: "TaskCreate", args_preview: "{\"subject\":\"搭脚手架\"}" }),
+    at(2, "tool.call_finished", { tool_call_id: "c1", tool_name: "TaskCreate", state: "success" }),
+    eph(2, "agent.token_delta", { attempt_id: "att_plan", block_id: "b2", text: "计划已制定。" }),
+    at(3, "message.agent_final", { text: "计划已制定。" }),
+    at(4, "attempt.finished", { outcome: "completed" }),
+  ];
+
+  it("puts the words before a call ahead of it, and only the last words in the bubble's text (P2)", () => {
+    const [turn] = bubbles(chat(events(), { roles: leaderRole }));
+    expect(turn.type === "bubble" && turn.text).toBe("计划已制定。");
+    expect(turn.type === "bubble" && turn.work?.segments.map((g) => (g.kind === "text" ? g.text : g.step.tool))).toEqual(["让我来制定开发计划", "TaskCreate"]);
+  });
+
+  it("gives an attempt's files to its last turn only, not to the turn that asked a question (P3)", () => {
+    const answer = ev(3, "message.user", { text: "NexaAI", delivery: "queue" });
+    const items = chat([at(1, "attempt.started", { attempt_no: 1 }), eph(1, "agent.token_delta", { attempt_id: "att_plan", block_id: "b1", text: "问个问题" }), answer, eph(3, "agent.token_delta", { attempt_id: "att_plan", block_id: "b2", text: "写好了" }), at(4, "attempt.finished", { outcome: "completed" })], { roles: leaderRole });
+    const turns = bubbles(items).flatMap((b) => (b.type === "bubble" ? [b] : []));
+    expect(turns.length).toBe(2);
+    const file = { manifestId: "m", attemptId: "att_plan", name: "site-setup.md", mediaType: "text/markdown", size: 10 };
+    const owners = fileOwners(items);
+    expect(turns.map((b) => bubbleFiles(b, [file], owners).length)).toEqual([0, 1]);
+    // without the owners every turn of the attempt claims it, as before
+    expect(turns.map((b) => bubbleFiles(b, [file]).length)).toEqual([1, 1]);
   });
 });

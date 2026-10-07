@@ -14,6 +14,7 @@ import { useTaskConfig } from "../lib/useTaskConfig";
 import { TaskHeader } from "../components/tasks/TaskHeader";
 import { AGENTS, HOME, OVERVIEW, TaskPanel, type Overview } from "../components/tasks/TaskPanel";
 import { Conversation } from "../components/conversation/Conversation";
+import { StepTitles } from "../components/conversation/stepTitles";
 import { GroupChat } from "../components/conversation/GroupChat";
 import { buildChat, latestRosterStatus, mainChat, type ChatItem } from "../lib/chat";
 import { describeFailure } from "../lib/api";
@@ -203,6 +204,7 @@ function TaskView({ taskId }: { taskId: string }) {
   // 只有取消才结束任务；做完只是空闲，随时可以接着聊。
   const closed = task.status === "CANCELLED";
   const nodeTitles = Object.fromEntries((plan?.nodes ?? []).map((node) => [node.node_id, nodeTitle(node.title)]));
+  const titleOfNode = (nodeId: string) => nodeTitles[nodeId];
   const pendingSwitches: Record<string, ProfileSwitch> = {};
   for (const item of live.switches) {
     const pending = pendingSwitch(live, item.nodeId);
@@ -242,6 +244,7 @@ function TaskView({ taskId }: { taskId: string }) {
   const message = (text: string, delivery: "queue" | "interrupt", mentions: readonly string[] = []) => act(() => sendTaskMessage(task.task_id, text, delivery, mentions));
 
   return (
+    <StepTitles.Provider value={titleOfNode}>
     <div className="flex min-h-0 flex-1">
       <main className={cn("flex min-h-0 min-w-0 flex-1 flex-col bg-card", full && "hidden")}>
         <TaskHeader task={task} onCancel={() => void act(() => controlTask(task.task_id, "cancel"))} onTakeover={() => void act(() => controlTask(task.task_id, "takeover"))} panelOpen={panelOpen} onOpenPanel={() => setPanelOpen(true)} />
@@ -254,7 +257,7 @@ function TaskView({ taskId }: { taskId: string }) {
           files={files}
           roles={roles}
           nameOf={nameOf}
-          custom={chat && team ? { size: chat.reduce((sum, item) => sum + (item.type === "bubble" ? item.text.length + (item.work?.text.length ?? 0) + (item.work?.steps.length ?? 0) : item.type === "user" || item.type === "system" ? item.text.length : 1), chat.length), node: <GroupChat items={chat} team={team} files={files} onOpenFile={openFile} onOpenAllFiles={() => showOverview({ kind: "artifacts" })} onOpenMember={showMember} pendingApprovals={pendingApprovals} approvalOutcomes={live.approvals} approvalInfos={approvals} nameOf={nameOf} roleNameOf={roleNameOf} onFocusApproval={focusApproval} /> } : undefined}
+          custom={chat && team ? { size: chat.reduce((sum, item) => sum + (item.type === "bubble" ? item.text.length + (item.work?.text.length ?? 0) + (item.work?.segments.reduce((count, segment) => count + (segment.kind === "text" ? segment.text.length : 1), 0) ?? 0) : item.type === "user" || item.type === "system" ? item.text.length : 1), chat.length), node: <GroupChat items={chat} team={team} files={files} onOpenFile={openFile} onOpenAllFiles={() => showOverview({ kind: "artifacts" })} onOpenMember={showMember} pendingApprovals={pendingApprovals} approvalOutcomes={live.approvals} approvalInfos={approvals} nameOf={nameOf} roleNameOf={roleNameOf} onFocusApproval={focusApproval} /> } : undefined}
           onOpenFile={openFile}
           onOpenAllFiles={() => showOverview({ kind: "artifacts" })}
         >
@@ -331,6 +334,7 @@ function TaskView({ taskId }: { taskId: string }) {
         />
       ) : null}
     </div>
+    </StepTitles.Provider>
   );
 }
 

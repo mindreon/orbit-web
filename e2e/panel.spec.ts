@@ -340,6 +340,30 @@ test.describe("desktop 1440x900", () => {
     await expect(panel.getByRole("button", { name: "风险摘要.md", exact: true })).toHaveCount(2);
   });
 
+  test("查看所有产物 shows the artifacts as a folder tree; folders toggle and a file opens its preview", async ({ page }) => {
+    await mockBackend(page, "mixed");
+    await page.goto(`/tasks/${TASK_ID}`);
+    const panel = panelOf(page);
+    await page.getByRole("button", { name: /查看所有产物/ }).first().click();
+    const tree = panel.getByRole("tree", { name: "产物文件树" });
+    await expect(tree).toBeVisible();
+    // Three files: the tree starts fully expanded and the single-child chain is compacted.
+    const reports = tree.getByRole("treeitem", { name: /^reports\/2026-q3\/release-readiness\/weekly/ });
+    await expect(reports).toHaveAttribute("aria-expanded", "true");
+    const workspace = tree.getByRole("treeitem", { name: /^workspace\/projects\/orbit\/release-readiness\/2026-q3\/weekly-risk-review\/appendix/ });
+    await expect(workspace).toHaveAttribute("aria-expanded", "true");
+    await expect(tree.getByRole("treeitem", { name: /notes\.txt/ })).toBeVisible();
+    // Keyboard toggle collapses a folder and hides its file.
+    await reports.focus();
+    await page.keyboard.press("Enter");
+    await expect(reports).toHaveAttribute("aria-expanded", "false");
+    await expect(tree.getByRole("treeitem", { name: /^风险摘要\.md/ })).toHaveCount(1);
+    await page.keyboard.press("Space");
+    await expect(reports).toHaveAttribute("aria-expanded", "true");
+    await tree.getByRole("treeitem", { name: /^风险摘要\.md/ }).first().click();
+    await expect(page.getByTestId("artifact-preview").getByRole("heading", { name: "风险摘要" })).toBeVisible();
+  });
+
   test("the overview and 子智能体 tabs stay pinned while file tabs scroll; the preview fills the panel and scrolls inside itself", async ({ page }) => {
     await mockBackend(page, "mixed");
     await page.goto(`/tasks/${TASK_ID}`);

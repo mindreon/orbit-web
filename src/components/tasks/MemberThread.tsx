@@ -1,11 +1,12 @@
 import { ChevronRight } from "lucide-react";
-import { bubbleFiles, memberThread, mentionColor, type ChatItem, type ChatTeam, type ThreadSection } from "../../lib/chat";
+import { useMemo } from "react";
+import { bubbleFiles, fileOwners, memberThread, mentionColor, type ChatItem, type ChatTeam, type ThreadSection } from "../../lib/chat";
 import type { ArtifactFile } from "../../lib/artifacts";
 import { useDeveloperMode } from "../../lib/devMode";
 import { roleName } from "../../lib/display";
 import { formatSeconds } from "../../lib/usage";
 import { ArtifactCards } from "../conversation/ArtifactCards";
-import { StepList } from "../conversation/StepList";
+import { ActivityTimeline } from "../conversation/ActivityTimeline";
 import { memberTitle } from "../conversation/TeamRoster";
 import { RichText } from "../markdown/RichText";
 import { Avatar } from "../TeamAvatars";
@@ -48,7 +49,7 @@ function Assignment({ assign, member, team }: { assign: Bubble; member: string; 
   );
 }
 
-function Section({ section, team, files, onOpenFile, onOpenAllFiles, totalFiles, developer, member }: { section: ThreadSection; member: string; developer: boolean } & Omit<MemberThreadProps, "items" | "role">) {
+function Section({ section, team, files, owners, onOpenFile, onOpenAllFiles, totalFiles, developer, member }: { section: ThreadSection; member: string; developer: boolean; owners: ReadonlySet<string> } & Omit<MemberThreadProps, "items" | "role">) {
   return (
     <div data-testid="thread-section" className="space-y-3">
       {section.assign ? <Assignment assign={section.assign} member={member} team={team} /> : null}
@@ -57,7 +58,7 @@ function Section({ section, team, files, onOpenFile, onOpenAllFiles, totalFiles,
         const text = bubble.text || bubble.work?.text || "";
         return (
           <div key={bubble.id} data-testid="thread-bubble" data-kind={bubble.kind} className="space-y-2">
-            {bubble.work ? <StepList steps={bubble.work.steps} active={bubble.live} /> : null}
+            {bubble.work ? <ActivityTimeline segments={bubble.work.segments} active={bubble.live} /> : null}
             {developer && bubble.work?.thinking ? <p className="whitespace-pre-wrap rounded-card bg-muted px-3 py-2 text-small text-muted-foreground">{bubble.work.thinking}</p> : null}
             {text !== "" || bubble.live ? (
               <div className="rounded-card bg-secondary px-4 py-2.5 text-body text-foreground">
@@ -66,7 +67,7 @@ function Section({ section, team, files, onOpenFile, onOpenAllFiles, totalFiles,
                 {bubble.status === "failed" ? <p className="mt-1 text-caption text-danger-700">失败{bubble.failure ? `：${bubble.failure}` : ""}</p> : null}
               </div>
             ) : null}
-            <ArtifactCards files={bubbleFiles(bubble, files)} total={totalFiles} onOpen={onOpenFile} onOpenAll={onOpenAllFiles} />
+            <ArtifactCards files={bubbleFiles(bubble, files, owners)} total={totalFiles} onOpen={onOpenFile} onOpenAll={onOpenAllFiles} />
           </div>
         );
       })}
@@ -77,6 +78,7 @@ function Section({ section, team, files, onOpenFile, onOpenAllFiles, totalFiles,
 /** 右侧面板里一位成员的任务：领队派的活，成员的步骤、消息、给领队的回复和它的文件。数据都来自页面已有的对话，没有新接口。 */
 export function MemberThread({ items, role, team, files, onOpenFile, onOpenAllFiles, totalFiles }: MemberThreadProps) {
   const developer = useDeveloperMode();
+  const owners = useMemo(() => fileOwners(items), [items]);
   const sections = memberThread(items, role);
   const member = team.members.find((item) => item.role === role);
   const { name, label } = memberTitle({ role, label: member?.label ?? "", name: member?.name ?? "" });
@@ -84,7 +86,7 @@ export function MemberThread({ items, role, team, files, onOpenFile, onOpenAllFi
   return (
     <div className="space-y-6">
       {sections.map((section, index) => (
-        <Section key={section.assign?.id ?? `s${index}`} section={section} member={name || label} team={team} files={files} onOpenFile={onOpenFile} onOpenAllFiles={onOpenAllFiles} totalFiles={totalFiles} developer={developer} />
+        <Section key={section.assign?.id ?? `s${index}`} section={section} member={name || label} team={team} files={files} owners={owners} onOpenFile={onOpenFile} onOpenAllFiles={onOpenAllFiles} totalFiles={totalFiles} developer={developer} />
       ))}
     </div>
   );

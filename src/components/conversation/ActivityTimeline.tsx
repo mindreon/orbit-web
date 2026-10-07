@@ -1,9 +1,10 @@
 import { ChevronRight, CircleAlert, CircleCheck, CircleDot, CircleSlash, CircleX, Circle, FilePlus, FileText, FolderOpen, Globe, ListChecks, ListTodo, MessageCircleQuestion, Pencil, Search, ShieldAlert, Sparkles, Terminal, Users, Wallet, Wrench, type LucideIcon } from "lucide-react";
-import { useCallback, useMemo, useState } from "react";
-import { describeStep, firstPlanId, groupCategory, groupSummary, isPlanStep, planItems, planText, prettyArgs, settledState, timelineItems, type PlanStatus, type ToolCategory } from "../../lib/activity";
+import { useCallback, useContext, useMemo, useState } from "react";
+import { describeStep, firstPlanId, isResultCut, groupCategory, groupSummary, isPlanStep, planItems, planText, prettyArgs, settledState, timelineItems, type PlanStatus, type ToolCategory } from "../../lib/activity";
 import { cn } from "../../lib/cn";
 import type { Segment, Step, StepState } from "../../lib/conversation";
 import { RichText } from "../markdown/RichText";
+import { StepTitles } from "./stepTitles";
 
 /** Which rows and groups are open, by step / group id: it outlives re-renders and regrouping while the reply streams. */
 export interface Expansion {
@@ -84,12 +85,16 @@ const STATUS_TEXT: Record<StepState, string> = { running: "运行中…", succes
 
 /** The expanded row: its arguments and what it returned, in a muted block; a command reads as `$ command`, its output and how it ended. */
 function StepDetail({ step, state }: { step: Step; state: StepState }) {
-  const { category, command } = describeStep(step, state);
+  const titleOf = useContext(StepTitles);
+  const { category, command } = describeStep(step, state, titleOf);
+  // The runtime cuts a result to its first 200 characters; say so rather than let the text end mid-line.
+  const cut = isResultCut(step.result) ? <span className="text-gray-500">{"\n…（已截断）"}</span> : null;
   if (category === "command") {
     return (
       <pre data-testid="step-detail" className="ml-6 max-h-64 overflow-auto whitespace-pre-wrap break-words rounded-control bg-muted px-3 py-2 font-mono text-caption text-gray-700">
         <span className="text-foreground">$ {command || prettyArgs(step.args) || "…"}</span>
         {step.result ? `\n${step.result}` : ""}
+        {cut}
         {"\n\n"}
         <span className="text-gray-500">{STATUS_TEXT[state]}</span>
       </pre>
@@ -100,6 +105,7 @@ function StepDetail({ step, state }: { step: Step; state: StepState }) {
   return (
     <pre data-testid="step-detail" className="ml-6 max-h-64 overflow-auto whitespace-pre-wrap break-words rounded-control bg-muted px-3 py-2 font-mono text-caption text-gray-700">
       {body || <span className="text-gray-500">没有可显示的内容</span>}
+      {cut}
     </pre>
   );
 }
@@ -115,7 +121,8 @@ interface RowProps {
 function ActivityRow({ step, active, first, expansion }: RowProps) {
   const state = settledState(step.state, active);
   const plan = isPlanStep(step);
-  const { category, text } = describeStep(step, state);
+  const titleOf = useContext(StepTitles);
+  const { category, text } = describeStep(step, state, titleOf);
   const label = plan ? planText(step, state, first) : text;
   const open = expansion.isOpen(step.id);
   return (

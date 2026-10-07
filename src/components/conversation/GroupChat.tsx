@@ -1,7 +1,7 @@
 import { ChevronRight, ClipboardCheck } from "lucide-react";
 import { useMemo } from "react";
 import { visibleArtifacts, type ArtifactFile } from "../../lib/artifacts";
-import { bubbleFiles, finalAnswerId, firstSentence, groupChat, mainChat, mentionColor, parseMentions, type ChatGroup, type ChatItem, type ChatTeam } from "../../lib/chat";
+import { bubbleFiles, fileOwners, finalAnswerId, firstSentence, groupChat, mainChat, mentionColor, parseMentions, type ChatGroup, type ChatItem, type ChatTeam } from "../../lib/chat";
 import { useDeveloperMode } from "../../lib/devMode";
 import { reviewLabel, roleName } from "../../lib/display";
 import { cn } from "../../lib/cn";
@@ -12,7 +12,7 @@ import { ApprovalMarker } from "../tasks/ApprovalInbox";
 import { approvalState, type ApprovalInfo } from "../../lib/approvals";
 import { ArtifactCards } from "./ArtifactCards";
 import { MentionChip, MentionText } from "./MentionChip";
-import { StepList } from "./StepList";
+import { ActivityTimeline } from "./ActivityTimeline";
 import { TeamRoster } from "./TeamRoster";
 import { UserBubble } from "./UserMessage";
 
@@ -48,7 +48,7 @@ function Thinking({ text }: { text: string }) {
   );
 }
 
-type BodyProps = { team: ChatTeam; finalId: string; developer: boolean } & Pick<GroupChatProps, "files" | "onOpenFile" | "onOpenAllFiles">;
+type BodyProps = { team: ChatTeam; finalId: string; developer: boolean; owners: ReadonlySet<string> } & Pick<GroupChatProps, "files" | "onOpenFile" | "onOpenAllFiles">;
 
 /** 早先几轮的复盘折成一行淡色的字，点开才看全文；最后一条领队的话不折。领队转述成员对你的回答（没有轮次）是给你的答复，也不折。 */
 function FoldedReview({ bubble }: { bubble: Bubble }) {
@@ -68,7 +68,7 @@ function FoldedReview({ bubble }: { bubble: Bubble }) {
   );
 }
 
-function BubbleBody({ bubble, team, files, finalId, developer, onOpenFile, onOpenAllFiles }: { bubble: Bubble } & BodyProps) {
+function BubbleBody({ bubble, team, files, owners, finalId, developer, onOpenFile, onOpenAllFiles }: { bubble: Bubble } & BodyProps) {
   if (bubble.kind === "review" && bubble.reviewRound && bubble.text !== "" && !bubble.live && bubble.id !== finalId) {
     return (
       <div data-testid="chat-bubble" data-kind={bubble.kind} data-status={bubble.status} data-node-id={bubble.nodeId || undefined}>
@@ -76,16 +76,17 @@ function BubbleBody({ bubble, team, files, finalId, developer, onOpenFile, onOpe
       </div>
     );
   }
-  const own = bubbleFiles(bubble, files);
+  const own = bubbleFiles(bubble, files, owners);
   const text = bubble.text || bubble.work?.text || "";
   const mentions = parseMentions(text, team.members);
   // A reply says who it answers; an assignment, who it is for. The chips lead the text.
   const to = bubble.to.filter((role) => role !== "system" && !mentions.includes(role));
   return (
     <div data-testid="chat-bubble" data-kind={bubble.kind} data-live={bubble.live ? "true" : undefined} data-status={bubble.status} data-node-id={bubble.nodeId || undefined} className="space-y-2">
-      {bubble.work && (bubble.work.steps.length > 0 || (developer && bubble.work.thinking)) ? (
+      {bubble.work && (bubble.work.segments.length > 0 || (developer && bubble.work.thinking)) ? (
         <div className="space-y-2" data-testid="chat-work">
-          <StepList steps={bubble.work.steps} active={bubble.live} />
+          {/* The leader's words and calls in the order they happened; the last words are the bubble below. */}
+          <ActivityTimeline segments={bubble.work.segments} active={bubble.live} />
           {developer && bubble.work.thinking ? <Thinking text={bubble.work.thinking} /> : null}
         </div>
       ) : null}
@@ -154,10 +155,11 @@ export function GroupChat({ items, team, nameOf, pendingApprovals, approvalOutco
   const developer = useDeveloperMode();
   const main = useMemo(() => mainChat(items, team), [items, team]);
   const finalId = useMemo(() => finalAnswerId(main), [main]);
+  const owners = useMemo(() => fileOwners(items), [items]);
   return (
     <>
       {groupChat(main).map((group) => {
-        if (group.type === "bubbles") return <BubbleGroup key={group.key} group={group} team={team} nameOf={nameOf} finalId={finalId} developer={developer} {...rest} />;
+        if (group.type === "bubbles") return <BubbleGroup key={group.key} group={group} team={team} nameOf={nameOf} finalId={finalId} developer={developer} owners={owners} {...rest} />;
         if (group.type === "roster") return <div key={group.key} className="space-y-2">{group.items.map((item) => <TeamRoster key={item.id} members={item.members} team={team} onOpenMember={onOpenMember} />)}</div>;
         if (group.type === "user") {
           return (

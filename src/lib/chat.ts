@@ -1,9 +1,8 @@
-import { buildTimeline, type Step, type StepState } from "./conversation";
+import { arrange, buildTimeline, type Segment, type Step, type StepState } from "./conversation";
 import { eventPosition, type AttemptStatus, type TaskLiveState } from "./taskEvents";
 import type { Task, TaskEvent } from "./tasks";
 import type { NodeRole } from "./display";
 import type { ArtifactFile } from "./artifacts";
-import { joinSplits, splitThinking } from "./thinking";
 
 /**
  * The group chat of a task with a team: every utterance in order, one bubble each, the work behind a member's bubble
@@ -26,8 +25,10 @@ export interface ChatSpeaker {
 /** What a member did on the way to a bubble. */
 export interface ChatWork {
   readonly steps: readonly Step[];
+  /** The steps and the words between them, in the order they happened (`steps` is its subset): what the bubble draws as its activity. */
+  readonly segments: readonly Segment[];
   readonly thinking: string;
-  /** The text streamed so far (a bubble still in progress); empty once the bubble has its own text. */
+  /** The words after the last step (a bubble still in progress); empty once the bubble has its own text. */
   readonly text: string;
 }
 
@@ -158,6 +159,8 @@ export function mentionColor(role: string, team: ChatTeam): number {
 /** What one agent session has done since its last bubble. */
 interface Work {
   steps: Step[];
+  /** `t:<block id>` / `s:<step id>` in the order the events came, as `Turn.order`. */
+  order: string[];
   blocks: Map<string, string>;
   thinking: Map<string, string>;
   role: string;
@@ -165,13 +168,14 @@ interface Work {
   attemptId: string;
 }
 
-const emptyWork = (role: string, label: string, attemptId: string): Work => ({ steps: [], blocks: new Map(), thinking: new Map(), role, label, attemptId });
+const emptyWork = (role: string, label: string, attemptId: string): Work => ({ steps: [], order: [], blocks: new Map(), thinking: new Map(), role, label, attemptId });
 
-const workOf = (work: Work): ChatWork => ({
-  steps: work.steps,
-  thinking: [...work.thinking.values()].filter(Boolean).join("\n\n"),
-  text: joinSplits([...work.blocks.values()].map(splitThinking)).answer,
-});
+const workOf = (work: Work): ChatWork => {
+  const { segments, answer } = arrange(work, [...work.blocks].map(([id, text]) => ({ id, text })), false);
+  return { steps: work.steps, segments, thinking: [...work.thinking.values()].filter(Boolean).join("\n\n"), text: answer };
+};
+
+const noted = (order: string[], key: string) => (order.includes(key) ? order : [...order, key]);
 
 const hasWork = (work: Work): boolean => work.steps.length > 0 || [...work.blocks.values()].some((text) => text !== "") || [...work.thinking.values()].some((text) => text !== "");
 
@@ -234,6 +238,7 @@ export function buildChat(input: BuildInput): ChatItem[] {
         const at = w.steps.findIndex((item) => item.id === id);
         if (at >= 0) w.steps[at] = { ...w.steps[at], ...step, args: step.args || w.steps[at].args };
         else w.steps.push(step);
+        w.order = noted(w.order, `s:${id}`);
         break;
       }
       case "agent.token_delta":
@@ -243,6 +248,7 @@ export function buildChat(input: BuildInput): ChatItem[] {
         const blocks = event.type === "agent.token_delta" ? w.blocks : w.thinking;
         const id = str(payload, "block_id");
         blocks.set(id, (blocks.get(id) ?? "") + str(payload, "text"));
+        if (event.type === "agent.token_delta") w.order = noted(w.order, `t:${id}`);
         break;
       }
       case "team.message": {
@@ -261,6 +267,7 @@ export function buildChat(input: BuildInput): ChatItem[] {
         if (ENDS_TURN.includes(kind)) {
           for (const [key, w] of work) {
             if (w.role === role && hasWork(w)) {
+              // What the member said last is the message itself: the work keeps the words before it.
               attached = { ...workOf(w), text: "" };
               work.delete(key);
               break;
@@ -309,13 +316,13 @@ export function buildChat(input: BuildInput): ChatItem[] {
     const split = turn.generation > 0 && previous?.kind === "user" ? items.find((item) => item.type === "user" && item.id === previous.id) : undefined;
     const base = split ? split.pos + 0.001 : (startPos.get(turn.attemptId) ?? last) + turn.generation * 0.01;
     const done = turn.status === "completed" || turn.status === "failed" || turn.status === "cancelled";
-    const forTurn: ChatWork = { steps: turn.steps, thinking: turn.thinking, text: "" };
+    const forTurn: ChatWork = { steps: turn.steps, segments: turn.segments, thinking: turn.thinking, text: "" };
     // The message the workflow wrote for this node already says what the attempt said: the attempt only adds its steps.
     const message = items.find((item): item is Extract<ChatItem, { type: "bubble" }> => item.type === "bubble" && item.nodeId === turn.nodeId && (item.kind === "reply" || item.kind === "review") && !taken.has(item.id));
     if (message && done) {
       taken.add(message.id);
       const at = items.indexOf(message);
-      items[at] = { ...message, work: forTurn.steps.length > 0 || forTurn.thinking ? forTurn : message.work, attemptId: message.attemptId || turn.attemptId };
+      items[at] = { ...message, work: forTurn.segments.length > 0 || forTurn.thinking ? forTurn : message.work, attemptId: message.attemptId || turn.attemptId };
       continue;
     }
     items.push({
@@ -324,7 +331,8 @@ export function buildChat(input: BuildInput): ChatItem[] {
       pos: base,
       speaker,
       to: [],
-      text: turn.text,
+      // The words between the steps stay in the work, in place; what the turn says last is its text.
+      text: turn.answer,
       // A node's own turn, with no message of the workflow's for it (the leader's planning, a member still at work).
       kind: role?.kind === "review" ? "review" : "turn",
       round: 0,
@@ -333,7 +341,7 @@ export function buildChat(input: BuildInput): ChatItem[] {
       nodeId: turn.nodeId,
       attemptId: turn.attemptId,
       ...(role?.kind === "review" && role.round ? { reviewRound: role.round } : {}),
-      ...(forTurn.steps.length > 0 || forTurn.thinking ? { work: forTurn } : {}),
+      ...(forTurn.segments.length > 0 || forTurn.thinking ? { work: forTurn } : {}),
       live: !done,
       status: turn.status,
       ...(turn.failure ? { failure: turn.failure.message } : {}),
@@ -492,10 +500,22 @@ export function memberThread(items: readonly ChatItem[], role: string): ThreadSe
   });
 }
 
-/** The files a bubble owns: the ones its message names, and (an answer or a review) what its attempt left. */
-export function bubbleFiles(bubble: BubbleItem, files: readonly ArtifactFile[]): readonly ArtifactFile[] {
+const leavesFiles = (bubble: BubbleItem) => (bubble.kind === "reply" || bubble.kind === "review" || bubble.kind === "turn") && bubble.attemptId !== "";
+
+/**
+ * The bubbles that show what their attempt left: the last one of each attempt. An artifact manifest belongs to an attempt, not to a
+ * turn of it (a question you answered splits an attempt into several turns), and the files were written by the work that ended it.
+ */
+export function fileOwners(items: readonly ChatItem[]): ReadonlySet<string> {
+  const last = new Map<string, string>();
+  for (const item of items) if (item.type === "bubble" && leavesFiles(item)) last.set(item.attemptId, item.id);
+  return new Set(last.values());
+}
+
+/** The files a bubble owns: the ones its message names, and (when it is the last bubble of its attempt: see `fileOwners`) what the attempt left. Without `owners`, every bubble of the attempt shows them. */
+export function bubbleFiles(bubble: BubbleItem, files: readonly ArtifactFile[], owners?: ReadonlySet<string>): readonly ArtifactFile[] {
   const named = bubble.artifacts.flatMap((name) => files.filter((file) => file.name === name).slice(-1));
-  const ofAttempt = (bubble.kind === "reply" || bubble.kind === "review" || bubble.kind === "turn") && bubble.attemptId !== "" ? files.filter((file) => file.attemptId === bubble.attemptId) : [];
+  const ofAttempt = leavesFiles(bubble) && (!owners || owners.has(bubble.id)) ? files.filter((file) => file.attemptId === bubble.attemptId) : [];
   const seen = new Set<string>();
   return [...named, ...ofAttempt].filter((file) => (seen.has(`${file.manifestId}/${file.name}`) ? false : (seen.add(`${file.manifestId}/${file.name}`), true)));
 }

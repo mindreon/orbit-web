@@ -23,9 +23,18 @@ interface ToolSpec {
   readonly base: string;
   /** What to say when the arguments gave no subject: 已读取文件. */
   readonly noun?: string;
-  /** The subject out of the call's `args_preview`; empty when there is none to show. */
-  readonly subject?: (args: string) => string;
+  /** The subject out of the call's `args_preview`; empty when there is none to show. `titleOf` names a plan node by its id, when the caller has the plan. */
+  readonly subject?: (args: string, titleOf?: TitleOf) => string;
 }
+
+/** The title of a plan node by its id; undefined when the plan has no such node (or is not loaded). */
+export type TitleOf = (nodeId: string) => string | undefined;
+
+/** What the runtime cuts a tool result to (`result_preview`, orbit_worker/ledger_middleware.py): a result this long may have been cut. */
+export const RESULT_PREVIEW_CHARS = 200;
+
+/** Whether a step's `result` is likely cut short upstream: it fills the whole preview. */
+export const isResultCut = (result: string): boolean => [...result].length >= RESULT_PREVIEW_CHARS;
 
 // ---- reading `args_preview` ------------------------------------------------------------------------------------------------
 // The preview is the call's JSON arguments cut to 256 characters, so it may be broken off in the middle of a string.
@@ -63,6 +72,27 @@ const dirOf = (args: string) => {
   const path = relativePath(oneLine(pickArg(args, "path")));
   return path ? (path.endsWith("/") ? path : `${path}/`) : oneLine(pickArg(args, "pattern"));
 };
+const hasArg = (args: string, key: string) => new RegExp(`"${key}"\\s*:`).test(args);
+
+const TASK_STATUS: Readonly<Record<string, string>> = { pending: "待办", in_progress: "进行中", completed: "已完成", deleted: "已删除" };
+
+/** What a TaskUpdate changed, in a few words: the new status, the dependencies, the owner or the description. */
+function updateNote(args: string): string {
+  const status = oneLine(pickArg(args, "status"));
+  if (status) return TASK_STATUS[status] ?? status;
+  if (["add_blocked_by", "add_blocks", "blocked_by", "blocks"].some((key) => hasArg(args, key))) return "设置依赖";
+  const owner = oneLine(pickArg(args, "owner"));
+  if (owner) return `指派给 ${owner}`;
+  return hasArg(args, "description") ? "修改描述" : "";
+}
+
+/** The task's own subject, else its title in the plan; then what changed. With no title the note stands alone, glued to the verb: 已更新任务（设置依赖）. */
+function updateSubject(args: string, titleOf?: TitleOf): string {
+  const title = oneLine(pickArg(args, "subject")) || oneLine(titleOf?.(pickArg(args, "task_id")) ?? "");
+  const note = updateNote(args);
+  return `${title}${note ? `（${note}）` : ""}`;
+}
+
 const commandOf = (args: string) => oneLine(firstArg(args, ["description", "command"]));
 
 const TOOLS: Readonly<Record<string, ToolSpec>> = {
@@ -80,7 +110,7 @@ const TOOLS: Readonly<Record<string, ToolSpec>> = {
   ask_user: { category: "ask", done: "已向你提问", doing: "正在向你提问", failed: "提问失败", base: "向你提问", subject: (args) => oneLine(pickArg(args, "question")) },
   [TODO_TOOL]: { category: "plan", done: "已更新计划", doing: "正在更新计划", failed: "更新计划失败", base: "更新计划" },
   TaskCreate: { category: "task", done: "已创建任务", doing: "正在创建任务", failed: "创建任务失败", base: "创建任务", subject: (args) => oneLine(pickArg(args, "subject")) },
-  TaskUpdate: { category: "task", done: "已更新任务", doing: "正在更新任务", failed: "更新任务失败", base: "更新任务", subject: (args) => oneLine(pickArg(args, "subject")) },
+  TaskUpdate: { category: "task", done: "已更新任务", doing: "正在更新任务", failed: "更新任务失败", base: "更新任务", subject: updateSubject },
   TaskList: { category: "task", done: "已查看任务计划", doing: "正在查看任务计划", failed: "查看任务计划失败", base: "查看任务计划" },
   TaskGet: { category: "task", done: "已查看任务", doing: "正在查看任务", failed: "查看任务失败", base: "查看任务" },
   team_assign: { category: "team", done: "已分配任务给", doing: "正在分配任务给", failed: "分配任务失败", base: "分配任务给", subject: (args) => oneLine(pickArg(args, "member")) },
@@ -109,10 +139,11 @@ export interface StepView {
 }
 
 /** What a step says about itself in its state. `Step.state` stays as the event gave it; the caller decides when a running step is really over. */
-export function describeStep(step: Pick<Step, "tool" | "args">, state: StepState): StepView {
+export function describeStep(step: Pick<Step, "tool" | "args">, state: StepState, titleOf?: TitleOf): StepView {
   const { spec, known } = specOf(step.tool);
-  const subject = known ? spec.subject?.(step.args) ?? "" : "";
-  const tail = known ? (subject ? ` ${subject}` : spec.noun ?? "") : ` ${step.tool}`;
+  const subject = known ? spec.subject?.(step.args, titleOf) ?? "" : "";
+  const spaced = subject.startsWith("（") ? subject : ` ${subject}`;
+  const tail = known ? (subject ? spaced : spec.noun ?? "") : ` ${step.tool}`;
   const command = spec.category === "command" ? oneLine(pickArg(step.args, "command")) : "";
   switch (state) {
     case "running":
@@ -121,7 +152,7 @@ export function describeStep(step: Pick<Step, "tool" | "args">, state: StepState
       return { category: spec.category, text: `${spec.done}${tail}`, command };
     case "error":
       // 读取失败 foo.ts: the failure says what failed on, so an unknown tool keeps its name in front.
-      return { category: spec.category, text: known ? `${spec.failed}${subject ? ` ${subject}` : ""}` : `调用 ${step.tool} 失败`, command };
+      return { category: spec.category, text: known ? `${spec.failed}${subject ? spaced : ""}` : `调用 ${step.tool} 失败`, command };
     case "denied":
       return { category: spec.category, text: `已拒绝${spec.base}${tail}`, command };
     case "interrupted":

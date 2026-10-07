@@ -212,7 +212,7 @@ function fold(turns: readonly Turn[], event: TaskEvent): readonly Turn[] {
  * 排不出位置的 block（事件流里没有它的增量，比如刷新后只剩 agent_final）排在所有步骤前面，不去猜。
  * 最终回复拿出来单独放：有 agent_final 时是最后一个 block（回放时它没有位置）；没有时是排在最后的那段话，只要它后面没有再跟工具调用。
  */
-function arrange(turn: AgentTurn, blocks: readonly LiveBlock[], hasFinal: boolean): { readonly segments: readonly Segment[]; readonly answer: string } {
+export function arrange(turn: Pick<AgentTurn, "order" | "steps">, blocks: readonly LiveBlock[], hasFinal: boolean): { readonly segments: readonly Segment[]; readonly answer: string } {
   const parts = blocks.map((block) => ({ id: block.id, text: splitThinking(block.text).answer.trim() }));
   const closing = hasFinal ? parts[parts.length - 1] : undefined;
   const placed: { pos: number; segment: Segment }[] = [];
