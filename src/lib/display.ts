@@ -3,6 +3,8 @@
  * Pure functions, no React. Anything not mapped here is either hidden or shown through a neutral fallback, never raw.
  */
 
+import type { PermissionPreset } from "./permissions";
+
 export const DEFAULT_AGENT_NAME = "默认智能体";
 const CUSTOM_EXPERT_NAME = "自定义专家";
 
@@ -227,4 +229,22 @@ export function roleText(role: NodeRole, nameOf: (ref: string) => string = (ref)
   const name = role.name || (role.expert ? nameOf(role.expert) : "");
   const who = role.kind === "leader" ? roleName(role.role, role.label, role.role) : roleName(role.role, role.label);
   return name ? `${who} · ${name}` : who;
+}
+
+// ---- Permissions ----------------------------------------------------------------------------------------------------------
+
+/** How each permission preset reads: `label` in lists and the settings, `short` on the composer trigger, `description` under the title. */
+export const PERMISSION_TEXT: Readonly<Record<PermissionPreset, { label: string; short: string; description: string }>> = {
+  default: { label: "默认权限", short: "默认权限", description: "工作区内编辑文件自动通过，运行命令前需要你确认。" },
+  request: { label: "请求批准", short: "请求批准", description: "编辑文件和运行命令前都需要你确认。" },
+  auto: { label: "帮我批准", short: "帮我批准", description: "编辑和普通命令自动通过，只有检测到风险的操作才问你。" },
+  full: { label: "完全访问权限", short: "完全访问", description: "沙箱内的操作全部自动通过；灾难性命令仍会被拒绝。" },
+  custom: { label: "自定义权限", short: "自定义", description: "使用设置里的读写范围和自动审批规则。" },
+};
+
+/** The tag on an approval card: only the risks that change how carefully to read it; low and unknown say nothing. */
+export function riskTag(risk: string): { text: string; tone: "danger" | "warning" } | null {
+  if (risk === "high") return { text: "高风险", tone: "danger" };
+  if (risk === "medium") return { text: "需要确认", tone: "warning" };
+  return null;
 }

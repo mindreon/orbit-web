@@ -1,4 +1,4 @@
-import { ArrowUp, Bot, Cpu, Link2, Loader2, Paperclip, Play, Sparkles, Square, Wrench, X } from "lucide-react";
+import { ArrowUp, Bot, Cpu, Link2, Loader2, Paperclip, Play, ShieldCheck, Sparkles, Square, Wrench, X } from "lucide-react";
 import { useLayoutEffect, useRef, useState } from "react";
 import { cn } from "../../lib/cn";
 import { useImeGuard } from "../../lib/keys";
@@ -33,6 +33,8 @@ interface ComposerProps {
   readonly catalog?: ConfigCatalog;
   /** 任务有专家团时：输入「@」可以点名成员。没有就和以前一样。 */
   readonly team?: { readonly leader: string; readonly members: readonly ChatMember[] } | null;
+  /** 权限的「完全访问」确认每个任务问一次，用任务 id 区分。 */
+  readonly taskId?: string;
 }
 
 /** 输入框右下角只有一个按钮，它的样子就是点下去会发生什么：发送；任务在跑、没有要发的话时停止；停住后继续。 */
@@ -57,7 +59,7 @@ const LOOK: Record<ComposerAction, { label: string; Icon: typeof ArrowUp }> = {
   continue: { label: "继续", Icon: Play },
 };
 
-export function Composer({ onSend, onControl, status, closed = false, attention = false, docked = false, config, catalog, team = null }: ComposerProps) {
+export function Composer({ onSend, onControl, status, closed = false, attention = false, docked = false, config, catalog, team = null, taskId }: ComposerProps) {
   const touch = useMediaQuery(COARSE_POINTER);
   const ime = useImeGuard();
   const [draft, setDraft] = useState("");
@@ -72,6 +74,7 @@ export function Composer({ onSend, onControl, status, closed = false, attention 
   // Commands that open a panel that lives in the toolbar: a counter that goes up each time, so asking twice opens twice.
   const [menuRequest, setMenuRequest] = useState<{ panel: Panel; n: number } | null>(null);
   const [modelRequest, setModelRequest] = useState(0);
+  const [permissionRequest, setPermissionRequest] = useState(0);
   const field = useRef<HTMLTextAreaElement>(null);
   const box = useRef<HTMLDivElement>(null);
   const width = useElementWidth(box);
@@ -146,6 +149,7 @@ export function Composer({ onSend, onControl, status, closed = false, attention 
           { id: "skills", label: "技能", hint: "添加或去掉技能", Icon: Wrench, run: panel("skills") },
           { id: "connectors", label: "连接器", hint: "添加或去掉连接器", Icon: Link2, run: panel("connectors") },
           { id: "model", label: "模型", hint: "选择这个任务用的模型", Icon: Cpu, run: () => setModelRequest((n) => n + 1) },
+          { id: "permission", label: "权限", hint: "选择如何批准 Agent 的操作", Icon: ShieldCheck, run: () => setPermissionRequest((n) => n + 1) },
         ]
       : []),
     ...(closed ? [] : [{ id: "file", label: "添加文件", hint: "把本地文件附到消息里", Icon: Paperclip, run: local.pick }]),
@@ -262,7 +266,9 @@ export function Composer({ onSend, onControl, status, closed = false, attention 
           <div className="flex items-center gap-2 px-2 pb-2">
             {config && catalog ? <ConfigMenu draft={config.draft} onChange={config.apply} catalog={catalog} disabled={closed || !config.ready} onAddFile={local.pick} request={menuRequest} /> : null}
             <div className="min-w-0 flex-1">{config && catalog ? <ToolbarChips draft={config.draft} onChange={config.apply} catalog={catalog} /> : null}</div>
-            <PermissionChip compact={compact} />
+            {config && catalog ? (
+              <PermissionChip value={config.draft.permission} onChange={(permission) => config.apply({ ...config.draft, permission })} scope={taskId ?? ""} compact={compact} disabled={closed || !config.ready} deferred openSignal={permissionRequest} />
+            ) : null}
             {config && catalog ? <ModelSelector draft={config.draft} onChange={config.apply} catalog={catalog} disabled={closed || !config.ready} compact={compact} openSignal={modelRequest} /> : null}
             <button
               type="button"

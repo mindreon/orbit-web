@@ -16,6 +16,8 @@ export interface ApprovalInfo {
   readonly detail: string;
   /** 「总是允许」会允许什么：工具名和命令前缀或路径规则；没有就不能总是允许。 */
   readonly rule: { readonly tool: string; readonly content: string | null } | null;
+  /** How risky the operation looks (`ApprovalSubject.risk`): low, medium or high; empty when the event has none. */
+  readonly risk: string;
 }
 
 const text = (value: unknown): string => (typeof value === "string" ? value : "");
@@ -40,6 +42,7 @@ export function approvalInfos(events: readonly TaskEvent[]): Readonly<Record<str
       roleLabel: text(subject.role_label),
       tool: withoutRolePrefix(text(subject.summary), text(subject.role)),
       detail: text(subject.detail),
+      risk: ["low", "medium", "high"].includes(text(subject.risk)) ? text(subject.risk) : "",
       rule: rule ? { tool: text(rule.tool_name), content: typeof rule.rule_content === "string" ? rule.rule_content : null } : null,
     };
   }

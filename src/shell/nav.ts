@@ -35,7 +35,7 @@ export const PRIMARY_NAV: readonly NavItem[] = [
 export const SETTINGS_NAV = [
   {
     group: "个人设置",
-    items: ["个人主页", "语言", "主题"],
+    items: ["个人主页", "语言", "主题", "权限"],
   },
 ] as const;
 
