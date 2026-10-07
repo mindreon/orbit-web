@@ -397,7 +397,8 @@ function isMemberTalk(bubble: BubbleItem): boolean {
 /**
  * The chat as the user reads it: their own messages, the leader's words to them, approvals and notices. A member's
  * bubbles and the leader's assignments are replaced by one roster row at the first of them after each user message,
- * saying who is on it and how each stands. The full items still feed the member's thread (`memberThread`).
+ * saying who is on it and how each stands. The full items still feed the member's thread (`memberThread`). A member's reply is
+ * never a bubble here: to the leader it is folded into the leader's review, to the user it leaves one quiet line.
  */
 export function mainChat(items: readonly ChatItem[], team: ChatTeam): ChatItem[] {
   const out: ChatItem[] = [];
@@ -429,6 +430,11 @@ export function mainChat(items: readonly ChatItem[], team: ChatTeam): ChatItem[]
       set(status, item.speaker.role, "done");
     } else if (!status.has(item.speaker.role) || status.get(item.speaker.role) === "waiting") {
       set(status, item.speaker.role, "running");
+    }
+    // A member answering the user directly (the user @-ed it) has no leader review to carry its words: the answer stays in the
+    // member's thread and the main chat says where it is, in one quiet line, instead of repeating it.
+    if (item.kind === "reply" && !item.live && item.text !== "" && item.to.includes("user")) {
+      out.push({ type: "system", id: `answered:${item.id}`, pos: item.pos, text: `${item.speaker.label || item.speaker.name || item.speaker.role} 已回复你，点上面的成员查看` });
     }
   }
   for (const { at, status } of segments) {

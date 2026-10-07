@@ -61,7 +61,7 @@ function Section({ section, team, files, onOpenFile, onOpenAllFiles, totalFiles,
             {developer && bubble.work?.thinking ? <p className="whitespace-pre-wrap rounded-card bg-muted px-3 py-2 text-small text-muted-foreground">{bubble.work.thinking}</p> : null}
             {text !== "" || bubble.live ? (
               <div className="rounded-card bg-secondary px-4 py-2.5 text-body text-foreground">
-                {bubble.kind === "reply" ? <p className="mb-1 text-small font-medium text-primary-700">回复领队</p> : null}
+                {bubble.kind === "reply" ? <p data-testid="thread-reply-to" className="mb-1 text-small font-medium text-primary-700">{bubble.to.includes("user") ? "回复你" : "回复领队"}</p> : null}
                 {text === "" ? <span className="text-muted-foreground">正在思考…</span> : <RichText text={text} streaming={bubble.live && !bubble.text} />}
                 {bubble.status === "failed" ? <p className="mt-1 text-caption text-danger-700">失败{bubble.failure ? `：${bubble.failure}` : ""}</p> : null}
               </div>

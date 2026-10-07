@@ -270,6 +270,28 @@ describe("the main chat: the leader and summaries", () => {
     expect(firstSentence("x".repeat(100))).toHaveLength(81);
   });
 
+  it("a member's reply to the leader never reaches the main chat, only the leader's review of it does (M8)", () => {
+    const main = mainChat(chat([msg(1, "assign", "member-1", ["member-2"], "查一下"), msg(2, "reply", "member-2", ["member-1"], "整体采用 FastAPI 的四层结构"), msg(3, "review", "member-1", [], "后端已经好了：四层结构。", { node_id: "n_r1" })]), team);
+    const text = main.flatMap((item) => (item.type === "bubble" ? [item.text] : item.type === "system" ? [item.text] : []));
+    expect(text).toEqual(["后端已经好了：四层结构。"]);
+    expect(main.map((item) => item.type)).toEqual(["roster", "bubble"]);
+  });
+
+  it("a member's reply to the user stays in its thread: the main chat gets one quiet line naming it, not the report (M9)", () => {
+    const items = chat([ev(1, "message.user", { text: "@研究员 介绍下实现", mentions: ["member-2"] }), msg(2, "reply", "member-2", ["user"], "整体采用 FastAPI + Pydantic 的标准结构，分为四层", { node_id: "n_m" })]);
+    const main = mainChat(items, team);
+    expect(main.map((item) => item.type)).toEqual(["user", "roster", "system"]);
+    const notice = main.at(-1);
+    expect(notice?.type === "system" && notice.text).toBe("研究员 已回复你，点上面的成员查看");
+    expect(main.some((item) => item.type === "bubble")).toBe(false);
+    expect(memberThread(items, "member-2")[0].bubbles.map((b) => [b.kind, b.to, b.text])).toEqual([["reply", ["user"], "整体采用 FastAPI + Pydantic 的标准结构，分为四层"]]);
+  });
+
+  it("a member's note to another member or a reply still working leaves no line in the main chat (M10)", () => {
+    const items = chat([msg(1, "assign", "member-1", ["member-2"], "a"), msg(2, "note", "member-2", ["member-3"], "@审校 看下"), msg(3, "reply", "member-3", ["member-2"], "好")]);
+    expect(mainChat(items, team).map((item) => item.type)).toEqual(["roster"]);
+  });
+
   it("a member's thread is its assignments with what it did after each, and the time it took (M6)", () => {
     const items = chat([msg(1, "assign", "member-1", ["member-2"], "a", { }), msg(2, "reply", "member-2", ["member-1"], "b")].map((e, i) => ({ ...e, occurred_at: `2026-10-05T00:00:${i === 0 ? "00" : "42"}Z` })));
     const sections = memberThread(items, "member-2");

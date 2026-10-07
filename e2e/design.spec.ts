@@ -747,6 +747,43 @@ for (const viewport of VIEWPORTS) {
       await check(page, phone ? "team-task-drawer" : "team-task");
     });
 
+    test("teams: a member's reply stays in its thread; the main chat shows the leader's summary, or one quiet line when the member answered the user", async ({ page }) => {
+      await page.unroute("**/v1/**");
+      const report = "整体采用 FastAPI + Pydantic 的标准结构，分为四层：models.py、data.py、main.py、requirements.txt。";
+      const answer = "接口一共九个，全部在 main.py 里。";
+      const events = [
+        event(1, "task.created", { goal: task.goal, title: task.title }),
+        gm(2, "assign", "member-1", ["member-2"], "调研发布风险：把本周的风险列出来", { node_id: "n_2", attempt_id: "att_1", round: 0 }),
+        gm(3, "reply", "member-2", ["member-1"], report, { node_id: "n_2", attempt_id: "att_2", round: 0 }),
+        gm(4, "review", "member-1", [], "领队总结：风险已经调研清楚，后端结构是四层。", { node_id: "n_3", attempt_id: "att_3", round: 0 }),
+        event(5, "message.user", { text: "@研究员 简单介绍下接口", mentions: ["member-2"], delivery: "queue" }),
+        gm(6, "reply", "member-2", ["user"], answer, { node_id: "n_5", attempt_id: "att_5", round: 0 }),
+      ];
+      await mockBackend(page, { events: events as never, plan: teamPlan as never, task: { profile: "writer@1" }, experts: [expert, researcher, reviewer, team], config: teamConfig });
+      await page.goto(`/tasks/${TASK_ID}`);
+
+      // The leader's summary is in the main chat; the member's report to the leader and its answer to the user are not.
+      await expect(page.getByTestId("chat-text").filter({ hasText: "领队总结：风险已经调研清楚" })).toBeVisible();
+      await expect(page.locator('[data-testid="chat-group"][data-role="member-2"]')).toHaveCount(0);
+      await expect(page.getByTestId("chat-bubble")).toHaveCount(1);
+      await expect(page.getByText("models.py")).toHaveCount(0);
+      await expect(page.getByText("接口一共九个")).toHaveCount(0);
+      await expect(page.getByText("回复领队")).toHaveCount(0);
+      // The answer to the user leaves one quiet line saying who answered.
+      await expect(page.getByTestId("chat-system")).toHaveCount(1);
+      await expect(page.getByTestId("chat-system")).toHaveText("研究员 已回复你，点上面的成员查看");
+
+      // Both are in the member's thread, each saying who it answers.
+      const roster = page.getByTestId("team-roster").last();
+      await roster.locator('[data-testid="roster-member"][data-role="member-2"]').click();
+      const thread = page.getByTestId("panel-member");
+      await expect(thread.getByTestId("thread-bubble")).toHaveCount(2);
+      await expect(thread.getByTestId("thread-bubble").nth(0)).toContainText("models.py");
+      await expect(thread.getByTestId("thread-bubble").nth(0).getByTestId("thread-reply-to")).toHaveText("回复领队");
+      await expect(thread.getByTestId("thread-bubble").nth(1)).toContainText("接口一共九个");
+      await expect(thread.getByTestId("thread-bubble").nth(1).getByTestId("thread-reply-to")).toHaveText("回复你");
+    });
+
     test("teams: the '+' menu offers the team and says what it means", async ({ page }) => {
       await page.unroute("**/v1/**");
       await mockBackend(page, { experts: [expert, researcher, team] });
