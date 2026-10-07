@@ -7,14 +7,14 @@ import { useDeveloperMode } from "../../lib/devMode";
 import type { NodeRole } from "../../lib/display";
 import type { AttemptView, BudgetAmounts, NodeState, ProfileSwitch, TeamStageView } from "../../lib/taskEvents";
 import type { TeamView } from "../../lib/taskConfig";
-import type { Plan, Task, TaskEvent } from "../../lib/tasks";
+import type { ArtifactOmitted, Plan, Task, TaskEvent } from "../../lib/tasks";
 import { clampPanelWidth, defaultPanelWidth, readPanelWidth, writePanelWidth } from "../../lib/panelWidth";
 import { BREAKPOINT, useMediaQuery } from "../../lib/useMediaQuery";
-import { ArtifactPreview } from "../conversation/ArtifactPreview";
+import { ArtifactFilePreview } from "../files/ArtifactFilePreview";
 import { AttemptTimeline } from "./AttemptTimeline";
 import { DeveloperInfo } from "./DeveloperInfo";
 import { EventLog } from "./EventLog";
-import { FileList, FileRows } from "./FileList";
+import { ArtifactTree, FileList, OmittedNotice } from "./FileList";
 import type { NodeActions } from "./NodeActions";
 import { PANEL_WIDTH_VAR, PanelResizeHandle } from "./PanelResizeHandle";
 import { PlanGraph } from "./PlanGraph";
@@ -40,6 +40,8 @@ interface TaskPanelProps {
   readonly nodeActions: NodeActions;
   readonly events: readonly TaskEvent[];
   readonly files: readonly ArtifactFile[];
+  /** 清单里没列出来的文件（合计）；没有就是 null。 */
+  readonly omitted: ArtifactOmitted | null;
   /** 已打开的预览标签，概览标签始终在最前。 */
   readonly openFiles: readonly ArtifactFile[];
   readonly active: string;
@@ -119,7 +121,7 @@ function SubHeader({ onBack, children }: { onBack: () => void; children: React.R
  * 宽屏时是并排的一列，灰底托着白卡片，不画边框，左边缘可以拖动调宽，也可以最大化占满整个任务页；
  * 窄屏（<1024px）时是从右边滑出的抽屉，由页头的按钮打开。
  */
-export function TaskPanel({ plan, nodes, task, reserved, pendingSwitches, nodeActions, attempts, events, files, openFiles, active, overview, chat, member, onMember, maximized, onToggleMaximize, onOverview, nameOf, roles, team, stageOf, onActivate, onOpenFile, onCloseFile, onCollapse }: TaskPanelProps) {
+export function TaskPanel({ plan, nodes, task, reserved, pendingSwitches, nodeActions, attempts, events, files, omitted, openFiles, active, overview, chat, member, onMember, maximized, onToggleMaximize, onOverview, nameOf, roles, team, stageOf, onActivate, onOpenFile, onCloseFile, onCollapse }: TaskPanelProps) {
   const developer = useDeveloperMode();
   const wide = useMediaQuery(BREAKPOINT.lg);
   const panel = useRef<HTMLElement>(null);
@@ -162,7 +164,7 @@ export function TaskPanel({ plan, nodes, task, reserved, pendingSwitches, nodeAc
         </button>
       </div>
       {activeFile ? (
-        <ArtifactPreview key={fileKey(activeFile)} file={activeFile} />
+        <ArtifactFilePreview key={fileKey(activeFile)} file={activeFile} />
       ) : active === AGENTS && team && chat ? (
         <SubAgentsView chat={chat} team={team} files={files} totalFiles={shown.length} role={member} onRole={onMember} onOpenFile={onOpenFile} onOpenAllFiles={() => onOverview({ kind: "artifacts" })} />
       ) : (
@@ -194,14 +196,15 @@ export function TaskPanel({ plan, nodes, task, reserved, pendingSwitches, nodeAc
                   <ChevronRight aria-hidden="true" className="h-3.5 w-3.5 transition-transform group-open:rotate-90" />
                   产物 ({shown.length})
                 </summary>
-                {shown.length === 0 ? <p className="mt-2 text-small text-muted-foreground">暂无产物</p> : <FileRows files={shown} onOpen={onOpenFile} />}
+                {shown.length === 0 ? <p className="mt-2 text-small text-muted-foreground">暂无产物</p> : <ArtifactTree files={shown} onOpen={onOpenFile} />}
+                <OmittedNotice omitted={omitted} />
               </details>
             </div>
           ) : null}
           {page.kind === "artifacts" ? (
             <div data-testid="panel-artifacts">
               <SubHeader onBack={back}>全部产物</SubHeader>
-              <FileList files={shown} onOpen={onOpenFile} />
+              <FileList files={shown} onOpen={onOpenFile} omitted={omitted} />
             </div>
           ) : null}
           {page.kind === "developer" ? (

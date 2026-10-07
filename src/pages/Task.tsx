@@ -20,7 +20,7 @@ import { buildChat, latestRosterStatus, mainChat, type ChatItem } from "../lib/c
 import { describeFailure } from "../lib/api";
 import { nodeRoles, nodeTitle, profileName, roleName } from "../lib/display";
 import { BREAKPOINT, useMediaQuery } from "../lib/useMediaQuery";
-import { fileKey, flattenArtifacts, type ArtifactFile } from "../lib/artifacts";
+import { fileKey, flattenArtifacts, sumOmitted, type ArtifactFile } from "../lib/artifacts";
 import { approvalInfos, approvalState } from "../lib/approvals";
 import { buildTimeline } from "../lib/conversation";
 import { completeTaskNode, controlTask, decideTaskApproval, grantTaskBudget, sendTaskMessage, switchNodeProfile } from "../lib/tasks";
@@ -88,6 +88,7 @@ function TaskView({ taskId }: { taskId: string }) {
   }, [task, upsert]);
 
   const files = useMemo(() => flattenArtifacts(artifacts), [artifacts]);
+  const omitted = useMemo(() => sumOmitted(artifacts), [artifacts]);
   const turns = useMemo(() => (task ? buildTimeline(task, events, live) : []), [task, events, live]);
   // 事件比任务快照先到：已有结果的审批立刻离开待确认；被取消的留一张说明。
   const pendingApprovals = (task?.pending_approvals ?? []).filter((id) => live.approvals[id] === undefined);
@@ -311,6 +312,7 @@ function TaskView({ taskId }: { taskId: string }) {
           attempts={live.attempts}
           events={events}
           files={files}
+          omitted={omitted}
           openFiles={openFiles}
           active={active}
           overview={overview}

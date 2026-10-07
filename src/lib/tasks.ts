@@ -36,12 +36,20 @@ export type TaskEvent = {
   entity?: { kind: string; id: string; version: number };
 };
 
+/** What a manifest left out of its file list (absent when nothing was). */
+export type ArtifactOmitted = {
+  count: number;
+  bytes: number;
+  reasons?: { file_cap?: number; size_cap?: number; total_cap?: number };
+};
+
 export type ArtifactManifest = {
   manifest_id: string;
   task_id: string;
   attempt_id?: string;
   entries: Array<Record<string, unknown>>;
   manifest_hash?: string;
+  omitted?: ArtifactOmitted;
   created_at: string;
 };
 

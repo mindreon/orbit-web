@@ -11,8 +11,9 @@
  *   R6 dragging the left edge does not resize (or clamp, or collapse), the width is lost on reload, the keyboard does not resize
  *   R7 the drawer at 390px scrolls sideways, shows a resize handle or a maximize button
  */
-import { mkdirSync } from "node:fs";
+import { mkdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
+import { fileURLToPath } from "node:url";
 import type { Locator, Page } from "@playwright/test";
 import { expect, test } from "@playwright/test";
 
@@ -104,11 +105,28 @@ function events(scenario: Scenario) {
   return list;
 }
 
-const entry = (name: string, mediaType: string) => ({ name, media_type: mediaType, size_bytes: 128, blob_ref: "sha256:x" });
+const entry = (name: string, mediaType: string, size = 128) => ({ name, media_type: mediaType, size_bytes: size, blob_ref: "sha256:x" });
+
+/** Small real files for every previewer (regenerate with e2e/fixtures/make-fixtures.py), served from the fake artifact host. */
+const FIXTURES = fileURLToPath(new URL("./fixtures/", import.meta.url));
+const FIXTURE_FILES: Readonly<Record<string, { file: string; type: string; size?: number }>> = {
+  "docs/sample.pdf": { file: "sample.pdf", type: "application/pdf" },
+  "docs/sample.docx": { file: "sample.docx", type: "application/vnd.openxmlformats-officedocument.wordprocessingml.document" },
+  "data/sample.xlsx": { file: "sample.xlsx", type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" },
+  "data/sample.csv": { file: "sample.csv", type: "text/csv" },
+  "slides/sample.pptx": { file: "sample.pptx", type: "application/vnd.openxmlformats-officedocument.presentationml.presentation" },
+  "backend/main.py": { file: "main.py", type: "text/x-python" },
+  "docs/old.doc": { file: "sample.docx", type: "application/msword" },
+  "docs/huge.pdf": { file: "sample.pdf", type: "application/pdf", size: 80 * 1024 * 1024 },
+  "node-compile-cache/v22/abc.cache": { file: "main.py", type: "application/octet-stream" },
+  "assets/logo.svg": { file: "", type: "image/svg+xml" },
+};
+const SVG = '<svg xmlns="http://www.w3.org/2000/svg" width="40" height="40"><script>window.top.__pwned = 1</script><rect width="40" height="40" fill="#07c"/></svg>';
+type Extras = { fixtures?: boolean; omitted?: boolean };
 const SOURCE = "# 风险摘要\n\n本周有三项风险需要处理。";
 const LONG_TEXT = Array.from({ length: 80 }, (_, i) => `第 ${i + 1} 行：迁移窗口与大促重叠，需要提前确认回滚方案。`).join("\n");
 
-async function mockBackend(page: Page, scenario: Scenario = "mixed") {
+async function mockBackend(page: Page, scenario: Scenario = "mixed", extras: Extras = {}) {
   const feed = events(scenario);
   await page.addInitScript((items) => {
     class FakeEventSource {
@@ -131,16 +149,30 @@ async function mockBackend(page: Page, scenario: Scenario = "mixed") {
     if (pathname === "/v1/tasks") return json({ items: [task] });
     if (pathname === `/v1/tasks/${TASK_ID}`) return json(task);
     if (pathname.endsWith("/plan")) return json(plan);
-    if (pathname.endsWith("/artifacts")) return json({ items: [{ manifest_id: "man_1", task_id: TASK_ID, attempt_id: "att_1", entries: [entry(PATH, "text/markdown"), entry(LONG_PATH, "text/markdown"), entry("notes.txt", "text/plain")], created_at: START }] });
+    if (pathname.endsWith("/artifacts")) {
+      const extra = extras.fixtures ? Object.entries(FIXTURE_FILES).map(([name, item]) => entry(name, item.type, item.size)) : [];
+      const first = { manifest_id: "man_1", task_id: TASK_ID, attempt_id: "att_1", entries: [entry(PATH, "text/markdown"), entry(LONG_PATH, "text/markdown"), entry("notes.txt", "text/plain"), ...extra], created_at: START, ...(extras.omitted ? { omitted: { count: 5, bytes: 9000, reasons: { file_cap: 3, size_cap: 2 } } } : {}) };
+      const second = { manifest_id: "man_2", task_id: TASK_ID, attempt_id: "att_2", entries: [], created_at: START, omitted: { count: 2, bytes: 1, reasons: { total_cap: 2 } } };
+      return json({ items: extras.omitted ? [first, second] : [first] });
+    }
     if (pathname.endsWith("/config")) return json(teamConfig);
     if (pathname === "/v1/artifacts/man_1/url") return json({ url: `http://artifacts.test/${searchParams.get("name")}` });
     if (pathname === "/v1/experts") return json({ items: [] });
     if (pathname === "/v1/models") return json({ items: ["test-model"], default: "test-model" });
     return json({ items: [], total: 0 });
   });
-  await page.route("http://artifacts.test/**", (route) => route.fulfill({ status: 200, headers: { "Access-Control-Allow-Origin": "*" }, contentType: "text/plain", body: new URL(route.request().url()).pathname.endsWith("notes.txt") ? LONG_TEXT : SOURCE }));
+  await page.route("http://artifacts.test/**", (route) => {
+    const name = decodeURIComponent(new URL(route.request().url()).pathname.slice(1));
+    const headers = { "Access-Control-Allow-Origin": "*" };
+    const fixture = FIXTURE_FILES[name];
+    if (name === "assets/logo.svg") return route.fulfill({ status: 200, headers, contentType: "image/svg+xml", body: SVG });
+    if (fixture) return route.fulfill({ status: 200, headers, contentType: fixture.type, body: readFileSync(join(FIXTURES, fixture.file)) });
+    return route.fulfill({ status: 200, headers, contentType: "text/plain", body: name.endsWith("notes.txt") ? LONG_TEXT : SOURCE });
+  });
 }
 
+/** A file row in the artifact tree, found by its full path (the row's title); the name alone repeats across folders. */
+const fileItem = (scope: Locator | Page, path: string) => scope.locator(`[role="treeitem"][title="${path}"]`);
 const panelOf = (page: Page) => page.getByRole("complementary", { name: "任务详情" });
 const handleOf = (page: Page) => page.getByRole("separator", { name: "调整详情宽度" });
 const widthOf = async (locator: Locator) => Math.round((await locator.boundingBox())!.width);
@@ -284,9 +316,9 @@ test.describe("desktop 1440x900", () => {
     await mockBackend(page, "mixed");
     await page.goto(`/tasks/${TASK_ID}`);
     const panel = panelOf(page);
-    await panel.getByRole("button", { name: /风险摘要\.md/ }).first().click();
+    await fileItem(panel, PATH).click();
     await panel.getByRole("button", { name: "概览" }).click();
-    await panel.getByRole("button", { name: /notes\.txt/ }).first().click();
+    await fileItem(panel, "notes.txt").click();
 
     // The tab is labelled with the file's name, not its path; the path is the tooltip.
     const first = panel.getByRole("button", { name: "风险摘要.md", exact: true });
@@ -306,7 +338,7 @@ test.describe("desktop 1440x900", () => {
 
     // Preview header: the directory is muted and cut from the start, then ›, then the bold name; copy path is on the right.
     await first.click();
-    const preview = page.getByTestId("artifact-preview");
+    const preview = page.getByTestId("file-preview");
     await expect(preview.getByRole("heading", { name: "风险摘要" })).toBeVisible();
     await expect(preview.getByTestId("preview-dir")).toHaveCSS("direction", "rtl");
     await expect(preview.getByTestId("preview-dir").locator("bdi")).toHaveAttribute("dir", "ltr");
@@ -325,7 +357,7 @@ test.describe("desktop 1440x900", () => {
 
     // A path too long for the header loses its start, never the file name.
     await panel.getByRole("button", { name: "概览" }).click();
-    await panel.getByRole("button", { name: new RegExp(LONG_PATH.replace(/[.*+?^${}()|[\]\\/]/g, "\\$&")) }).click();
+    await fileItem(panel, LONG_PATH).click();
     const dir = page.getByTestId("preview-dir");
     await expect(dir).toBeVisible();
     expect(await dir.evaluate((el) => el.scrollWidth > el.clientWidth), "the long directory is cut").toBe(true);
@@ -361,7 +393,7 @@ test.describe("desktop 1440x900", () => {
     await page.keyboard.press("Space");
     await expect(reports).toHaveAttribute("aria-expanded", "true");
     await tree.getByRole("treeitem", { name: /^风险摘要\.md/ }).first().click();
-    await expect(page.getByTestId("artifact-preview").getByRole("heading", { name: "风险摘要" })).toBeVisible();
+    await expect(page.getByTestId("file-preview").getByRole("heading", { name: "风险摘要" })).toBeVisible();
   });
 
   test("the overview and 子智能体 tabs stay pinned while file tabs scroll; the preview fills the panel and scrolls inside itself", async ({ page }) => {
@@ -370,9 +402,9 @@ test.describe("desktop 1440x900", () => {
     const panel = panelOf(page);
     await handleOf(page).focus();
     await page.keyboard.press("Home"); // 20rem: three file tabs cannot all fit
-    for (const name of [new RegExp(PATH.replace(/[.*+?^${}()|[\]\\/]/g, "\\$&")), new RegExp(LONG_PATH.replace(/[.*+?^${}()|[\]\\/]/g, "\\$&")), /notes\.txt/]) {
+    for (const path of [PATH, LONG_PATH, "notes.txt"]) {
       await panel.getByRole("button", { name: "概览" }).click();
-      await panel.getByRole("button", { name }).first().click();
+      await fileItem(panel, path).click();
     }
     const strip = page.getByTestId("file-tabs");
     await expect(strip.getByRole("button", { name: "关闭 notes.txt" })).toBeVisible();
@@ -392,13 +424,13 @@ test.describe("desktop 1440x900", () => {
     await snap(page, "light-1440x900-tabs");
 
     // Text: one surface from the header to the bottom of the panel; the long file scrolls inside it.
-    const body = page.getByTestId("artifact-preview").locator("> div").last();
+    const body = page.getByTestId("file-preview").locator("> div").last();
     const filled = async () => {
       const [b, p] = await Promise.all([body.boundingBox(), panel.boundingBox()]);
       expect(Math.round(b!.y + b!.height), "the preview surface reaches the bottom of the panel").toBe(Math.round(p!.y + p!.height));
       expect(await body.evaluate((el) => getComputedStyle(el).backgroundColor)).toBe(await page.evaluate(() => getComputedStyle(document.querySelector("main")!).backgroundColor));
     };
-    await expect(page.getByTestId("artifact-preview")).toContainText("第 80 行");
+    await expect(page.getByTestId("file-preview")).toContainText("第 80 行");
     await filled();
     expect(await body.evaluate((el) => el.scrollHeight > el.clientHeight)).toBe(true);
     await body.evaluate((el) => el.scrollTo(0, el.scrollHeight));
@@ -407,11 +439,130 @@ test.describe("desktop 1440x900", () => {
 
     // Markdown, rendered and as source: short content, same full-height surface.
     await panel.getByRole("button", { name: "风险摘要.md", exact: true }).first().click();
-    await expect(page.getByTestId("artifact-preview").getByRole("heading", { name: "风险摘要" })).toBeVisible();
+    await expect(page.getByTestId("file-preview").getByRole("heading", { name: "风险摘要" })).toBeVisible();
     await filled();
-    await page.getByTestId("artifact-preview").getByRole("button", { name: "源码" }).click();
-    await expect(page.getByTestId("artifact-preview")).toContainText("# 风险摘要");
+    await page.getByTestId("file-preview").getByRole("button", { name: "源码" }).click();
+    await expect(page.getByTestId("file-preview")).toContainText("# 风险摘要");
     await filled();
+  });
+
+  test("the overview 产物 is the shared folder tree: folders toggle, a file opens its tab, old caches stay out", async ({ page }) => {
+    await mockBackend(page, "mixed", { fixtures: true });
+    await page.goto(`/tasks/${TASK_ID}`);
+    const home = page.getByTestId("panel-home");
+    const tree = home.getByRole("tree", { name: "产物文件树" });
+    await expect(tree).toBeVisible();
+    const reports = tree.getByRole("treeitem", { name: /^reports\/2026-q3\/release-readiness\/weekly/ });
+    await expect(reports).toHaveAttribute("aria-expanded", "true");
+    await reports.click();
+    await expect(reports).toHaveAttribute("aria-expanded", "false");
+    await expect(fileItem(tree, PATH)).toHaveCount(0);
+    await reports.click();
+    await expect(fileItem(tree, PATH)).toBeVisible();
+    // node-compile-cache is dropped like node_modules, even though the old manifest still lists it.
+    await expect(tree.locator('[title^="node-compile-cache"]')).toHaveCount(0);
+    await fileItem(tree, "backend/main.py").click();
+    await expect(panelOf(page).getByTestId("file-tabs").getByRole("button", { name: "main.py", exact: true })).toBeVisible();
+  });
+
+  test("the notice 「还有 N 个文件未列出」 sums the manifests' omitted counts and names the reasons, in the overview and in 全部产物", async ({ page }) => {
+    await mockBackend(page, "mixed", { omitted: true });
+    await page.goto(`/tasks/${TASK_ID}`);
+    const notice = page.getByTestId("panel-home").getByTestId("artifact-omitted");
+    await expect(notice).toHaveText("还有 7 个文件未列出");
+    await expect(notice).toHaveAttribute("title", "文件数上限 3 个；单文件过大 2 个；总大小上限 2 个");
+    await page.getByRole("button", { name: /查看所有产物/ }).first().click();
+    const all = page.getByTestId("panel-artifacts").getByTestId("artifact-omitted");
+    await expect(all).toHaveText("还有 7 个文件未列出");
+    await expect(all).toHaveAttribute("title", /文件数上限 3 个/);
+  });
+
+  test("each format opens in its own previewer, and the heavy libraries load only when such a file is opened", async ({ page }) => {
+    const requested: string[] = [];
+    page.on("request", (request) => requested.push(request.url()));
+    await mockBackend(page, "mixed", { fixtures: true });
+    await page.goto(`/tasks/${TASK_ID}`);
+    const panel = panelOf(page);
+    const tree = panel.getByRole("tree", { name: "产物文件树" });
+    await expect(tree).toBeVisible();
+    const HEAVY = /pdfjs-dist|pdf\.worker|docx-preview|\/xlsx|pptx-preview|echarts|PdfPreview|DocxPreview|SheetPreview|PptxPreview/;
+    expect(requested.filter((url) => HEAVY.test(url)), "no format library is fetched before a file is opened").toEqual([]);
+    const preview = page.getByTestId("file-preview");
+    const open = async (path: string) => {
+      await panel.getByRole("button", { name: "概览" }).click();
+      await fileItem(tree, path).click();
+    };
+
+    // PDF: page buttons and zoom; the canvas holds drawn pixels.
+    await open("docs/sample.pdf");
+    await expect(preview).toHaveAttribute("data-previewer", "pdf");
+    await expect(page.getByTestId("pdf-page")).toHaveText("1 / 2");
+    expect(requested.some((url) => /pdfjs-dist|PdfPreview/.test(url)), "the PDF library loads on open").toBe(true);
+    const inked = () => preview.locator("canvas").evaluate((canvas: HTMLCanvasElement) => {
+      const { data } = canvas.getContext("2d")!.getImageData(0, 0, canvas.width, canvas.height);
+      for (let i = 0; i < data.length; i += 4) if (data[i] < 100) return true;
+      return false;
+    });
+    await expect.poll(inked).toBe(true);
+    await preview.getByRole("button", { name: "下一页" }).click();
+    await expect(page.getByTestId("pdf-page")).toHaveText("2 / 2");
+    await expect(preview.getByRole("button", { name: "下一页" })).toBeDisabled();
+    await preview.getByRole("button", { name: "放大" }).click();
+    await expect(page.getByTestId("pdf-zoom")).toHaveText("125%");
+    await expect.poll(inked).toBe(true);
+    await snap(page, "light-1440x900-preview-pdf");
+
+    await open("docs/sample.docx");
+    await expect(preview).toHaveAttribute("data-previewer", "docx");
+    await expect(page.getByTestId("docx-preview")).toContainText("Orbit DOCX heading");
+    await expect(preview).toContainText("近似");
+    await snap(page, "light-1440x900-preview-docx");
+
+    await open("data/sample.xlsx");
+    await expect(preview).toHaveAttribute("data-previewer", "sheet");
+    const sheet = page.getByTestId("sheet-preview");
+    await expect(sheet.getByRole("cell", { name: "Orbit license" })).toBeVisible();
+    await sheet.getByRole("tab", { name: "Notes" }).click();
+    await expect(sheet.getByRole("cell", { name: "Orbit sheet two" })).toBeVisible();
+    await expect(sheet.getByRole("cell", { name: "Orbit license" })).toHaveCount(0);
+    await snap(page, "light-1440x900-preview-xlsx");
+
+    await open("data/sample.csv");
+    await expect(preview).toHaveAttribute("data-previewer", "sheet");
+    await expect(sheet.getByRole("cell", { name: "Orbit CSV row" })).toBeVisible();
+    await expect(sheet.getByRole("tab")).toHaveCount(0);
+
+    await open("slides/sample.pptx");
+    await expect(preview).toHaveAttribute("data-previewer", "pptx");
+    await expect(page.getByTestId("pptx-preview")).toContainText("Orbit PPTX title");
+    await expect(preview.getByRole("button", { name: "下载" })).toBeVisible();
+    await expect(preview).toContainText("近似");
+    await snap(page, "light-1440x900-preview-pptx");
+
+    // Code is highlighted by extension.
+    await open("backend/main.py");
+    await expect(preview).toHaveAttribute("data-previewer", "code");
+    const code = page.getByTestId("code-preview");
+    await expect(code).toHaveAttribute("data-language", "python");
+    await expect(code.locator(".hljs-keyword").first()).toBeVisible();
+    await snap(page, "light-1440x900-preview-code");
+
+    // SVG: shown through <img>, never in the DOM; its script does not run; the source view shows the markup.
+    await open("assets/logo.svg");
+    await expect(preview).toHaveAttribute("data-previewer", "svg");
+    await expect(preview.locator("img")).toBeVisible();
+    await expect(preview.locator(`svg[width="40"], script`)).toHaveCount(0);
+    expect(await page.evaluate(() => (window as unknown as { __pwned?: number }).__pwned)).toBeUndefined();
+    await preview.getByRole("button", { name: "源码" }).click();
+    await expect(page.getByTestId("code-preview")).toContainText("<rect");
+
+    // Old binary Office formats and oversize files fall back to download only.
+    await open("docs/old.doc");
+    await expect(preview).toHaveAttribute("data-previewer", "none");
+    await expect(page.getByTestId("preview-fallback")).toContainText("此格式暂不支持预览，请下载查看");
+    await expect(page.getByTestId("preview-fallback").getByRole("button", { name: "下载" })).toBeVisible();
+    await open("docs/huge.pdf");
+    await expect(page.getByTestId("preview-fallback")).toContainText("文件较大");
   });
 
   test("maximize hides the conversation; Esc and the button restore it", async ({ page }) => {
@@ -557,8 +708,8 @@ test.describe("desktop 1440x900", () => {
     await expect(page.getByTestId("panel-member")).toBeVisible();
     await snap(page, "dark-1440x900-member");
     await panelOf(page).getByRole("button", { name: "概览" }).click();
-    await panelOf(page).getByRole("button", { name: /风险摘要\.md/ }).first().click();
-    await expect(page.getByTestId("artifact-preview").getByRole("heading", { name: "风险摘要" })).toBeVisible();
+    await fileItem(panelOf(page), PATH).click();
+    await expect(page.getByTestId("file-preview").getByRole("heading", { name: "风险摘要" })).toBeVisible();
     await snap(page, "dark-1440x900-file");
   });
 });
@@ -601,8 +752,8 @@ test.describe("phone 390x844", () => {
 
     // Open files: a long path in a narrow drawer.
     await drawer.getByRole("button", { name: "概览" }).click();
-    await drawer.getByRole("button", { name: new RegExp(LONG_PATH.replace(/[.*+?^${}()|[\]\\/]/g, "\\$&")) }).click();
-    await expect(page.getByTestId("artifact-preview").getByRole("heading", { name: "风险摘要" })).toBeVisible();
+    await fileItem(drawer, LONG_PATH).click();
+    await expect(page.getByTestId("file-preview").getByRole("heading", { name: "风险摘要" })).toBeVisible();
     await fits("drawer file");
     await snap(page, "light-390x844-file");
     await page.keyboard.press("Escape");

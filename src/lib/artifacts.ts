@@ -1,4 +1,4 @@
-import type { ArtifactManifest } from "./tasks";
+import type { ArtifactManifest, ArtifactOmitted } from "./tasks";
 
 export type FileKind = "image" | "html" | "markdown" | "text" | "pdf" | "other";
 
@@ -38,7 +38,7 @@ export function latestByName(files: readonly ArtifactFile[]): readonly ArtifactF
 
 const extension = (name: string) => name.slice(name.lastIndexOf(".") + 1).toLowerCase();
 
-/** 决定怎么预览：图片直接显示，HTML 放沙箱，文本和 Markdown 渲染，PDF 和其他文件只给下载。 */
+/** 文件的大类：用来选图标和排序；怎么预览由 `components/files/preview/registry.ts` 决定。 */
 export function fileKind(name: string, mediaType: string): FileKind {
   const ext = extension(name);
   if (mediaType.startsWith("image/") || ["png", "jpg", "jpeg", "gif", "webp", "svg"].includes(ext)) return "image";
@@ -49,12 +49,25 @@ export function fileKind(name: string, mediaType: string): FileKind {
   return "other";
 }
 
+/** 所有清单没列出的文件加在一起；一个都没落下时返回 null。 */
+export function sumOmitted(manifests: readonly ArtifactManifest[]): ArtifactOmitted | null {
+  const total: { count: number; bytes: number; reasons: Record<string, number> } = { count: 0, bytes: 0, reasons: {} };
+  for (const manifest of manifests) {
+    const omitted = manifest.omitted;
+    if (!omitted || !(omitted.count > 0)) continue;
+    total.count += omitted.count;
+    total.bytes += omitted.bytes ?? 0;
+    for (const [reason, n] of Object.entries(omitted.reasons ?? {})) total.reasons[reason] = (total.reasons[reason] ?? 0) + (n ?? 0);
+  }
+  return total.count > 0 ? total : null;
+}
+
 export const fileKey = (file: Pick<ArtifactFile, "manifestId" | "name">) => `${file.manifestId}/${file.name}`;
 
 // ---- 对话和面板里该给人看的产物 -------------------------------------------------------------------------------------------
 
 /** 路径里出现这些目录，就是依赖或构建产物，不是人要看的成果。 */
-const NOISE_DIRS = new Set(["node_modules", ".venv", "venv", "__pycache__", ".git", "dist", "build", ".cache", ".next", "coverage", "site-packages"]);
+const NOISE_DIRS = new Set(["node_modules", ".venv", "venv", "__pycache__", ".git", "dist", "build", ".cache", ".next", "coverage", "site-packages", "node-compile-cache", ".npm", ".pnpm-store", ".vite"]);
 const LOCKFILES = new Set(["package-lock.json", "pnpm-lock.yaml", "yarn.lock", "uv.lock"]);
 
 /** 依赖目录、构建输出、缓存和锁文件：前端兜底过滤，后端没滤干净时也不会把上百个文件摆给人看。 */

@@ -89,7 +89,7 @@ test("artifact cards open a preview tab; HTML runs in a sandbox", async ({ page 
   await expect(page.getByTestId("user-message")).toContainText("整理本周周报");
 
   await page.getByRole("button", { name: /report\.md/ }).first().click();
-  await expect(page.getByTestId("artifact-preview")).toContainText("周报标题");
+  await expect(page.getByTestId("file-preview")).toContainText("周报标题");
   await expect(page.getByRole("button", { name: "关闭 report.md" })).toBeVisible();
 
   await page.getByRole("button", { name: /slides\.html/ }).first().click();

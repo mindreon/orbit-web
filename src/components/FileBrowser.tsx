@@ -1,6 +1,7 @@
 import { lazy, Suspense, useEffect, useMemo, useState } from "react";
-import { stripFrontmatter } from "../lib/display";
 import { FileTree } from "./files/FileTree";
+import { FilePreview } from "./files/preview/FilePreview";
+import { textSource } from "./files/preview/sources";
 
 // Markdown pulls Mermaid's loader. Keep that off the entry chunk; the browser
 // loads it when a markdown file is shown. SkillDetail renders the overview
@@ -55,7 +56,7 @@ export function FileBrowser({
   if (mode === "preview" && selected) {
     return (
       <div className="flex h-[70vh] flex-col overflow-hidden rounded-card bg-muted">
-        <FilePreview path={selected} body={bodies.get(fileKey(selected))} loading={loadingPath === selected} onBack={() => setMode("tree")} />
+        <BrowserPreview path={selected} body={bodies.get(fileKey(selected))} size={entries.find((item) => item.path === selected)?.size} pending={loadingPath === selected} onBack={() => setMode("tree")} />
       </div>
     );
   }
@@ -89,42 +90,8 @@ function fileKey(path: string) {
   return path.replaceAll("\\", "/").replace(/^\/+/, "");
 }
 
-function previewKind(path: string) {
-  const base = fileKey(path).slice(fileKey(path).lastIndexOf("/") + 1).toLowerCase();
-  const dot = base.lastIndexOf(".");
-  const ext = dot <= 0 ? "" : base.slice(dot + 1);
-  if (ext === "md" || ext === "mdx") return "markdown";
-  return "text";
-}
-
-function FilePreview({ path, body, loading, onBack }: { path: string; body?: string; loading?: boolean; onBack: () => void }) {
-  const kind = previewKind(path);
-  const text = body ? (kind === "markdown" ? stripFrontmatter(body) : body) : "";
-  return (
-    <div className="flex h-full flex-col">
-      <div className="sticky top-0 z-10 flex items-center gap-2 bg-secondary px-4 py-2">
-        <button type="button" onClick={onBack} className="flex shrink-0 cursor-pointer items-center gap-1 text-body">
-          返回文件树
-        </button>
-        <span className="mx-4 flex-1 truncate text-body text-muted-foreground" title={path}>
-          {path}
-        </span>
-      </div>
-      <div className="flex-1 overflow-auto">
-        {loading ? (
-          <p className="flex h-full min-h-[240px] items-center justify-center text-body text-muted-foreground">正在读取</p>
-        ) : !text ? (
-          <p className="flex h-full min-h-[240px] items-center justify-center text-body text-muted-foreground">暂不支持预览此类型文件</p>
-        ) : kind === "markdown" ? (
-          <div className="p-4">
-            <RenderedMarkdown text={text} />
-          </div>
-        ) : (
-          <pre className="m-4 overflow-auto rounded-control bg-card p-4 text-small text-foreground">
-            <code>{text}</code>
-          </pre>
-        )}
-      </div>
-    </div>
-  );
+/** 选中文件的预览：内容已经在内存里（专家文件是点开才取回来的，取回前 `pending`），其余交给共用的 FilePreview。 */
+function BrowserPreview({ path, body, size, pending, onBack }: { path: string; body?: string; size?: number; pending: boolean; onBack: () => void }) {
+  const source = useMemo(() => textSource({ name: fileKey(path), size }, body ?? ""), [path, body, size]);
+  return <FilePreview key={path} source={source} assumeText hideFrontmatter pending={pending} onBack={onBack} />;
 }
