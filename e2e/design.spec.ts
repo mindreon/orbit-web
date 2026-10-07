@@ -784,6 +784,44 @@ for (const viewport of VIEWPORTS) {
       await expect(thread.getByTestId("thread-bubble").nth(1).getByTestId("thread-reply-to")).toHaveText("回复你");
     });
 
+    test("teams: when the user @-mentions a member, the member reports to the leader and the leader answers in the main chat, unfolded", async ({ page }) => {
+      await page.unroute("**/v1/**");
+      const answer = "接口一共九个，全部在 main.py 里。";
+      const relay = "研究员查过了：接口一共九个，都在 main.py；我核对过路由，没有遗漏。";
+      // The relay is the leader's node 「领队复盘」 with no review round: it is not a round of reviews but an answer to the user.
+      const relayPlan = {
+        ...teamPlan,
+        nodes: [
+          ...teamPlan.nodes,
+          node("n_5", "@研究员: 简单介绍下接口", "COMPLETED", { owner_profile: "research@1", owner_role: "member-2", owner_label: "研究员" }),
+          node("n_6", "领队复盘", "COMPLETED", { depends_on: ["n_5"], owner_profile: "writer@1" }),
+          node("n_7", "收尾", "COMPLETED", { owner_profile: "writer@1" }),
+        ],
+      };
+      const events = [
+        event(1, "task.created", { goal: task.goal, title: task.title }),
+        event(2, "message.user", { text: "@研究员 简单介绍下接口", mentions: ["member-2"], delivery: "queue" }),
+        gm(3, "reply", "member-2", ["member-1"], answer, { node_id: "n_5", attempt_id: "att_5", round: 0 }),
+        gm(4, "review", "member-1", [], relay, { node_id: "n_6", attempt_id: "att_6", round: 0 }),
+        event(5, "message.user", { text: "好的，收个尾", mentions: [], delivery: "queue" }),
+        gm(6, "review", "member-1", [], "已收尾。", { node_id: "n_7", attempt_id: "att_7", round: 0 }),
+      ];
+      await mockBackend(page, { events: events as never, plan: relayPlan as never, task: { profile: "writer@1" }, experts: [expert, researcher, reviewer, team], config: teamConfig });
+      await page.goto(`/tasks/${TASK_ID}`);
+
+      // The leader's relay is in the main chat in full, not folded and without a round label, though a later answer follows it.
+      await expect(page.getByTestId("chat-text").filter({ hasText: "我核对过路由，没有遗漏" })).toBeVisible();
+      await expect(page.locator('[data-folded="true"]')).toHaveCount(0);
+      await expect(page.getByText(/第 \d+ 轮/)).toHaveCount(0);
+      // The member's own answer went to the leader: it is not in the main chat, and there is no 「已回复你」 line.
+      await expect(page.getByText(answer)).toHaveCount(0);
+      await expect(page.getByTestId("chat-system")).toHaveCount(0);
+      const roster = page.getByTestId("team-roster").first();
+      await roster.locator('[data-testid="roster-member"][data-role="member-2"]').click();
+      const thread = page.getByTestId("panel-member");
+      await expect(thread.getByTestId("thread-bubble").filter({ hasText: "接口一共九个" }).getByTestId("thread-reply-to")).toHaveText("回复领队");
+    });
+
     test("teams: the '+' menu offers the team and says what it means", async ({ page }) => {
       await page.unroute("**/v1/**");
       await mockBackend(page, { experts: [expert, researcher, team] });

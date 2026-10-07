@@ -50,7 +50,7 @@ function Thinking({ text }: { text: string }) {
 
 type BodyProps = { team: ChatTeam; finalId: string; developer: boolean } & Pick<GroupChatProps, "files" | "onOpenFile" | "onOpenAllFiles">;
 
-/** 早先几轮的复盘折成一行淡色的字，点开才看全文；最后一条领队的话不折。 */
+/** 早先几轮的复盘折成一行淡色的字，点开才看全文；最后一条领队的话不折。领队转述成员对你的回答（没有轮次）是给你的答复，也不折。 */
 function FoldedReview({ bubble }: { bubble: Bubble }) {
   const label = bubble.reviewRound ? `第 ${bubble.reviewRound} 轮复盘` : "复盘";
   return (
@@ -69,7 +69,7 @@ function FoldedReview({ bubble }: { bubble: Bubble }) {
 }
 
 function BubbleBody({ bubble, team, files, finalId, developer, onOpenFile, onOpenAllFiles }: { bubble: Bubble } & BodyProps) {
-  if (bubble.kind === "review" && bubble.text !== "" && !bubble.live && bubble.id !== finalId) {
+  if (bubble.kind === "review" && bubble.reviewRound && bubble.text !== "" && !bubble.live && bubble.id !== finalId) {
     return (
       <div data-testid="chat-bubble" data-kind={bubble.kind} data-status={bubble.status} data-node-id={bubble.nodeId || undefined}>
         <FoldedReview bubble={bubble} />
