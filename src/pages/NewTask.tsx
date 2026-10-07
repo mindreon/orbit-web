@@ -1,5 +1,5 @@
 import { ArrowUp, Sparkles } from "lucide-react";
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { COARSE_POINTER, useMediaQuery } from "../lib/useMediaQuery";
 import { useNavigate } from "react-router";
 import { PermissionChip } from "../components/tasks/PermissionChip";
@@ -8,6 +8,7 @@ import { describeFailure } from "../lib/api";
 import { InputChips, ToolbarChips } from "../components/tasks/ConfigChips";
 import { FileChips, filesToAttachmentText, useLocalFiles } from "../components/tasks/LocalFiles";
 import { ConfigMenu } from "../components/tasks/ConfigMenu";
+import { useSettings } from "../lib/settings";
 import { useConfigCatalog } from "../lib/configCatalog";
 import { draftToInput, emptyDraft, isDefaultDraft, type ConfigDraft } from "../lib/taskConfig";
 import { createTask } from "../lib/tasks";
@@ -34,6 +35,13 @@ export function NewTaskPage() {
   const [goal, setGoal] = useState("");
   const catalog = useConfigCatalog();
   const [draft, setDraft] = useState<ConfigDraft>(emptyDraft);
+  // 权限的初始值是你在设置里选的默认；设置读回来之前、读不到的时候是「默认权限」。你自己选过之后不再被设置覆盖。
+  const settings = useSettings();
+  const permissionTouched = useRef(false);
+  const defaultPreset = settings.settings.permissions.default_preset;
+  useEffect(() => {
+    if (!permissionTouched.current) setDraft((current) => ({ ...current, permission: defaultPreset }));
+  }, [defaultPreset]);
   const [sending, setSending] = useState(false);
   const [error, setError] = useState("");
   const local = useLocalFiles();
@@ -67,7 +75,7 @@ export function NewTaskPage() {
         ))}
       </div>
       <div className="mt-5 w-full max-w-3xl">
-        <div className="rounded-card bg-card shadow-md ring-1 ring-border focus-within:ring-primary-500">
+        <div className="relative rounded-card bg-card shadow-md ring-1 ring-border focus-within:ring-primary-500">
           {local.input}
           {/* 已选的技能/专家内嵌在输入行里，和 WorkBuddy 一致 */}
           <div className="flex items-start">
@@ -92,7 +100,14 @@ export function NewTaskPage() {
           <div className="flex items-center gap-2 px-2 pb-2 pt-1">
             <ConfigMenu draft={draft} onChange={setDraft} catalog={catalog} onAddFile={local.pick} />
             <ToolbarChips draft={draft} onChange={setDraft} catalog={catalog} />
-            <PermissionChip />
+            <PermissionChip
+              value={draft.permission}
+              onChange={(permission) => {
+                permissionTouched.current = true;
+                setDraft((current) => ({ ...current, permission }));
+              }}
+              scope="new"
+            />
             <span className="ml-auto" />
             {/* 提示词优化要一个改写输入的模型端点，后端还没有：先按 WorkBuddy 的样子占位。 */}
             <button

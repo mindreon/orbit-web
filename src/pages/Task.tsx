@@ -294,7 +294,7 @@ function TaskView({ taskId }: { taskId: string }) {
           onRestore={() => setMinimizedQuestion("")}
           focusRequest={approvalFocus}
         />
-        <Composer onSend={message} onControl={(action) => void act(() => controlTask(task.task_id, action))} status={task.status} closed={closed} attention={attention} docked={docked} config={config} catalog={catalog} team={team} />
+        <Composer onSend={message} onControl={(action) => void act(() => controlTask(task.task_id, action))} status={task.status} closed={closed} attention={attention} docked={docked} config={config} catalog={catalog} team={team} taskId={taskId} />
       </main>
       {drawerOpen ? <div aria-hidden="true" data-testid="panel-backdrop" className="fixed inset-0 z-30 bg-black/40" onClick={() => setPanelOpen(false)} /> : null}
       {panelOpen ? (

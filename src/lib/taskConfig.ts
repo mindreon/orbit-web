@@ -1,4 +1,5 @@
 import { api } from "./api";
+import { isPreset, type PermissionPreset, type PermissionSpec } from "./permissions";
 
 /** 任务带着什么运行：专家、技能、连接器和模式。技能与连接器是完整集合：null 沿用专家的默认，[] 明确清空。 */
 export type ConfigMode = "default" | "plan" | "ask";
@@ -28,6 +29,8 @@ export type TaskConfigView = {
   /** 任务选的专家团自己的引用；原样送回 `team_ref` 就不会丢掉团队。 */
   team_ref?: string | null;
   team?: TeamView | null;
+  /** 任务怎么批准操作；没有就是「默认权限」。选了「自定义」时带着展开后的读写范围和自动审批规则。 */
+  permissions?: PermissionSpec;
 };
 
 export type TaskConfigInput = {
@@ -39,6 +42,8 @@ export type TaskConfigInput = {
   mode?: ConfigMode;
   /** 空串会清掉之前的模型选择，回到专家（再退到部署默认）的模型。 */
   model?: string;
+  /** 自定义只需要写 `{ preset: "custom" }`，规则由控制面从你的设置里补。 */
+  permissions?: PermissionSpec;
 };
 
 export function getTaskConfig(taskId: string): Promise<TaskConfigView> {
@@ -62,16 +67,18 @@ export type ConfigDraft = {
   skills: string[] | null;
   connectorIds: string[] | null;
   mode: ConfigMode;
+  /** 怎么批准 Agent 的操作；规则本身（自定义时）在设置里，不在草稿里。 */
+  permission: PermissionPreset;
   labels: Readonly<Record<string, string>>;
   /** 选的是专家团时，它的领队和成员；只用来显示，不会发给后端。 */
   team: TeamView | null;
   teamName: string;
 };
 
-export const emptyDraft: ConfigDraft = { expert: "", model: "", skills: null, connectorIds: null, mode: "default", labels: {}, team: null, teamName: "" };
+export const emptyDraft: ConfigDraft = { expert: "", model: "", skills: null, connectorIds: null, mode: "default", permission: "default", labels: {}, team: null, teamName: "" };
 
 export const isDefaultDraft = (draft: ConfigDraft) =>
-  draft.expert === "" && draft.model === "" && draft.skills === null && draft.connectorIds === null && draft.mode === "default";
+  draft.expert === "" && draft.model === "" && draft.skills === null && draft.connectorIds === null && draft.mode === "default" && draft.permission === "default";
 
 export function draftToInput(draft: ConfigDraft): TaskConfigInput {
   return {
@@ -82,6 +89,8 @@ export function draftToInput(draft: ConfigDraft): TaskConfigInput {
     skills: draft.skills,
     connector_ids: draft.connectorIds,
     mode: draft.mode,
+    // 权限总是带着：新任务不带就是默认，改回「默认权限」也要明确说出来。
+    permissions: { preset: draft.permission },
   };
 }
 
@@ -97,6 +106,7 @@ export function viewToDraft(view: TaskConfigView): ConfigDraft {
     skills: view.skills,
     connectorIds: view.connector_ids,
     mode: (["default", "plan", "ask"].includes(view.mode) ? view.mode : "default") as ConfigMode,
+    permission: isPreset(view.permissions?.preset) ? view.permissions.preset : "default",
     labels: {},
   };
 }
@@ -104,5 +114,5 @@ export function viewToDraft(view: TaskConfigView): ConfigDraft {
 /** 两份配置是否一样（忽略只用来显示的名字）。 */
 export function sameDraft(a: ConfigDraft, b: ConfigDraft): boolean {
   const same = (x: string[] | null, y: string[] | null) => (x === null || y === null ? x === y : x.length === y.length && x.every((item, i) => item === y[i]));
-  return a.expert === b.expert && a.model === b.model && a.mode === b.mode && same(a.skills, b.skills) && same(a.connectorIds, b.connectorIds);
+  return a.expert === b.expert && a.model === b.model && a.mode === b.mode && a.permission === b.permission && same(a.skills, b.skills) && same(a.connectorIds, b.connectorIds);
 }

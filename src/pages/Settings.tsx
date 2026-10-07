@@ -1,18 +1,21 @@
 import { useSyncExternalStore, type ReactNode } from "react";
 import { useSearchParams } from "react-router";
-import { Check, Languages, Palette, UserRound, type LucideIcon } from "lucide-react";
+import { Check, Languages, Palette, ShieldCheck, UserRound, type LucideIcon } from "lucide-react";
 import { cn } from "../lib/cn";
 import { getUiPrefs, setUiPrefs, subscribeUiPrefs, type ThemeName } from "../lib/uiPrefs";
+import { PermissionsSection } from "../components/permissions/PermissionsSection";
 import { SETTINGS_NAV } from "../shell/nav";
 import { Button } from "../ui/Button";
 import { PageBody, PageHeader } from "../ui/PageHeader";
 import { panelClass } from "../ui/card";
+import { Switch } from "../ui/Switch";
 import { SegmentedTabs } from "../ui/Tabs";
 
 const SECTION_ICONS: Record<string, LucideIcon> = {
   个人主页: UserRound,
   语言: Languages,
   主题: Palette,
+  权限: ShieldCheck,
 };
 
 function knownSection(value: string | null) {
@@ -178,20 +181,13 @@ function SettingsBody({ section }: { section: string }) {
           </Button>
         </Row>
         <Row title="开发者模式" hint="打开后，任务页右侧多出计划图、执行记录、事件日志、完整用量和思考过程。">
-          <button
-            type="button"
-            role="switch"
-            aria-checked={uiPrefs.developer}
-            aria-label="开发者模式"
-            onClick={() => setUiPrefs({ developer: !uiPrefs.developer })}
-            className={cn("relative h-6 w-10 shrink-0 rounded-full transition-colors", uiPrefs.developer ? "bg-primary" : "bg-gray-300")}
-          >
-            <span aria-hidden="true" className={cn("absolute left-0.5 top-0.5 h-5 w-5 rounded-full bg-card shadow-sm transition-transform", uiPrefs.developer && "translate-x-4")} />
-          </button>
+          <Switch label="开发者模式" checked={uiPrefs.developer} onChange={(developer) => setUiPrefs({ developer })} />
         </Row>
       </div>
     );
   }
+
+  if (section === "权限") return <PermissionsSection />;
 
   if (section === "语言") {
     return (

@@ -512,7 +512,7 @@ test.describe("slash commands", () => {
     expect(box.width, "as wide as the composer").toBe(surface.width);
     expect(box.bottom, "above the composer").toBeLessThanOrEqual(surface.top);
     const items = page.getByTestId("slash-item");
-    await expect(items.locator("button .shrink-0.font-medium")).toHaveText(["模式", "专家", "技能", "连接器", "模型", "添加文件", "停止"]);
+    await expect(items.locator("button .shrink-0.font-medium")).toHaveText(["模式", "专家", "技能", "连接器", "模型", "权限", "添加文件", "停止"]);
     expect(await items.first().locator("button").evaluate((el) => (el as HTMLElement).offsetHeight)).toBe(32);
     await expect(items.first()).toHaveAttribute("aria-selected", "true");
     // ↑ wraps to the last, ↓ wraps back.

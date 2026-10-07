@@ -1,6 +1,6 @@
 import { ArrowRightLeft, ClipboardCheck, Pencil, ShieldAlert, ShieldCheck, ShieldOff, ShieldX } from "lucide-react";
 import { useEffect, type ReactNode } from "react";
-import { humanizeProfileRefs, memberApprovalTitle } from "../../lib/display";
+import { humanizeProfileRefs, memberApprovalTitle, riskTag } from "../../lib/display";
 import { alwaysHint, approvalGist, approvalTitle, ruleText, type ApprovalInfo, type ApprovalState } from "../../lib/approvals";
 import { isTyping, useImeGuard } from "../../lib/keys";
 import { cn } from "../../lib/cn";
@@ -76,6 +76,7 @@ export function ApprovalCard({ approvalId, info, nodeTitles = {}, nameOf = (ref)
   const Icon = kind === "profile_switch" ? ArrowRightLeft : kind === "node_approval" || kind === "sop_step" ? ClipboardCheck : ShieldAlert;
   const member = info?.role ? info.roleLabel || roleNameOf(info.role) : "";
   const step = nodeTitles[info?.nodeId ?? ""];
+  const risk = riskTag(info?.risk ?? "");
 
   return (
     <DockCard
@@ -99,9 +100,16 @@ export function ApprovalCard({ approvalId, info, nodeTitles = {}, nameOf = (ref)
       data-role={info?.role || undefined}
       data-approval-id={approvalId}
     >
-      <p data-testid="approval-title" className="mt-2 break-words text-body font-semibold text-foreground">
-        {title}
-      </p>
+      <div className="mt-2 flex flex-wrap items-baseline gap-x-2 gap-y-1">
+        <p data-testid="approval-title" className="min-w-0 break-words text-body font-semibold text-foreground">
+          {title}
+        </p>
+        {risk ? (
+          <span data-testid="approval-risk" data-risk={info?.risk} className={cn("shrink-0 rounded-full px-2 text-caption font-medium", risk.tone === "danger" ? "bg-danger-100 text-danger-700" : "bg-warning-100 text-warning-700")}>
+            {risk.text}
+          </span>
+        ) : null}
+      </div>
       {kind === "profile_switch" && info ? (
         <>
           <p className="mt-1 text-body text-gray-700">
