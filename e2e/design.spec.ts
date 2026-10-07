@@ -588,6 +588,10 @@ for (const viewport of VIEWPORTS) {
       // Editing keeps the kind: no type switch, the members are filled in and the leader is marked.
       await page.unroute("**/v1/**");
       await mockBackend(page, { experts: [expert, researcher, reviewer, team] });
+      const fileRequests: string[] = [];
+      page.on("request", (request) => {
+        if (new URL(request.url()).pathname.endsWith("/files")) fileRequests.push(request.url());
+      });
       await page.goto("/experts/team1/edit");
       await expect(page.getByRole("heading", { name: "编辑专家团" })).toBeVisible();
       await expect(page.getByRole("tab", { name: "专家团" })).toHaveCount(0);
@@ -595,6 +599,8 @@ for (const viewport of VIEWPORTS) {
       await expect(page.getByLabel("显示名 2")).toHaveValue("研究员");
       await expect(page.getByLabel("角色 ID 2")).toHaveValue("member-2");
       await expect(page.getByLabel("第 1 位成员当领队")).toBeChecked();
+      // A team has no bundle files: the editor must not ask for them.
+      expect(fileRequests).toEqual([]);
       await check(page, "team-edit");
     });
 

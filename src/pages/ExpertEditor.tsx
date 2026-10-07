@@ -188,7 +188,8 @@ export function ExpertEditorPage() {
                 onRemove={(id) => toggle(skillIds, setSkillIds, id)}
               />
             </fieldset>
-            {expertId ? <ExpertFiles expertId={expertId} /> : null}
+            {/* Wait for the list: until it answers `kind` is still "expert", and a team has no bundle files to fetch. */}
+            {expertId && experts.some((item) => item.expert_id === expertId && !isTeam(item)) ? <ExpertFiles expertId={expertId} /> : null}
             </>
           )}
           {error ? <Alert>{error}</Alert> : null}
