@@ -67,7 +67,15 @@ export interface ChecklistInput {
   readonly events: readonly TaskEvent[];
   /** 领队的角色名（团队任务）；单个智能体为空。 */
   readonly leader: string;
-  readonly nodes: ReadonlyArray<{ readonly node_id: string; readonly type: string; readonly title: string; readonly status: string }>;
+  readonly nodes: ReadonlyArray<{
+    readonly node_id: string;
+    readonly type: string;
+    readonly title: string;
+    readonly status: string;
+    readonly depends_on?: readonly string[];
+    readonly parent_node_id?: string | null;
+    readonly review_round?: number | null;
+  }>;
   readonly roles: Readonly<Record<string, NodeRole>>;
   readonly stageNodeIds: ReadonlySet<string>;
   /** 事件里最新的节点状态，比计划快照新。 */
@@ -90,6 +98,30 @@ export function nodeChecklistStatus(status: string): ChecklistStatus {
 
 const FROM_ROSTER: Record<MemberStatus, ChecklistStatus> = { running: "in_progress", done: "completed", failed: "failed", waiting: "pending" };
 
+const TITLE_CHARS = 200;
+const MENTION_PREFIX = /^@[^:：]*[:：]\s*/;
+const firstLine = (text: string): string => text.split("\n").map((line) => line.trim()).find((line) => line !== "") ?? "";
+
+/**
+ * 运行时把用户的一条消息变成一个计划节点（任务全部做完后的追问，或 @ 成员的消息）：无父节点、无依赖，标题是消息的第一行
+ * （@ 成员的是「@名字: 第一行」，都截到 200 字）。节点上没有「来自用户」的字段，所以只能拿标题对 `message.user` 事件的文字。
+ * 同时要求没有父节点、没有依赖、不是复盘：领队自己排的计划节点挂在「理解目标并规划」下面或依赖别的节点，不会被误伤。
+ */
+function userMessageNodeIds(input: Pick<ChecklistInput, "events" | "nodes">): ReadonlySet<string> {
+  const lines = input.events.filter((event) => event.type === "message.user" && typeof event.payload.text === "string").map((event) => firstLine(event.payload.text as string)).filter((line) => line !== "");
+  if (lines.length === 0) return new Set();
+  // 标题被截断（满 200 字）时，只要消息的第一行以它开头就算。
+  const answers = (title: string): boolean => {
+    const body = title.replace(MENTION_PREFIX, "");
+    return lines.some((line) => line === title || line === body || (title.length >= TITLE_CHARS && line.startsWith(body)));
+  };
+  return new Set(
+    input.nodes
+      .filter((node) => node.type === "agent_turn" && !node.parent_node_id && (node.depends_on ?? []).length === 0 && !((node.review_round ?? 0) > 0) && answers(node.title))
+      .map((node) => node.node_id),
+  );
+}
+
 /**
  * 执行清单从哪来：领队给成员（或留给自己）建了计划节点（计划层的团队）时，每个节点一项，按计划里的顺序，后几轮的节点出现就加进来；
  * 其余（单个智能体、团队阶段里的领队）用最后一次 TodoWrite。
@@ -98,10 +130,14 @@ const FROM_ROSTER: Record<MemberStatus, ChecklistStatus> = { running: "in_progre
 export function executionChecklist(input: ChecklistInput): readonly ChecklistItem[] | null {
   const { nodes, roles, stageNodeIds, liveNodes, roster } = input;
   // 成员的节点和领队自己做的工作节点一样是清单项；领队复盘和开头的「理解目标并规划」不是。
-  const mine = nodes.filter((node) => node.type !== "team_stage" && !stageNodeIds.has(node.node_id) && !PLANNING_TITLES.includes(node.title) && (roles[node.node_id]?.kind === "member" || roles[node.node_id]?.kind === "leader"));
+  const owned = nodes.filter((node) => node.type !== "team_stage" && !stageNodeIds.has(node.node_id) && !PLANNING_TITLES.includes(node.title) && (roles[node.node_id]?.kind === "member" || roles[node.node_id]?.kind === "leader"));
+  // 用户的消息（给领队的追问、@ 成员）运行时也建节点，但那是回答，不是领队排的步骤。
+  const answers = userMessageNodeIds(input);
+  const mine = owned.filter((node) => !answers.has(node.node_id));
   if (mine.length === 0) return latestTodos(input.events, input.leader);
+  // 名册里成员的状态是他手上最新那件事的：最新的是在回答用户时，不能拿它改写已排好的步骤。
   const lastOf = new Map<string, string>();
-  for (const node of mine) lastOf.set(roles[node.node_id].role, node.node_id);
+  for (const node of owned) lastOf.set(roles[node.node_id].role, node.node_id);
   return mine.map((node): ChecklistItem => {
     const role = roles[node.node_id];
     const fromRoster = lastOf.get(role.role) === node.node_id ? roster.get(role.role) : undefined;

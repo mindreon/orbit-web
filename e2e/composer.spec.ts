@@ -671,6 +671,39 @@ test.describe("plan pill", () => {
     await expect(page.getByTestId("todo-item").filter({ has: page.locator('[aria-label="失败"]') })).toHaveCount(1);
     await expect(page.getByTestId("todo-owner").first()).toBeVisible();
   });
+
+  test("a follow-up the user sends is not a step: the node that answers it stays out of the checklist", async ({ page }) => {
+    const teamPlan = {
+      ...plan,
+      nodes: [
+        node("n_1", "Explore and plan", "COMPLETED", { frozen: true, owner_profile: "writer@1", owner_role: "member-1", owner_label: "主编" }),
+        node("n_a", "调研发布风险", "COMPLETED", { depends_on: ["n_1"], owner_profile: "research@1", parent_node_id: "n_1", owner_role: "member-2", owner_label: "研究员" }),
+        node("n_b", "评审发布方案", "RUNNING", { depends_on: ["n_a"], owner_profile: "reviewer@1", parent_node_id: "n_1", owner_role: "member-3", owner_label: "评审员" }),
+        // What the runtime makes of a message: a node of its own, titled with the message's first line, no parent and no dependencies.
+        node("n_u1", "改成前后端分离的，react + python/fastapi", "COMPLETED", { owner_profile: "writer@1", owner_role: "member-1", owner_label: "主编" }),
+        node("n_u2", "你已经 review 过了么？", "RUNNING", { owner_profile: "writer@1", owner_role: "member-1", owner_label: "主编" }),
+        node("n_u3", "@研究员: 简单介绍下你的实现", "COMPLETED", { owner_profile: "research@1", owner_role: "member-2", owner_label: "研究员" }),
+      ],
+    };
+    const events = [
+      ...baseEvents(),
+      event("message.user", { text: "改成前后端分离的，react + python/fastapi", delivery: "queue", mentions: [] }),
+      event("message.user", { text: "你已经 review 过了么？", delivery: "queue", mentions: ["member-1"] }),
+      event("message.user", { text: "简单介绍下你的实现", delivery: "queue", mentions: ["member-2"] }),
+    ];
+    await mockBackend(page, { teamed: true, task: { status: "RUNNING" }, plan: teamPlan, events });
+    await open(page);
+    const pill = page.getByTestId("todo-checklist");
+    await expect(pill).toHaveText("已完成 1/2 步");
+    await pill.click();
+    const items = page.getByTestId("todo-item");
+    await expect(items).toHaveCount(2);
+    await expect(items.nth(0)).toContainText("调研发布风险");
+    await expect(items.nth(1)).toContainText("评审发布方案");
+    await expect(page.getByTestId("todo-popover")).not.toContainText("review 过了么");
+    await expect(page.getByTestId("todo-popover")).not.toContainText("前后端分离");
+    await expect(page.getByTestId("todo-popover")).not.toContainText("简单介绍");
+  });
 });
 
 // ---- the surfaces in both themes and widths, with screenshots ------------------------------------------------------------------
