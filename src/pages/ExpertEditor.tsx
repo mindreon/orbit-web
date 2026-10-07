@@ -153,7 +153,7 @@ export function ExpertEditorPage() {
               <Input aria-label="名称" value={name} maxLength={100} onChange={(event) => setName(event.target.value)} />
             </Field>
             <Field label="职能（一句话）">
-              <Input aria-label="职能" value={description} maxLength={TEAM_DESCRIPTION_MAX} placeholder="例如：React/TypeScript 前端开发，负责页面和组件" onChange={(event) => setDescription(event.target.value)} />
+              <Textarea aria-label="职能" rows={2} maxLength={TEAM_DESCRIPTION_MAX} value={description} placeholder="例如：React/TypeScript 前端开发，负责页面和组件" onChange={(event) => setDescription(event.target.value)} />
               <span className="mt-1 block text-small text-muted-foreground">写给领队看：它按这句话决定把活派给谁。拉进专家团时，成员不写职责就用这一句。</span>
             </Field>
             <Field label="人设（SOUL.md）">
