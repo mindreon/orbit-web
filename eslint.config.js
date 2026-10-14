@@ -7,7 +7,7 @@ import designTokens from "./eslint-rules/design-tokens.js";
 // Deliberately loose: the recommended rule sets, with rules that would need business-code rewrites left as warnings.
 export default tseslint.config(
   {
-    ignores: ["dist", "coverage", ".stack", "playwright-report*", "test-results*", "node_modules"],
+    ignores: ["dist", "coverage", "node_modules"],
   },
   js.configs.recommended,
   ...tseslint.configs.recommended,
@@ -33,9 +33,7 @@ export default tseslint.config(
     rules: { "orbit/design-tokens": "error" },
   },
   {
-    files: ["e2e/**/*.{ts,mjs}", "*.config.{ts,js}", "playwright*.ts"],
+    files: ["*.config.{ts,js}"],
     languageOptions: { globals: globals.node },
-    // Stripping ANSI escapes and matching padded report text are legitimate regexes here.
-    rules: { "no-control-regex": "off", "no-regex-spaces": "off" },
   },
 );

@@ -1,8 +1,8 @@
 import { ArrowLeft, Check, ChevronRight, Copy, Download, RotateCw } from "lucide-react";
 import { Suspense, useEffect, useState } from "react";
-import { describeFailure } from "../../../lib/api";
+import { describeFailure } from "../../../api/errors";
 import { cn } from "../../../lib/cn";
-import { formatSize } from "../../../lib/time";
+import { formatSize } from "../../../lib/format";
 import { Alert } from "../../../ui/Alert";
 import { Button } from "../../../ui/Button";
 import { Skeleton } from "../../../ui/Skeleton";

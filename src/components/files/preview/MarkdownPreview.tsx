@@ -1,4 +1,4 @@
-import { stripFrontmatter } from "../../../lib/display";
+import { stripFrontmatter } from "./frontmatter";
 import { RichText } from "../../markdown/RichText";
 import type { PreviewProps } from "./types";
 

@@ -11,10 +11,10 @@
     "lint": "eslint .",
     "test": "vitest run",
     "test:coverage": "vitest run --coverage",
-    "test:e2e": "playwright test",
-    "test:stack": "playwright test -c playwright.stack.config.ts"
+    "gen:api": "bash scripts/gen-api.sh"
   },
   "dependencies": {
+    "@tanstack/react-query": "5.104.2",
     "clsx": "^2.1.1",
     "docx-preview": "^0.4.1",
     "dompurify": "^3.4.16",
@@ -25,6 +25,7 @@
     "lowlight": "^3.3.0",
     "lucide-react": "^0.483.0",
     "mermaid": "^11.17.2",
+    "oauth4webapi": "3.8.8",
     "pdfjs-dist": "^6.4.299",
     "pptx-preview": "^1.0.7",
     "react": "^19.2.7",
@@ -41,7 +42,6 @@
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",
-    "@playwright/test": "^1.63.0",
     "@types/hast": "^3.0.5",
     "@types/react": "^19.2.14",
     "@types/react-dom": "^19.2.3",
@@ -51,7 +51,7 @@
     "eslint": "^10.11.0",
     "eslint-plugin-react-hooks": "^7.1.1",
     "globals": "^17.12.0",
-    "json-schema-to-typescript": "^16.0.0",
+    "openapi-typescript": "7.13.0",
     "postcss": "^8.5.3",
     "tailwindcss": "^3.4.17",
     "typescript": "^5.9.3",

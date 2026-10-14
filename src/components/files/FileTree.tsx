@@ -1,7 +1,7 @@
 import { useMemo, useState, type ReactNode } from "react";
 import { ChevronRight, File as FileGlyph, Folder, FolderOpen } from "lucide-react";
 import { buildFileTree, initialExpanded, type FileNode, type TreeEntry, type TreeNode } from "../../lib/fileTree";
-import { formatSize } from "../../lib/time";
+import { formatSize } from "../../lib/format";
 
 interface LevelProps<T extends TreeEntry> {
   readonly nodes: readonly TreeNode<T>[];
