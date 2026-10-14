@@ -33,7 +33,7 @@ export default tseslint.config(
     rules: { "orbit/design-tokens": "error" },
   },
   {
-    files: ["*.config.{ts,js}"],
+    files: ["*.config.{ts,js}", "scripts/**/*.{js,mjs}"],
     languageOptions: { globals: globals.node },
   },
 );

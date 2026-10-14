@@ -13,4 +13,5 @@ if [[ ! -f "$spec" ]]; then
 fi
 
 cd "$root"
+node scripts/validate-openapi.mjs "$spec"
 pnpm exec openapi-typescript "$spec" --output src/api/schema.d.ts
