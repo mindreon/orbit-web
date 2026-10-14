@@ -1,10 +1,11 @@
-import { useState, type FormEvent } from "react";
+import { useEffect, useRef, useState, type FormEvent } from "react";
 import { Navigate, useLocation } from "react-router";
 import { ApiError, describeFailure } from "../../api/errors";
 import { Alert } from "../../ui/Alert";
 import { Button } from "../../ui/Button";
 import { Field, Input } from "../../ui/fields";
 import { Skeleton } from "../../ui/Skeleton";
+import { auth } from "../api";
 import { useAuth } from "./context";
 
 const DEFAULT_LANDING = "/me";
@@ -17,6 +18,13 @@ export function LoginPage() {
   const [busy, setBusy] = useState(false);
   const [failure, setFailure] = useState<string | null>(null);
 
+  const autoAttempted = useRef(false);
+  useEffect(() => {
+    if (status !== "anonymous" || config?.mode !== "oidc" || error || autoAttempted.current) return;
+    autoAttempted.current = true;
+    void auth.autoLogin(from);
+  }, [status, config, error, from]);
+
   if (status === "ready") return <Navigate to={from} replace />;
 
   async function run(action: () => Promise<void>) {
@@ -26,6 +34,7 @@ export function LoginPage() {
       await action();
     } catch (cause) {
       setFailure(cause instanceof ApiError || cause instanceof Error ? describeFailure("登录失败", cause) : "登录失败");
+    } finally {
       setBusy(false);
     }
   }

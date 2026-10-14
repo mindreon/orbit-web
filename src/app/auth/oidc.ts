@@ -20,12 +20,15 @@ export interface OidcOptions {
   readonly now?: () => number;
 }
 
-const fetchOptions = (options: OidcOptions) => (options.fetch ? { [oauth.customFetch]: options.fetch } : {});
+const fetchOptions = (config: OidcConfig, options: OidcOptions) => ({
+  ...(options.fetch ? { [oauth.customFetch]: options.fetch } : {}),
+  [oauth.allowInsecureRequests]: import.meta.env.DEV || ["localhost", "127.0.0.1", "[::1]"].includes(new URL(config.issuer).hostname),
+});
 const client = (config: OidcConfig): oauth.Client => ({ client_id: config.client_id });
 
 export async function discover(config: OidcConfig, options: OidcOptions = {}): Promise<oauth.AuthorizationServer> {
   const issuer = new URL(config.issuer);
-  const response = await oauth.discoveryRequest(issuer, { algorithm: "oidc", ...fetchOptions(options) });
+  const response = await oauth.discoveryRequest(issuer, { algorithm: "oidc", ...fetchOptions(config, options) });
   return oauth.processDiscoveryResponse(issuer, response);
 }
 
@@ -72,7 +75,7 @@ export async function completeAuthorization(
   const pending = JSON.parse(raw) as PendingAuthorization;
 
   const parameters = validateCallback(as, config, callbackUrl, pending.state);
-  const response = await oauth.authorizationCodeGrantRequest(as, client(config), oauth.None(), parameters, redirectUri, pending.codeVerifier, fetchOptions(options));
+  const response = await oauth.authorizationCodeGrantRequest(as, client(config), oauth.None(), parameters, redirectUri, pending.codeVerifier, fetchOptions(config, options));
   const result = await oauth.processAuthorizationCodeResponse(as, client(config), response, { expectedNonce: pending.nonce, requireIdToken: true });
   return { tokens: toTokenSet(result, undefined, options.now ?? Date.now), returnTo: pending.returnTo };
 }
@@ -89,9 +92,20 @@ function validateCallback(as: oauth.AuthorizationServer, config: OidcConfig, cal
 /** Trades the refresh token for a new access token. IdPs that rotate refresh tokens send a new one; otherwise the old one stays. */
 export async function refreshTokens(as: oauth.AuthorizationServer, config: OidcConfig, current: TokenSet, options: OidcOptions = {}): Promise<TokenSet> {
   if (!current.refreshToken) throw new Error("没有可用的刷新令牌");
-  const response = await oauth.refreshTokenGrantRequest(as, client(config), oauth.None(), current.refreshToken, fetchOptions(options));
+  const response = await oauth.refreshTokenGrantRequest(as, client(config), oauth.None(), current.refreshToken, fetchOptions(config, options));
   const result = await oauth.processRefreshTokenResponse(as, client(config), response);
   return toTokenSet(result, current, options.now ?? Date.now);
+}
+
+/** Best effort at the caller: local logout must still succeed if the IdP refuses or is unavailable. */
+export async function revokeRefreshToken(as: oauth.AuthorizationServer, config: OidcConfig, tokens: TokenSet | null, options: OidcOptions = {}): Promise<void> {
+  if (!as.revocation_endpoint || !tokens?.refreshToken) return;
+  const response = await oauth.revocationRequest(as, client(config), oauth.None(), tokens.refreshToken, {
+    ...fetchOptions(config, options),
+    additionalParameters: { token_type_hint: "refresh_token" },
+    signal: AbortSignal.timeout(5000),
+  });
+  await oauth.processRevocationResponse(response);
 }
 
 /** Where to end the IdP's own session, or null when the IdP has no end-session endpoint. `postLogoutRedirect` must be registered at the IdP. */

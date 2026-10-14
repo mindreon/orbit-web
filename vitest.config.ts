@@ -1,11 +1,10 @@
 import { defineConfig } from "vitest/config";
 
-// Unit tests cover the logic that has no DOM: the API and SSE clients, the sign-in, the preview registry, the design checks.
-// Pages and layout are exercised by the Playwright suites against the Compose stack (WP9).
+// Logic runs in node; component files opt into jsdom. WP9 adds journeys against the Compose stack.
 export default defineConfig({
   test: {
     environment: "node",
-    include: ["src/**/*.test.ts"],
+    include: ["src/**/*.test.{ts,tsx}"],
     coverage: {
       provider: "v8",
       reporter: ["text", "json-summary"],

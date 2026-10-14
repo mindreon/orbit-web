@@ -44,11 +44,10 @@ describe("request headers (A1)", () => {
     expect(calls[0].headers.get("Authorization")).toBe("Bearer renewed");
   });
 
-  it("omits the headers it has no value for", async () => {
+  it("stops before fetch when the authenticated token is missing", async () => {
     const { api, calls } = setup(() => json({}), { token: () => null, tenant: () => null });
-    await api.get("/me");
-    expect(calls[0].headers.has("Authorization")).toBe(false);
-    expect(calls[0].headers.has("X-Orbit-Tenant")).toBe(false);
+    await expect(api.get("/me")).rejects.toMatchObject({ code: "UNAUTHENTICATED", status: 401 });
+    expect(calls).toHaveLength(0);
   });
 
   it("does not send credentials to the login endpoints", async () => {
@@ -93,7 +92,7 @@ describe("idempotency (A2)", () => {
   it("generates UUIDs by default", async () => {
     const calls: Headers[] = [];
     const api = createApiClient({
-      credentials: { token: () => null, tenant: () => null, unauthorized: vi.fn() },
+      credentials: { token: () => "token", tenant: () => null, unauthorized: vi.fn() },
       fetch: async (_input, init) => {
         calls.push(new Headers(init?.headers));
         return json({});

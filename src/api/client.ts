@@ -52,7 +52,8 @@ export function createApiClient(config: ApiClientConfig): ApiClient {
     if (method !== "GET") headers.set("Idempotency-Key", options.idempotencyKey ?? newKey());
     if (authenticated) {
       const token = await config.credentials.token();
-      if (token) headers.set("Authorization", `Bearer ${token}`);
+      if (!token) throw new ApiError(401, { code: "UNAUTHENTICATED", message: "请先登录", retryable: false });
+      headers.set("Authorization", `Bearer ${token}`);
       const tenant = config.credentials.tenant();
       if (tenant) headers.set("X-Orbit-Tenant", tenant);
     }

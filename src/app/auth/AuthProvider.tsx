@@ -23,8 +23,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const switchTenant = useCallback(
     (tenantId: string) => {
+      queryClient.clear();
       auth.setTenant(tenantId);
-      void queryClient.resetQueries();
     },
     [queryClient],
   );

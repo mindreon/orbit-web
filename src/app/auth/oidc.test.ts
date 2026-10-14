@@ -1,6 +1,6 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { CLIENT_ID, ISSUER, discoveryDocument, idToken, json, memoryStore, mockIdp } from "../../test/helpers";
-import { beginAuthorization, completeAuthorization, discover, endSessionUrl, refreshTokens, type OidcConfig } from "./oidc";
+import { beginAuthorization, completeAuthorization, discover, endSessionUrl, refreshTokens, revokeRefreshToken, type OidcConfig } from "./oidc";
 import { STORAGE_KEYS } from "./storage";
 
 /**
@@ -214,5 +214,33 @@ describe("endSessionUrl", () => {
 
   it("is null when the IdP has none", () => {
     expect(endSessionUrl({ issuer: ISSUER }, config, null, "https://app.example/login")).toBeNull();
+  });
+});
+
+// HTTP is for local development only; logout should revoke refresh credentials when advertised.
+describe("OIDC local issuer and revocation", () => {
+  it("supports HTTP localhost discovery and refresh", async () => {
+    const local = { ...config, issuer: "http://localhost:8080" };
+    const fetch = vi.fn(async (input: RequestInfo | URL) => String(input).includes("well-known")
+      ? json({ issuer: local.issuer, token_endpoint: `${local.issuer}/token` })
+      : json({ access_token: "local", token_type: "Bearer", expires_in: 600 }));
+    const as = await discover(local, { fetch });
+    expect((await refreshTokens(as, local, { accessToken: "old", refreshToken: "r", expiresAt: 0 }, { fetch })).accessToken).toBe("local");
+  });
+
+  it("refuses remote HTTP issuers in a production build", async () => {
+    vi.stubEnv("DEV", false);
+    try {
+      await expect(discover({ ...config, issuer: "http://remote.example" }, { fetch: async () => json({}) })).rejects.toThrow();
+    } finally { vi.unstubAllEnvs(); }
+  });
+
+  it("revokes a refresh token with its type hint", async () => {
+    const fetch = vi.fn<typeof globalThis.fetch>(async () => new Response(null, { status: 200 }));
+    await revokeRefreshToken({ ...discoveryDocument, revocation_endpoint: `${ISSUER}/revoke` }, config, { accessToken: "a", refreshToken: "r", expiresAt: 0 }, { fetch });
+    expect(fetch).toHaveBeenCalledOnce();
+    const params = new URLSearchParams(String(fetch.mock.calls[0]?.[1]?.body));
+    expect(params.get("token")).toBe("r");
+    expect(params.get("token_type_hint")).toBe("refresh_token");
   });
 });

@@ -14,6 +14,8 @@ export interface TokenSet {
 }
 
 export const STORAGE_KEYS = {
+  /** One page load after explicit OIDC logout must stay on the login page. */
+  loggedOut: "orbit.oidc.logged-out",
   /** The authorization request in flight: needed again when the browser comes back from the IdP. */
   oidcPending: "orbit.oidc.pending",
   /** When the last code exchange succeeded, to tell "token expired" from "control rejects what this IdP issues". */

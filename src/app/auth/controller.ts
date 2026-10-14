@@ -2,7 +2,7 @@ import type { AuthorizationServer } from "oauth4webapi";
 import type { AuthConfig, DevTokenRequest, DevTokenResponse } from "../../api/auth";
 import type { Credentials } from "../../api/client";
 import { describeFailure } from "../../api/errors";
-import { beginAuthorization, completeAuthorization, discover, endSessionUrl, refreshTokens, type OidcConfig, type OidcOptions } from "./oidc";
+import { beginAuthorization, completeAuthorization, discover, endSessionUrl, refreshTokens, revokeRefreshToken, type OidcConfig, type OidcOptions } from "./oidc";
 import { STORAGE_KEYS, type KeyValueStore, type TokenSet } from "./storage";
 
 export type AuthStatus = "initializing" | "anonymous" | "authenticated";
@@ -51,6 +51,8 @@ export class AuthController implements Credentials {
   private snapshot: AuthSnapshot;
   private tokens: TokenSet | null = null;
   private server: Promise<AuthorizationServer> | null = null;
+  private autoLoginBlocked: boolean;
+  private loggingIn: Promise<void> | null = null;
   private renewing: Promise<void> | null = null;
   private callback: { url: string; result: Promise<string> } | null = null;
   private readonly listeners = new Set<() => void>();
@@ -58,6 +60,8 @@ export class AuthController implements Credentials {
 
   constructor(private readonly deps: AuthDeps) {
     this.now = deps.now ?? Date.now;
+    this.autoLoginBlocked = deps.store.getItem(STORAGE_KEYS.loggedOut) !== null;
+    deps.store.removeItem(STORAGE_KEYS.loggedOut);
     this.snapshot = { status: "initializing", config: null, tenantId: deps.store.getItem(STORAGE_KEYS.tenant), error: null };
   }
 
@@ -89,9 +93,22 @@ export class AuthController implements Credentials {
   }
 
   /** OIDC: sends the browser to the IdP. `returnTo` is where to land afterwards. */
-  async login(returnTo: string): Promise<void> {
+  login(returnTo: string): Promise<void> {
+    this.loggingIn ??= this.beginLogin(returnTo).finally(() => (this.loggingIn = null));
+    return this.loggingIn;
+  }
+
+  /** Reloads can reuse the IdP session; an explicit logout suppresses this for the next page load. */
+  async autoLogin(returnTo: string): Promise<void> {
+    if (this.autoLoginBlocked || this.snapshot.status !== "anonymous" || this.snapshot.config?.mode !== "oidc" || this.snapshot.error) return;
+    await this.login(returnTo);
+  }
+
+  private async beginLogin(returnTo: string): Promise<void> {
     const config = this.snapshot.config;
     if (config?.mode !== "oidc") throw new Error("当前部署不使用 OIDC 登录");
+    this.autoLoginBlocked = false;
+    this.deps.store.removeItem(STORAGE_KEYS.loggedOut);
     try {
       const url = await beginAuthorization(await this.authorizationServer(config), config, this.redirectUri(), returnTo, this.deps.store);
       this.deps.redirect(url.toString());
@@ -137,8 +154,11 @@ export class AuthController implements Credentials {
     this.update({ status: "anonymous", error: null, tenantId: null });
     const config = this.snapshot.config;
     if (config?.mode !== "oidc") return;
+    this.autoLoginBlocked = true;
+    this.deps.store.setItem(STORAGE_KEYS.loggedOut, "1");
     // Ending the IdP session too, or the next "sign in" would silently sign the same user back in.
     const server = await this.authorizationServer(config).catch(() => null);
+    if (server) await revokeRefreshToken(server, config, tokens, this.oidcOptions()).catch(() => undefined);
     const url = server && endSessionUrl(server, config, tokens, `${this.deps.origin}${LOGIN_PATH}`);
     if (url) this.deps.redirect(url.toString());
   }
@@ -173,6 +193,7 @@ export class AuthController implements Credentials {
     const returnTo = this.deps.currentPath();
     const loop = this.justLoggedIn();
     this.clearSession();
+    this.setTenant(null);
     if (config?.mode === "oidc" && !loop) {
       this.update({ status: "anonymous" });
       void this.login(returnTo);
@@ -196,10 +217,11 @@ export class AuthController implements Credentials {
     const tokens = this.tokens;
     if (config?.mode !== "oidc" || !tokens) return;
     try {
-      this.tokens = await refreshTokens(await this.authorizationServer(config), config, tokens, this.oidcOptions());
+      const renewed = await refreshTokens(await this.authorizationServer(config), config, tokens, this.oidcOptions());
+      if (this.tokens === tokens) this.tokens = renewed;
     } catch {
       // Refresh token revoked or expired: the session is over, the same as a 401.
-      this.unauthorized();
+      if (this.tokens === tokens) this.unauthorized();
     }
   }
 
