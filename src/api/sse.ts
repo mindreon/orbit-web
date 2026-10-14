@@ -89,7 +89,7 @@ export interface BackoffPolicy {
 export const DEFAULT_BACKOFF: BackoffPolicy = { initialMs: 1000, maxMs: 30_000, factor: 2 };
 
 export interface EventStreamOptions {
-  readonly url: string;
+  readonly url: string | (() => string | Promise<string>);
   /** Called before every connection attempt, so a refreshed token is picked up on reconnect. */
   readonly headers?: () => Promise<HeadersInit> | HeadersInit;
   /** Resume point for the first connection (a cursor the caller already holds). */
@@ -97,9 +97,11 @@ export interface EventStreamOptions {
   readonly signal: AbortSignal;
   readonly onFrame: (frame: SseFrame) => void;
   /** The server dropped the cursor (`409 EVENT_CURSOR_EXPIRED`): the stream ends, and the caller rebuilds from the history endpoint. */
-  readonly onCursorExpired: () => void;
-  /** A refusal a retry cannot fix (401, 403, 404...). The stream ends. */
-  readonly onFatal: (error: ApiError) => void;
+  readonly onCursorExpired: (lastEventId: string | undefined) => void;
+  /** A refusal a retry cannot fix (403, 404, or 401 after renewing credentials). The stream ends. */
+  readonly onFatal: (error: ApiError, lastEventId: string | undefined) => void;
+  /** No bytes (including heartbeats) in this interval: cancel the half-open connection and reconnect. */
+  readonly idleTimeoutMs?: number;
   /** A connection failed or dropped and the next attempt is scheduled. */
   readonly onReconnect?: (info: { attempt: number; delayMs: number; error: unknown }) => void;
   readonly backoff?: BackoffPolicy;
@@ -126,56 +128,87 @@ export async function readEventStream(options: EventStreamOptions): Promise<void
   let lastEventId = options.lastEventId;
   let serverRetryMs: number | undefined;
   let failures = 0;
+  let retriedUnauthorized = false;
 
   while (!signal.aborted) {
     let delivered = false;
+    let retryAfterMs = 0;
     let failure: unknown;
     let handlerFailure: { error: unknown } | null = null;
     try {
       const headers = new Headers(await options.headers?.());
       headers.set("Accept", "text/event-stream");
-      if (lastEventId !== undefined) headers.set("Last-Event-ID", lastEventId);
-      const response = await doFetch(options.url, { headers, signal });
+      if (lastEventId) headers.set("Last-Event-ID", lastEventId);
+      else headers.delete("Last-Event-ID");
+      const url = typeof options.url === "function" ? await options.url() : options.url;
+      const response = await doFetch(url, { headers, signal });
       if (!response.ok) {
         const error = await ApiError.fromResponse(response);
-        if (response.status === 409 && error.code === CURSOR_EXPIRED) return options.onCursorExpired();
-        if (!error.retryable) return options.onFatal(error);
+        if (response.status === 409 && error.code === CURSOR_EXPIRED) return options.onCursorExpired(lastEventId);
+        if (response.status === 401 && !retriedUnauthorized) {
+          retriedUnauthorized = true;
+          continue;
+        }
+        if (!error.retryable) return options.onFatal(error, lastEventId);
+        if (response.status === 429) retryAfterMs = retryAfter(response.headers.get("Retry-After"));
         throw error;
+      }
+      retriedUnauthorized = false;
+      if (response.headers.get("Content-Type")?.split(";", 1)[0].trim().toLowerCase() !== "text/event-stream") {
+        await response.body?.cancel();
+        return options.onFatal(new ApiError(response.status, { code: "INVALID_EVENT_STREAM", message: "响应不是 text/event-stream", retryable: false }), lastEventId);
       }
       if (!response.body) throw new Error("响应没有正文");
       const parser = new SseParser();
       const reader = response.body.getReader();
       const decoder = new TextDecoder();
-      read: for (;;) {
-        const { done, value } = await reader.read();
-        if (done) break;
-        for (const frame of parser.push(decoder.decode(value, { stream: true }))) {
-          delivered = true;
-          if (frame.id !== undefined) lastEventId = frame.id;
-          try {
-            options.onFrame(frame);
-          } catch (error) {
-            // A bug in the handler is not a connection problem: stop reading and surface it instead of retrying forever.
-            handlerFailure = { error };
-            await reader.cancel().catch(() => undefined);
-            break read;
+      const cancel = () => { void reader.cancel().catch(() => undefined); };
+      signal.addEventListener("abort", cancel, { once: true });
+      try {
+        read: for (;;) {
+          const timer = setTimeout(cancel, options.idleTimeoutMs ?? 45_000);
+          const { done, value } = await reader.read().finally(() => clearTimeout(timer));
+          if (done) break;
+          const frames = parser.push(decoder.decode(value, { stream: true }));
+          lastEventId = parser.lastEventId ?? lastEventId;
+          for (const frame of frames) {
+            delivered = true;
+            try {
+              options.onFrame(frame);
+            } catch (error) {
+              // A bug in the handler is not a connection problem: stop reading and surface it instead of retrying forever.
+              handlerFailure = { error };
+              await reader.cancel().catch(() => undefined);
+              break read;
+            }
           }
+          serverRetryMs = parser.retryMs ?? serverRetryMs;
         }
-        serverRetryMs = parser.retryMs ?? serverRetryMs;
+      } finally {
+        signal.removeEventListener("abort", cancel);
+        reader.releaseLock();
       }
       failure = new Error("连接已关闭");
     } catch (error) {
       if (signal.aborted) return;
       failure = error;
     }
+    if (signal.aborted) return;
     if (handlerFailure) throw handlerFailure.error;
 
     failures = delivered ? 1 : failures + 1;
     const base = serverRetryMs ?? backoff.initialMs;
-    const delayMs = Math.floor(random() * Math.min(backoff.maxMs, base * backoff.factor ** (failures - 1)));
+    const delayMs = Math.max(retryAfterMs, Math.floor(random() * Math.min(backoff.maxMs, base * backoff.factor ** (failures - 1))));
     options.onReconnect?.({ attempt: failures, delayMs, error: failure });
     await sleep(delayMs, signal);
   }
+}
+
+function retryAfter(value: string | null): number {
+  if (!value) return 0;
+  if (/^\d+$/.test(value)) return Number(value) * 1000;
+  const at = Date.parse(value);
+  return Number.isFinite(at) ? Math.max(0, at - Date.now()) : 0;
 }
 
 function abortableSleep(ms: number, signal: AbortSignal): Promise<void> {

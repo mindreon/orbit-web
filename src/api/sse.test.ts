@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { apiError } from "../test/helpers";
 import { ApiError } from "./errors";
 import { readEventStream, SseParser, type EventStreamOptions, type SseFrame } from "./sse";
@@ -73,7 +73,7 @@ function sse(chunks: string[], init: ResponseInit = { status: 200 }): Response {
         controller.close();
       },
     }),
-    init,
+    { ...init, headers: { "Content-Type": "text/event-stream", ...init.headers } },
   );
 }
 
@@ -189,7 +189,7 @@ describe("readEventStream refusals (S5, S6)", () => {
     expect(h.events.fatal[0]).toMatchObject({ status: 409, code: "RUN_BUSY" });
   });
 
-  it.each([401, 403, 404])("stops on %i", async (status) => {
+  it.each([403, 404])("stops on %i", async (status) => {
     const h = harness([apiError(status, "NOPE")]);
     await h.run;
     expect(h.requests).toHaveLength(1);
@@ -214,6 +214,7 @@ describe("readEventStream closing (S7)", () => {
             signal.addEventListener("abort", () => controller.error(new DOMException("aborted", "AbortError")));
           },
         }),
+        { headers: { "Content-Type": "text/event-stream" } },
       );
     const h = harness([hang]);
     const done = h.run;
@@ -251,5 +252,64 @@ describe("readEventStream closing (S7)", () => {
     });
     await expect(h.run).rejects.toThrow("handler bug");
     expect(h.requests).toHaveLength(1);
+  });
+});
+
+// Regression cases: id-only/reset frames, expiring tokens, wrong routes, throttling and half-open sockets.
+describe("SSE recovery regressions", () => {
+  it("advances an id-only cursor and omits a reset cursor", async () => {
+    const h = harness([sse(["id: 51\n\n"]), sse(["id:\n\n"]), sse([])]);
+    await h.run;
+    expect(h.requests[1].get("Last-Event-ID")).toBe("51");
+    expect(h.requests[2].has("Last-Event-ID")).toBe(false);
+  });
+
+  it("renews headers and query tokens once on 401, preserving the cursor", async () => {
+    let token = 0;
+    const urls: string[] = [];
+    const h = harness([apiError(401, "EXPIRED"), sse([])], {
+      lastEventId: "42",
+      url: () => { const url = `/events?token=${++token}`; urls.push(url); return url; },
+    });
+    await h.run;
+    expect(urls.slice(0, 2)).toEqual(["/events?token=1", "/events?token=2"]);
+    expect(h.requests[1].get("Last-Event-ID")).toBe("42");
+    expect(h.events.fatal).toEqual([]);
+  });
+
+  it("stops after a second consecutive 401 and reports the cursor", async () => {
+    const onFatal = vi.fn();
+    const h = harness([apiError(401, "EXPIRED"), apiError(401, "EXPIRED")], { lastEventId: "9", onFatal });
+    await h.run;
+    expect(h.requests).toHaveLength(2);
+    expect(onFatal).toHaveBeenCalledWith(expect.objectContaining({ status: 401 }), "9");
+  });
+
+  it("reports the cursor on expiry", async () => {
+    const onCursorExpired = vi.fn();
+    const h = harness([apiError(409, "EVENT_CURSOR_EXPIRED")], { lastEventId: "9", onCursorExpired });
+    await h.run;
+    expect(onCursorExpired).toHaveBeenCalledWith("9");
+  });
+
+  it("rejects successful HTML responses as fatal", async () => {
+    const h = harness([new Response("<html/>", { headers: { "Content-Type": "text/html" } })]);
+    await h.run;
+    expect(h.events.fatal[0]).toMatchObject({ code: "INVALID_EVENT_STREAM" });
+    expect(h.requests).toHaveLength(1);
+  });
+
+  it.each(["3", new Date(Date.now() + 10_000).toUTCString()])("honors Retry-After %s", async (retryAfter) => {
+    const h = harness([new Response("", { status: 429, headers: { "Retry-After": retryAfter } })]);
+    await h.run;
+    expect(h.sleeps[0]).toBeGreaterThanOrEqual(3000);
+  });
+
+  it("cancels an idle reader and reconnects", async () => {
+    const cancel = vi.fn();
+    const h = harness([new Response(new ReadableStream({ cancel }), { headers: { "Content-Type": "text/event-stream" } })], { idleTimeoutMs: 5 });
+    await h.run;
+    expect(cancel).toHaveBeenCalledOnce();
+    expect(h.requests).toHaveLength(2);
   });
 });
