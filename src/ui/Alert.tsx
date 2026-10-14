@@ -2,7 +2,7 @@ import { AlertTriangle, CircleAlert, Info } from "lucide-react";
 import type { ReactNode } from "react";
 import { cn } from "../lib/cn";
 
-// Passive messages: tinted 50 surface, 700 text. Anything that needs a person to act is an <Attention> card instead.
+// Passive messages: tinted 50 surface, 700 text.
 const TONES = {
   danger: { box: "bg-danger-50 text-danger-700", Icon: CircleAlert },
   warning: { box: "bg-warning-50 text-warning-700", Icon: AlertTriangle },

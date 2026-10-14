@@ -13,7 +13,16 @@ import { emptyRunStream, reduceRunEvent, type RunEventLike, type RunStreamState 
 
 let eventSequence = 0;
 // Envelope/payload fields follow contract/v2/schema/run_event.json; reasoning.delta assumes the agreed message_id revision.
-const ev = (type: string, segment: number, attempt: number, data: Record<string, unknown> = {}, member = "leader"): RunEventLike => ({ id: `evt-${++eventSequence}`, type, segment, attempt, member, data: type === "segment.started" ? { expected_checkpoint_version: 0 } : data });
+const ev = (type: string, segment: number, attempt: number, data: Record<string, unknown> = {}, member = "leader") => ({
+  v: 1,
+  id: `evt-${++eventSequence}`,
+  ts: "2026-10-14T08:21:03.112Z",
+  tenant_id: "00000000-0000-4000-8000-000000000001",
+  session_id: "00000000-0000-4000-8000-000000000002",
+  run_id: "00000000-0000-4000-8000-000000000003",
+  type, segment, attempt, member,
+  data: type === "segment.started" ? { expected_checkpoint_version: 0 } : data,
+});
 const delta = (segment: number, attempt: number, messageId: string, text: string, member?: string) => ev("message.delta", segment, attempt, { message_id: messageId, delta: text }, member);
 const fold = (events: RunEventLike[], from: RunStreamState = emptyRunStream) => events.reduce(reduceRunEvent, from);
 const texts = (state: RunStreamState) => state.messages.map((message) => `${message.messageId}:${message.text}${message.final ? "!" : ""}`);
@@ -110,7 +119,7 @@ describe("reduceRunEvent", () => {
 
   it("passes other event types through untouched", () => {
     const before = fold([delta(1, 0, "m1", "a")]);
-    expect(reduceRunEvent(before, ev("tool.call", 1, 0))).toBe(before);
+    expect(reduceRunEvent(before, ev("tool.call", 1, 0, { call_id: "call-1", tool: "read_file", args_preview: "{}", effect_class: "read_only" }))).toBe(before);
   });
 
   it("does not mutate its input (R6)", () => {

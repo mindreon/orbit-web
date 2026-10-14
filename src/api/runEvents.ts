@@ -28,9 +28,9 @@ export interface StreamedMessage {
 }
 
 export interface RunStreamState {
-  /** The highest attempt seen per segment (`member#segment`). */
   /** Recent envelope ids, in arrival order. Replays within this bounded window are ignored. */
   readonly processedIds: readonly string[];
+  /** The highest attempt seen per segment (`member#segment`). */
   readonly attempts: Readonly<Record<string, number>>;
   readonly messages: readonly StreamedMessage[];
 }

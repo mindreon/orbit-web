@@ -44,9 +44,8 @@ Rows that mix sizes (title and badge, title and "编辑") use `items-baseline`, 
 
 ## Attention
 
-Anything that needs a person (approval waiting, blocked review, takeover, exhausted budget, rejected follow-up,
-a question from the agent) is an `<Attention>` card (`src/ui/Attention.tsx`): tinted 50 surface, left accent bar, shadow.
-Everything else stays flat and grey so the card is the loudest thing in its view. `<Alert>` is for passive messages.
+Use tinted 50 surfaces and 700 text for messages (`src/ui/Alert.tsx`). Reserve stronger visual accents for
+an action the person must take. WP9 will add interaction cards with their workflows; WP4 keeps only used primitives.
 
 ## Reading width
 
@@ -55,34 +54,23 @@ characters. The conversation, the user bubbles, the artifact cards and the compo
 
 ## Responsive
 
-- `< 1024px`: the task details become a slide-over drawer opened from the task header.
 - `< 640px`: the sidebar becomes a drawer opened from the top bar.
 - Page padding is `px-4 sm:px-6`; headings step down on phones (`text-heading sm:text-display`).
 
 ## Display language
 
-Internal wording becomes user wording in one place, `src/lib/display.ts` (profile refs → expert names, plan node
-titles and types, catalogue and framework labels, frontmatter stripping). Add a mapping there, not in a component.
+Use Chinese labels in pages and keep protocol identifiers out of user-facing copy. WP4 has login, callback and
+profile pages; feature-specific wording belongs with the WP9 feature that introduces it.
 
-Teams follow the same rule: a role id (`researcher`) becomes 「研究员」, the leader is 「领队」 whatever its role was named,
-and a review reads 「领队复盘 · 第 N 轮」 — all in `display.ts` (`roleLabel`, `memberRoleText`, `nodeRoles`, `roleText`).
-A task with a team is a group chat (`src/lib/chat.ts`, `GroupChat`): one header per run of one speaker's bubbles, the avatar
-at the group's bottom-left, @mentions as chips coloured by the member's place in the team, a notice from the runtime as a
-quiet centred line, the member's steps folded under its bubble. A plan node as 「<角色> · <专家名>」; a member's approval is
-「成员 <显示名> 请求确认」; the review cap is an `<Attention>` card with the same 「继续」 as any other wait for a person.
+## Markdown and file previews
 
-## Conversation
+`src/components/markdown/Markdown.tsx` treats raw HTML as literal text and applies DOMPurify plus rehype-sanitize.
+External images load only after the reader opts in. Closed Mermaid blocks render in strict mode and their SVG is
+purified again; incomplete or invalid diagrams show source. Code blocks preserve their state during streaming.
 
-An agent reply is a timeline (`src/lib/activity.ts`, `ActivityTimeline`): under a quiet header line (`text-small`, muted, hairline
-below: 正在思考 / 正在处理 12s / 已处理 1m 41s) come the words of each model round and its tool calls in the order they happened,
-then the final answer, which is always last and always visible. A tool call is one row: min height 28px, a 16px icon, `text-body`
-in `text-gray-600` (foreground on hover), one line with an ellipsis and the whole text in `title`. A call that is running reads
-正在读取 foo.ts with the `shimmer-text` utility (a moving highlight through the letters; plain muted text under reduced motion).
-Consecutive reads/searches/lists/edits/commands with no words between them fold into one group row (已读取 3 个文件 · 已运行 1 个命令),
-which opens under a `border-l` guide line. Every row opens to its arguments and result in a muted mono block (`max-h-64`).
-The wording of every tool lives in `activity.ts`, next to the rest of the display language.
-Under a settled reply a row of actions (copy, time, expert, token usage when the events report it) shows on hover and focus, always on
-the last reply and on touch screens. The user's message is a `rounded-bubble` `bg-secondary` bubble, `max-w-[78%]`, `px-4 py-2`.
+`src/components/files/preview/registry.ts` selects one of ten lazy previewers: SVG, image, Markdown, HTML, PDF,
+DOCX, sheet, PPTX, code and text. HTML uses a sandboxed iframe; SVG uses image mode. Office previews show an
+approximation notice and keep download available. Unknown formats and large files offer download instead of parsing.
 
 ## Lint
 
@@ -92,11 +80,13 @@ A legitimate exception takes `// eslint-disable-next-line orbit/design-tokens --
 
 ## Checks
 
-- `pnpm test`: contrast, display mapping, usage, and the lint rule itself.
-- `pnpm exec playwright test e2e/design.spec.ts`: pages at 1440×900 and 390×844 with a mocked API; no sideways scroll,
-  only the six font sizes, conversation column width, drawers, sidebar spacing, and the team surfaces (team card, editor,
-  member labels, grouped plan, team stage, review cap). Screenshots go to
-  `e2e-artifacts/design/` (git-ignored).
-- `pnpm exec playwright test e2e/activity.spec.ts`: the reply timeline (order of narration and calls, groups, shimmer and reduced
-  motion, row detail, plan rows, the 已处理 header, the action row and user bubble, light and dark, both widths). Screenshots go to
-  `e2e-artifacts/activity/` (git-ignored).
+- `pnpm lint`: enforces the design token rules in all application components.
+- `pnpm test`: includes stylesheet contrast and lint-rule checks, Markdown XSS/rendering regressions,
+  every previewer's lazy rendering, and auth component states under jsdom.
+- `pnpm licenses:check`: verifies the root NOTICE against the direct runtime dependencies in package.json and
+  their installed license metadata/text. `pnpm licenses:write` regenerates it for review after a dependency change.
+- `pnpm typecheck` and `pnpm build`: check all TypeScript components and the production bundle.
+
+The Markdown and preview tests use real sanitizers and renderers. Mermaid output and PDF/Office SDK boundaries
+are controlled fixtures because jsdom has no canvas, workers or Office layout engine; these tests verify the component
+integration and fallback paths. WP9 adds browser layout and full application journeys against the development stack.
