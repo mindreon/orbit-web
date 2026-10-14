@@ -36,6 +36,14 @@ describe("dependency NOTICE", () => {
     expect(notice).toContain("Copyright Example");
     expect(notice).toContain("MIT license text");
   });
+  it("normalizes upstream line endings and trailing spaces for a portable NOTICE", () => {
+    const root = fixture();
+    writeFileSync(path.join(root, "node_modules", "alias", "LICENSE"), "Copyright Example  \r\nMIT license text\t\r\n");
+    const notice = generateNotice(root);
+    expect(notice).not.toContain("\r");
+    expect(notice).not.toMatch(/[ \t]+$/m);
+    expect(notice).toContain("Copyright Example\nMIT license text");
+  });
   it("rejects missing or stale NOTICE and accepts exact generated output", () => {
     const root = fixture();
     expect(() => checkNotice(root)).toThrow();
