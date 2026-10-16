@@ -48,6 +48,12 @@ describe("reduceRunEvent", () => {
     expect(state.messages[0]).toMatchObject({ text: "", contentRef: "t/tenant/blobs/answer", final: true });
   });
 
+  it("replays an empty final as complete and retains it across an attempt change", () => {
+    const rebuilt = fold([ev("message.final", 1, 0, { message_id: "m1", text: "" })]);
+    const next = reduceRunEvent(rebuilt, ev("segment.started", 1, 1));
+    expect(next.messages).toEqual([expect.objectContaining({ messageId: "m1", text: "", final: true })]);
+  });
+
   it("merges reasoning before text into the same message, keeping model calls separate", () => {
     const state = fold([
       ev("reasoning.delta", 1, 0, { message_id: "m1", delta: "think" }),

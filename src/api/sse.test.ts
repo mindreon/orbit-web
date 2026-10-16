@@ -128,6 +128,12 @@ describe("readEventStream resume (S3)", () => {
     expect(h.requests[0].get("Last-Event-ID")).toBe("100");
   });
 
+  it.each([undefined, "0"])("omits Last-Event-ID when the resume cursor is %s", async (lastEventId) => {
+    const h = harness([sse([])], { lastEventId, headers: () => ({ "Last-Event-ID": "stale" }) });
+    await h.run;
+    expect(h.requests.every((headers) => !headers.has("Last-Event-ID"))).toBe(true);
+  });
+
   it("keeps the cursor across a connection that failed before delivering anything", async () => {
     const h = harness([sse(["id: 9\ndata: a\n\n"]), new TypeError("down"), sse(["id: 10\ndata: b\n\n"])]);
     await h.run;
@@ -196,6 +202,19 @@ describe("readEventStream refusals (S5, S6)", () => {
     expect(h.events.fatal[0]).toMatchObject({ status });
   });
 
+  it.each([403, 404])("reports a non-retryable headers error %i through onFatal without connecting", async (status) => {
+    const error = await ApiError.fromResponse(apiError(status, "STREAM_FORBIDDEN"));
+    const headers = vi.fn(async () => { throw error; });
+    const onFatal = vi.fn();
+    const h = harness([], { headers, onFatal, lastEventId: "81" });
+    await h.run;
+    expect(onFatal).toHaveBeenCalledExactlyOnceWith(error, "81");
+    expect(headers).toHaveBeenCalledOnce();
+    expect(h.requests).toEqual([]);
+    expect(h.sleeps).toEqual([]);
+    expect(h.events.reconnects).toEqual([]);
+  });
+
   it.each([502, 503, 429])("retries %i", async (status) => {
     const h = harness([new Response("", { status }), sse(["id: 1\ndata: a\n\n"])]);
     await h.run;
@@ -205,6 +224,49 @@ describe("readEventStream refusals (S5, S6)", () => {
 });
 
 describe("readEventStream closing (S7)", () => {
+  it("handles end before onFrame, cancels the reader and never reconnects", async () => {
+    const cancel = vi.fn();
+    const response = new Response(new ReadableStream({
+      start(controller) {
+        controller.enqueue(encoder.encode('id: 42\nevent: run.completed\ndata: {}\n\nevent: end\ndata: {"reason":"run_finished"}\n\ndata: ignored\n\n'));
+      },
+      cancel,
+    }), { headers: { "Content-Type": "text/event-stream" } });
+    const onEnd = vi.fn();
+    const h = harness([response], { onEnd });
+    await h.run;
+    expect(onEnd).toHaveBeenCalledExactlyOnceWith("run_finished");
+    expect(h.frames).toEqual([{ id: "42", event: "run.completed", data: "{}" }]);
+    expect(h.requests).toHaveLength(1);
+    expect(h.sleeps).toEqual([]);
+    expect(cancel).toHaveBeenCalledOnce();
+    expect(response.body?.locked).toBe(false);
+  });
+
+  it("treats end as a dropped connection when no onEnd callback is provided", async () => {
+    const h = harness([sse(['id: 42\ndata: done\n\nevent: end\ndata: {"reason":"run_finished"}\n\n'])]);
+    await h.run;
+    expect(h.frames).toHaveLength(1);
+    expect(h.requests[1].get("Last-Event-ID")).toBe("42");
+    expect(h.sleeps).toHaveLength(1);
+  });
+
+  it("surfaces an onEnd handler error and releases the reader", async () => {
+    const response = sse(['event: end\ndata: {"reason":"run_finished"}\n\n']);
+    const error = new Error("end handler failed");
+    const h = harness([response], { onEnd: () => { throw error; } });
+    await expect(h.run).rejects.toBe(error);
+    expect(h.requests).toHaveLength(1);
+    expect(response.body?.locked).toBe(false);
+  });
+
+  it("does not connect if cancellation happens while renewing headers", async () => {
+    const controller = new AbortController();
+    const h = harness([], { signal: controller.signal, headers: () => { controller.abort(); return {}; } });
+    await h.run;
+    expect(h.requests).toEqual([]);
+  });
+
   it("stops reading when the signal aborts mid-stream", async () => {
     const hang = (signal: AbortSignal) =>
       new Response(
@@ -257,6 +319,65 @@ describe("readEventStream closing (S7)", () => {
 
 // Regression cases: id-only/reset frames, expiring tokens, wrong routes, throttling and half-open sockets.
 describe("SSE recovery regressions", () => {
+  it.each(['{', '{}', '{"reason":1}'])("reports an invalid end payload %s through onFatal without retrying", async (data) => {
+    const onEnd = vi.fn();
+    const onFatal = vi.fn();
+    const response = sse([`event: end\ndata: ${data}\n\n`]);
+    const h = harness([response], { onEnd, onFatal, lastEventId: "81" });
+    await h.run;
+    expect(onFatal).toHaveBeenCalledExactlyOnceWith(expect.objectContaining({ code: "INVALID_EVENT_STREAM", retryable: false }), "81");
+    expect(onEnd).not.toHaveBeenCalled();
+    expect(h.frames).toEqual([]);
+    expect(h.requests).toHaveLength(1);
+    expect(h.sleeps).toEqual([]);
+    expect(h.events.reconnects).toEqual([]);
+    expect(response.body?.locked).toBe(false);
+  });
+
+  it("surfaces an onCursorExpired failure without retrying", async () => {
+    const error = new Error("rebuild failed");
+    const h = harness([apiError(409, "EVENT_CURSOR_EXPIRED")], { onCursorExpired: () => { throw error; } });
+    await expect(h.run).rejects.toBe(error);
+    expect(h.requests).toHaveLength(1);
+  });
+
+  it("surfaces an onFatal failure for a successful non-SSE response", async () => {
+    const error = new Error("fatal handler failed");
+    const h = harness([new Response("<html/>", { headers: { "Content-Type": "text/html" } })], { onFatal: () => { throw error; } });
+    await expect(h.run).rejects.toBe(error);
+    expect(h.requests).toHaveLength(1);
+  });
+
+  it("fetches a new stream token after every ordinary disconnect", async () => {
+    const tokenFetch = vi.fn(async () => new Response(JSON.stringify({ stream_token: `t${tokenFetch.mock.calls.length}`, expires_in: 900 })));
+    const h = harness([sse([]), sse(['event: end\ndata: {"reason":"run_finished"}\n\n'])], {
+      headers: async () => {
+        const response = await tokenFetch();
+        const token: { stream_token: string; expires_in: number } = await response.json();
+        return { Authorization: `Bearer ${token.stream_token}` };
+      },
+      onEnd: vi.fn(),
+    });
+    await h.run;
+    expect(tokenFetch).toHaveBeenCalledTimes(2);
+    expect(h.requests.map((headers) => headers.get("Authorization"))).toEqual(["Bearer t1", "Bearer t2"]);
+  });
+
+  it("stops delivering buffered frames and releases the reader when a handler aborts", async () => {
+    const controller = new AbortController();
+    const cancel = vi.fn();
+    const response = new Response(new ReadableStream({
+      start(stream) { stream.enqueue(encoder.encode("data: one\n\ndata: two\n\n")); }, cancel,
+    }), { headers: { "Content-Type": "text/event-stream" } });
+    const onFrame = vi.fn(() => controller.abort());
+    const h = harness([response], { signal: controller.signal, onFrame });
+    await h.run;
+    expect(onFrame).toHaveBeenCalledOnce();
+    expect(cancel).toHaveBeenCalledOnce();
+    expect(response.body?.locked).toBe(false);
+    expect(h.requests).toHaveLength(1);
+  });
+
   it("advances an id-only cursor and omits a reset cursor", async () => {
     const h = harness([sse(["id: 51\n\n"]), sse(["id:\n\n"]), sse([])]);
     await h.run;
