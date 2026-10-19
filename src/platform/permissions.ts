@@ -6,3 +6,5 @@ export function canNavigate(roles: readonly string[], permission: NavigationPerm
   const allowed = permission === "reviews" ? [...elevated, "tenant.reviewer"] : permission === "audit" || permission === "tenantUsage" ? [...elevated, "tenant.auditor"] : permission === "workspaceCreate" ? [...elevated, "tenant.member"] : elevated;
   return roles.some((role) => allowed.includes(role));
 }
+/** Ops payloads remain hidden unless both the server flag and the payload are present. */
+export function canViewRunOps(platformOperator: boolean, ops: unknown): boolean { return platformOperator && ops != null; }

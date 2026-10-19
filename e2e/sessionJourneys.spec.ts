@@ -16,13 +16,13 @@ async function navigate(page: Page, label: string, mobile: boolean) {
   if (mobile) await page.getByRole("button", { name: "打开导航" }).click();
   await page.getByRole("navigation", { name: "主导航" }).getByRole("link", { name: label, exact: true }).click();
 }
-async function createFromCatalog(page: Page, ref: string, marker: string, mobile = false) {
-  await navigate(page, "专家", mobile);
+async function createFromCatalog(page: Page, ref: string, marker: string, mobile = false, kind: "agent" | "team" = "agent") {
+  await navigate(page, kind === "team" ? "专家团" : "专家", mobile);
   const card = page.getByRole("article").filter({ hasText: ref });
   await expect(card).toBeVisible();
   await card.getByRole("link", { name: "开始对话" }).click();
   const dialog = page.getByRole("dialog", { name: "新建会话" });
-  await expect(dialog.getByLabel("入口", { exact: true })).toHaveValue(`agent:${ref}`);
+  await expect(dialog.getByLabel("入口", { exact: true })).toHaveValue(`${kind}:${ref}`);
   await expect(dialog.getByLabel("入口类型")).toBeDisabled();
   await dialog.getByLabel("标题", { exact: true }).fill(marker);
   await dialog.getByRole("button", { name: "创建会话" }).click();
@@ -88,7 +88,15 @@ test.describe("WJ1 single expert delivery", () => {
     await expect(page.getByRole("status", { name: "实时", exact: true })).toBeVisible();
     await complete(first.section);
     await expectModel(() => expect(first.section).toContainText("READY"));
-    // Replay-page assertions (step 4) belong to WP9d.
+    await first.section.getByRole("link", { name: "查看运行" }).click();
+    await expect(page).toHaveURL(new RegExp(`/runs/${first.id}$`));
+    const segments = page.getByRole("table", { name: "段", exact: true }).locator("tbody tr");
+    await expect(segments.first()).toBeVisible();
+    await expect(segments.last()).toContainText("已完成");
+    await expect.poll(async () => Number(await page.getByTestId("cost-total").getAttribute("data-millicredits"))).toBeGreaterThan(0);
+    await expect(page.getByTestId("replay-timeline").getByText("mcp_test_wait_seconds", { exact: true })).toBeVisible();
+    await expect(page.getByText("没有审批记录", { exact: true })).toBeVisible();
+    await page.getByRole("link", { name: "← 返回会话" }).click();
     const slow = `${marker}-cancel`;
     await send(page, `Call wait_seconds with seconds=240 and marker=${slow}. After the tool returns, reply DONE.`);
     await modelToolStarted(readCalls, slow);
@@ -137,7 +145,15 @@ test.describe("WJ3 tool approval", () => {
     tenant = seed.tenant_id; const marker = journeyMarker(3);
     await login(page); sessions.push(await createFromCatalog(page, "dev/notify-agent", marker));
     const first = await approveJourney(page, readCalls, marker, recordRun, false);
-    // Step 4's replay-page assertions are deliberately left to WP9d.
+    await first.section.getByRole("link", { name: "查看运行" }).click();
+    await expect(page).toHaveURL(new RegExp(`/runs/${first.id}$`));
+    const records = page.getByRole("list", { name: "审批记录", exact: true }).getByRole("listitem");
+    await expect(records).toHaveCount(1); await expect(records.first()).toContainText("已解决"); await expect(records.first()).toContainText("允许一次");
+    const effects = page.getByRole("table", { name: "工具副作用", exact: true }).locator("tbody tr");
+    await expect(effects).toHaveCount(1); await expect(effects.first()).toContainText("已完成");
+    const reasons = page.getByRole("table", { name: "段", exact: true }).locator("tbody tr td:nth-child(4)");
+    await expect.poll(() => reasons.allTextContents()).toEqual(["等待工具审批", "外部写入边界", "已完成"]);
+    await page.getByRole("link", { name: "← 返回会话" }).click();
     const denied = journeyMarker(3);
     await send(page, `Use the notify_send tool exactly once with to="ops" and text="deploy ${denied}". If denied, do not retry; reply with the single word DONE.`);
     await expect(page.getByText("工具审批", { exact: true })).toBeVisible({ timeout: 120_000 });
@@ -155,5 +171,56 @@ test.describe("WJ3 tool approval", () => {
     tenant = seed.tenant_id; const marker = journeyMarker(3);
     await login(page); sessions.push(await createFromCatalog(page, "dev/notify-agent", marker, true));
     await approveJourney(page, readCalls, marker, recordRun, true);
+  });
+});
+
+test.describe("WJ2 team collaboration", () => {
+  const sessions: string[] = []; let tenant = "";
+  test.afterAll(async ({ request }) => cleanup(request, tenant, sessions));
+  test("WJ2 writers, reviewer, artifacts and member replay", async ({ page, seed, recordRun }) => {
+    test.setTimeout(25 * 60_000);
+    tenant = seed.tenant_id; const marker = journeyMarker(2);
+    await login(page); sessions.push(await createFromCatalog(page, "dev/review-team", marker, false, "team"));
+    // Same J2 instruction, except /outputs: /workspace is not scanned for artifacts (WP9d step 0).
+    await send(page, "Create two independent tasks, assigned to writer-1 and writer-2. Each writer must write " +
+      "one short file under /outputs (writer-1.txt and writer-2.txt), about safe retries and " +
+      "idempotency respectively. Have reviewer inspect both files and submit verdicts. " +
+      "Wait for review before calling team_finish with a summary of both deliverables.");
+    const run = await currentRun(page, recordRun);
+    const board = run.section.getByTestId("team-board");
+    // Observe transient working state concurrently with task creation so it cannot be missed later.
+    const tasks = board.locator("article[data-task-id]");
+    await Promise.all([
+      expect(board.getByText("工作中", { exact: true }).first()).toBeVisible({ timeout: 180_000 }),
+      expect.poll(() => tasks.count(), { timeout: 180_000 }).toBeGreaterThanOrEqual(2),
+    ]);
+    for (const writer of ["writer-1", "writer-2"]) await expect(tasks.filter({ has: page.getByText(writer, { exact: true }) }).first()).toBeVisible({ timeout: 180_000 });
+    const votes = tasks.locator("div").filter({ has: page.getByText("reviewer", { exact: true }) }).filter({ has: page.getByText(/^(通过|驳回)$/) });
+    await expect.poll(() => votes.count(), { timeout: 20 * 60_000 }).toBeGreaterThan(0);
+    await expect(run.section.locator("[data-run-status]")).toHaveText("已完成", { timeout: 20 * 60_000 });
+    // Completed session boards collapse; reopen through the actual control.
+    const panel = run.section.locator("details").filter({ has: page.locator("summary").filter({ hasText: "专家团任务板" }) }).first();
+    if (!(await panel.evaluate((element) => (element as HTMLDetailsElement).open))) await panel.locator("summary").first().click();
+    await expect(board.getByRole("heading", { name: "总结", exact: true })).toBeVisible();
+    await page.getByRole("button", { name: "文件", exact: true }).click();
+    const file = page.getByRole("treeitem").filter({ hasText: /writer-[12]\.txt/ }).first();
+    await expect(file).toBeVisible(); await file.click();
+    await expect(page.getByTestId("file-preview")).toBeVisible();
+    await expect(page.getByTestId("file-preview").locator("pre")).not.toHaveText("");
+    await run.section.getByRole("link", { name: "查看运行" }).click();
+    await expect(page).toHaveURL(new RegExp(`/runs/${run.id}$`));
+    const segmentMembers = page.getByRole("table", { name: "段", exact: true }).locator("tbody tr td:first-child");
+    for (const member of ["leader", "writer-1", "writer-2", "reviewer"]) await expect(segmentMembers.filter({ hasText: new RegExp(`^${member}$`) }).first()).toBeVisible();
+    const events = page.getByTestId("replay-timeline").locator("[data-timeline-member]");
+    await expect.poll(() => events.evaluateAll((elements) => new Set(elements.map((element) => element.getAttribute("data-timeline-member"))).size)).toBeGreaterThan(1);
+    await page.getByRole("button", { name: "writer-1", exact: true }).click();
+    await expect.poll(() => page.getByTestId("replay-timeline").locator('[data-timeline-member="writer-1"]').count()).toBeGreaterThan(0);
+    expect(await events.evaluateAll((elements) => elements.every((element) => element.getAttribute("data-timeline-member") === "writer-1"))).toBe(true);
+    // Summary wording and file mentions are model assertions, not platform retries.
+    const summaryPanel = page.getByTestId("team-board").locator("div").filter({ has: page.getByRole("heading", { name: "总结", exact: true }) }).first();
+    await expectModel(async () => {
+      const text = (await summaryPanel.innerText()).replace("总结", "").trim(); expect(text.length).toBeGreaterThan(0);
+      await expect(summaryPanel).toContainText("writer-1.txt"); await expect(summaryPanel).toContainText("writer-2.txt");
+    }, "专家团总结未涵盖两个交付文件");
   });
 });

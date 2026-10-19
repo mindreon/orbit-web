@@ -143,6 +143,44 @@ full width, stacked, primary first, 44px tall.
 A single list of the same cards, 12px apart, `max-w-reading`, each with a top line "会话 · 成员" link in
 `text-small`. Empty state: centered `text-body text-muted-foreground` "没有待你处理的事项", no illustration.
 
+### Run replay (`/runs/:runId`, WP9d)
+
+- One reading page, not a dashboard: `max-w-5xl` centred, sections stacked with 32px between them. Each section has a
+  `text-title font-semibold` heading with an optional caption count (`text-caption text-muted-foreground`, e.g. "3 段").
+- Header: back link "← 返回会话" (`text-small`), then the run title row: status badge + `font-mono text-small` run id
+  (truncated, copy on click) on the left, actions (停止 / 暂停 / 继续, by state) right-aligned. Under it a facts row:
+  `dl` as a wrapping grid of label/value pairs (`text-caption` label in muted, `text-body` value; 触发方式, 开始, 结束, 时长,
+  预算 已用/上限, 成本). An error code shows as a danger `Alert` under the facts, never inside the grid.
+- Status badge (shared by runs, segments, effects, tasks, members): `rounded-control px-1.5 text-caption`, tinted by
+  meaning only: running/working → primary-50/700, waiting_* → warning-50/700, succeeded/completed → success-50/700,
+  failed/timed_out/budget_exhausted → danger-50/700, cancelled/idle/queued/paused → gray-100/700. Text is always the
+  Chinese label; colour is never the only signal.
+- Tables (segments, effects, cost): no outer border, `bg-card rounded-card` container, header row `text-caption
+  text-muted-foreground font-medium`, rows 40px `text-small` separated by `border-border` hairlines, numbers
+  right-aligned with `tabular-nums`, protocol values (tool names, error codes, checkpoint versions, quantities) in
+  `font-mono`. On phones a table scrolls horizontally inside its card; the page itself never overflows.
+- Timeline: reuses the session timeline read-only in the left reading column. For team runs a member filter sits above
+  it as a segmented row of chips (全部 + each member; active chip `bg-gray-200 font-medium`).
+- Interactions list: one row per record — kind, request summary (mono, one line, truncated), status badge, decision,
+  by whom, when. Empty → one muted sentence ("没有审批记录").
+- Ops (platform operators only): a collapsed `details` at the very bottom, "运维信息", mono key/value rows with external
+  links (Temporal, trace) opening in a new tab.
+
+### TeamBoard (`features/teams`)
+
+- Members strip first: one compact card per member (`bg-card rounded-card p-3`, min 180px, wraps): name (`font-medium`),
+  role label (负责人 / 成员 / 评审) in muted caption, status badge, current task title (one line, truncated). A member
+  that is `working` gets a 6px primary dot before its name, pulsing only if `prefers-reduced-motion` allows.
+- Task columns under it, one per contract `TaskStatus` in contract order, each a `bg-muted rounded-card p-2` lane with
+  a caption header "状态 · n". Task cards inside are `bg-card rounded-control p-3`: title (`text-small font-medium`, two
+  lines max), assignee chip, dependency count ("依赖 2"), attempt count when > 1, review verdict as a status badge.
+  Lanes form a wrapping grid (3 columns ≥1024px, 2 ≥640px, 1 on phones), top-aligned so an empty lane is just its
+  header; no horizontal scrolling, every lane stays visible.
+- On `finished` the summary appears above the members strip as a quiet panel (`bg-success-50 rounded-card p-4`,
+  Markdown body), titled "总结".
+- In the session page the board sits in a collapsible panel above the timeline of a team run (open while the run is
+  active, collapsed once it ends); on the replay page it is a full section.
+
 ### States
 
 Skeletons mirror the final layout (same heights), gray-100 blocks, no shimmer. Errors use `Alert` inline at the

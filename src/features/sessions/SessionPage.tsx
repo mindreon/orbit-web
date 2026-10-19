@@ -22,14 +22,14 @@ import { DropdownMenu } from "../../ui/DropdownMenu";
 import { Input, Select } from "../../ui/fields";
 import { Skeleton } from "../../ui/Skeleton";
 import { FileArea } from "../files";
+import { SessionTeamBoard } from "../teams";
 import { activeStatus, allPages } from "./api";
 import { Composer, type SendResult } from "./Composer";
 import { policyLabels } from "./NewSessionDialog";
-import { runStateLabels } from "./labels";
-import { Timeline, UserBubble } from "./Timeline";
+import { runStateLabels, Timeline, UserBubble } from "../runs";
 import { useSessionStream } from "./useSessionStream";
 
-function RunTurn({ run, state, messages, archived }: { run: Run; state?: RunStreamState; messages: readonly Message[]; archived: boolean }) {
+function RunTurn({ run, state, messages, archived, team }: { run: Run; state?: RunStreamState; messages: readonly Message[]; archived: boolean; team: boolean }) {
   const { currentTenant, principal } = useIdentity(); const tenant = currentTenant?.id ?? null;
   const client = useQueryClient(); const [expanded, setExpanded] = useState<RunStreamState>();
   const [loading, setLoading] = useState(false); const [error, setError] = useState<unknown>();
@@ -51,7 +51,8 @@ function RunTurn({ run, state, messages, archived }: { run: Run; state?: RunStre
   const status = run.status;
   const duration = run.started_at && run.ended_at ? `${Math.max(0, Math.round((Date.parse(run.ended_at) - Date.parse(run.started_at)) / 1000))}秒` : null;
   const hasFinal = timeline?.messages.some((message) => message.final);
-  return <section data-run-id={run.id} className="space-y-2">
+  return <section data-run-id={run.id} className="min-w-0 space-y-2">
+    {team ? <SessionTeamBoard runId={run.id} active={activeStatus(status)} teamSignal={timeline?.teamSignal} /> : null}
     {!timeline ? messages.filter((message) => message.role === "user").map((message) => <UserBubble key={message.id} text={message.text ?? ""} />) : null}
     {timeline ? <Timeline userMessages={messages.filter((message) => message.role === "user")} state={timeline} runStatus={run.status} interactions={interactions.data?.items ?? []} principalId={principal?.id ?? ""} onResolve={resolve} readOnly={archived} /> : <Button variant="ghost" size="sm" disabled={loading} onClick={() => { setLoading(true); void fetchRunHistory(api, run.id).then((history) => setExpanded(history.events.reduce(reduceRunEvent, emptyRunStream)), setError).finally(() => setLoading(false)); }}>展开过程</Button>}
     {!hasFinal ? messages.filter((message) => message.role === "assistant").map((message) => <div key={message.id}><Markdown text={message.text ?? ""} />{message.truncated || message.content_ref ? <p className="text-caption text-muted-foreground">内容过长，已截断显示</p> : null}</div>) : null}
@@ -122,7 +123,7 @@ export default function SessionPage() {
       {[
         ...orderedRuns.map((run) => ({ kind: "run" as const, value: run })),
         ...(messages.data?.items ?? []).filter((message) => message.role === "user" && !message.run_id).map((message) => ({ kind: "message" as const, value: message })),
-      ].sort((a, b) => a.value.created_at.localeCompare(b.value.created_at) || a.value.id.localeCompare(b.value.id)).map((item) => item.kind === "message" ? <UserBubble key={`message:${item.value.id}`} text={item.value.text ?? ""} /> : <RunTurn key={item.value.id} run={item.value} state={live.states.get(item.value.id)} archived={archived} messages={messages.data?.items.filter((message) => message.run_id === item.value.id) ?? []} />)}
+      ].sort((a, b) => a.value.created_at.localeCompare(b.value.created_at) || a.value.id.localeCompare(b.value.id)).map((item) => item.kind === "message" ? <UserBubble key={`message:${item.value.id}`} text={item.value.text ?? ""} /> : <RunTurn key={item.value.id} run={item.value} state={live.states.get(item.value.id)} archived={archived} team={session.data.entry_kind === "team"} messages={messages.data?.items.filter((message) => message.run_id === item.value.id) ?? []} />)}
       {!orderedRuns.length ? <p className="py-12 text-center text-body text-muted-foreground">正在与{entryKindLabels[session.data.entry_kind]} {session.data.entry_ref} 对话</p> : null}
     </div></div>
     <div className="shrink-0 px-4 pb-4 sm:px-6"><div className="mx-auto max-w-reading">{waiting ? <div className="mb-2 flex flex-wrap items-baseline justify-between gap-2 rounded-control bg-warning-50 px-3 py-2 text-small text-warning-700"><span>{activeRunStatus === "waiting_approval" ? "有工具调用等待你审批" : "有问题等待你回答"}</span><button onClick={() => { if (pending) document.getElementById(`interaction-${pending[0]}`)?.scrollIntoView({ block: "center" }); }}>跳到卡片</button></div> : null}

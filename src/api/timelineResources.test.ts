@@ -12,7 +12,7 @@ describe("timeline resources", () => {
   it("replaces unfinished tools on a retry, preserving completed ones and removing stale order entries", () => {
     const state = fold([event(1, "tool.call", { call_id: "done", tool: "read" }), event(2, "tool.result", { call_id: "done", ok: true }), event(3, "tool.call", { call_id: "pending", tool: "wait" }), event(1, "segment.started", {}, 1)]);
     expect([...state.tools.keys()]).toEqual(["done"]);
-    expect(state.order).toEqual([{ kind: "tool", key: "done" }]);
+    expect(state.order).toEqual([{ kind: "tool", key: "done", member: "main" }]);
   });
   it("records interaction resolution, team signals, artifacts and latest usage", () => {
     const state = fold([event(1, "interaction.requested", { interaction: { interaction_id: "i", kind: "ask_user" }, expires_at: "soon" }), event(2, "interaction.resolved", { interaction_id: "i", decision: { kind: "ask_user", answer: "yes" }, actor: "p" }), event(3, "artifact.created", { artifact: { path: "a", digest: "old" } }), event(4, "artifact.updated", { artifact: { path: "a", digest: "new" } }), event(5, "team.task.created", {}), event(6, "team.message", { message_id: "tm", text: "hello" }), event(7, "usage.update", { cost_millicredits: 10 })]);

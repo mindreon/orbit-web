@@ -7,7 +7,7 @@ import { Alert } from "../../ui/Alert";
 import { Button } from "../../ui/Button";
 import { Field, Input, Select, Textarea } from "../../ui/fields";
 
-const choiceLabels = { allow_once: "允许一次", allow_session: "本会话允许", allow_always: "始终允许", deny: "拒绝", treat_as_done: "视为已完成", retry: "重试", abandon: "放弃" };
+import { decisionChoiceLabels as choiceLabels, interactionKindLabels } from "./labels";
 export function EffectChip({ effect }: { effect: S["EffectClass"] }) {
   return <span className={cn("rounded-control px-1.5 text-caption", effect === "external_write" || effect === "privileged" ? "bg-danger-50 text-danger-700" : effect === "sandbox_write" ? "bg-warning-50 text-warning-700" : "bg-gray-100 text-gray-700")}>{effect}</span>;
 }
@@ -32,7 +32,7 @@ function Card({ request, approvers, principalId, expiresAt, resolution, status, 
   };
   return <article data-interaction-id={request.interaction_id} className={cn("min-w-0 rounded-card border-l-[3px] bg-card p-4", result || expired || settled ? "border-l-gray-300" : "border-l-warning-500")}>
     {result ? <p className="flex items-baseline gap-2 text-small text-muted-foreground"><Check aria-hidden="true" className="h-4 w-4 shrink-0" /><span>已由 {result.actor === principalId ? "你" : result.actor}{result.at ? ` 于 ${new Date(result.at).toLocaleTimeString("zh-CN", { hour: "2-digit", minute: "2-digit" })}` : ""} 处理：{result.decision.choice ? choiceLabels[result.decision.choice] : result.decision.answer}</span></p> : <>
-      <div className="mb-3 flex flex-wrap items-baseline justify-between gap-2"><h3 className="text-small font-semibold">{{ tool_approval: "工具审批", ask_user: "提问", effect_uncertain: "结果未知的操作" }[request.kind]}</h3>{expiresAt && !expired && !settled ? <time className="text-caption text-muted-foreground" dateTime={expiresAt}>{new Date(expiresAt).toLocaleString("zh-CN")} 到期</time> : null}</div>
+      <div className="mb-3 flex flex-wrap items-baseline justify-between gap-2"><h3 className="text-small font-semibold">{interactionKindLabels[request.kind]}</h3>{expiresAt && !expired && !settled ? <time className="text-caption text-muted-foreground" dateTime={expiresAt}>{new Date(expiresAt).toLocaleString("zh-CN")} 到期</time> : null}</div>
       {request.calls?.map((call) => <div key={call.call_id} className="mb-3 space-y-2"><div className="flex flex-wrap items-baseline gap-2"><span className="font-mono text-small">{call.name}</span><EffectChip effect={call.effect_class} /></div><pre className="max-h-48 overflow-auto whitespace-pre-wrap break-all rounded-control bg-muted px-3 py-2 font-mono text-caption text-gray-700">{call.args_preview}</pre>{call.risk_reasons.length ? <ul aria-label="风险原因" className="flex flex-wrap gap-1.5">{call.risk_reasons.map((reason, i) => <li key={i} className="rounded-control bg-warning-50 px-1.5 font-mono text-caption text-warning-700">{reason}</li>)}</ul> : null}</div>)}
       {request.question ? <p className="mb-3 whitespace-pre-wrap text-body">{request.question.text}</p> : null}
       {request.effect ? <div className="mb-3 space-y-2"><p className="text-body">该外部操作在中断时结果未知</p><p className="font-mono text-small">{request.effect.tool}</p><pre className="overflow-auto whitespace-pre-wrap break-all text-caption">{request.effect.args_preview}</pre></div> : null}

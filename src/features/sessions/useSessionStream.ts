@@ -40,6 +40,7 @@ export function useSessionStream(sessionId: string, tenant: string | null, runs:
           }
           if (event.type.startsWith("artifact.")) void client.invalidateQueries({ queryKey: qk.artifacts(tenant, sessionId) });
           if (event.type.startsWith("run.")) {
+            void client.invalidateQueries({ queryKey: qk.team(tenant, event.run_id) });
             void client.invalidateQueries({ queryKey: qk.runs(tenant, sessionId) });
             void client.invalidateQueries({ queryKey: qk.run(tenant, event.run_id) });
             void client.invalidateQueries({ queryKey: qk.messages(tenant, sessionId) });
