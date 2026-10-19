@@ -85,11 +85,13 @@ streaming cursor and the live-status dot.
 
 ### Shell
 
-- Sidebar 240px, `bg-gray-50`, no right border; the main area is `bg-background`. Items are 32px rows,
+- Sidebar 240px, `bg-gray-50` with a `border-border` right edge (it separates the sidebar from the content in both themes); the main area is `bg-background`. Items are 32px rows,
   `rounded-control`, `text-body`; the active item is `bg-gray-200 font-medium`, hover `bg-gray-100`.
-- Order: workspace switcher (one row, chevron; the tenant is never shown in the UI) → primary "新建会话" button (full width, the only
-  primary fill in the sidebar) → 最近会话 (section label, max 12 rows, single-line truncated titles, a 6px status dot
-  on the right: primary-500 运行中, warning-500 等待你处理, none when idle) → navigation → "我" pinned to the bottom.
+- Order: brand row (24px primary monogram + "Orbit") → workspace switcher (one row, chevron; the tenant is never shown in the
+  UI) → primary "新建会话" button (full width, the only primary fill in the sidebar) → navigation in three groups (unlabelled
+  main group, then "资源" and "系统" with `text-small font-medium text-muted-foreground` labels, 16px between groups) →
+  最近会话 (section label, max 12 rows, single-line truncated titles, a 6px status dot on the right: primary-500 运行中,
+  warning-500 等待你处理, none when idle) → "我" pinned to the bottom above a hairline.
 - Page header: `text-title font-semibold`, optional `text-small text-muted-foreground` subline, actions right-aligned
   and baseline-aligned. 24px top padding, 16px under the header. No breadcrumb.
 
@@ -110,7 +112,8 @@ streaming cursor and the live-status dot.
   "专家 · 名称", then right side: stream status (dot + word only when not live), message-policy select, "…" menu
   with 归档. A hairline under the header only after the timeline scrolls.
 - Rhythm: 24px between turns, 8px between items within one assistant turn. A run divider is a quiet centered row
-  (`text-caption text-muted-foreground`: status · 耗时 · 成本 · 查看运行) with no rule line.
+  (`text-caption text-muted-foreground`: status · 耗时 · 成本 · 查看运行) between two `bg-border` hairlines that fill
+  the reading column, so each run reads as closed.
 - User bubble: right-aligned, `bg-gray-100 rounded-bubble px-4 py-2.5`, max 80% width. Assistant message: no bubble,
   full column width, Markdown at `text-body leading-7`. Streaming cursor: 2px × 1em primary-500 bar blinking 1s.
   Reasoning: a collapsed `text-small text-muted-foreground` row "思考过程" with chevron; expanded body in gray-600.
@@ -120,8 +123,7 @@ streaming cursor and the live-status dot.
   "展开全部". Collapsed by default when finished; failures stay expanded.
 - Team message: indented 16px, `text-small`, "成员A → 成员B" in gray-500, body collapsed to one line.
 - Composer: `rounded-bubble bg-card` with a 1px gray-200 border (the one bordered surface on the page), 1–8 lines
-  auto-grow, send button is a 32px round primary icon button inside the field at bottom-right; while a run is active
-  it becomes a square "停止" (gray-900 fill), with 暂停/继续 as a text button beside it. Disposition notes appear as one
+  auto-grow, send button is a 32px round primary icon button inside the field at bottom-right whenever text is non-empty; while a run is active (including paused), only an empty field replaces it with a square "停止" (gray-900 fill), and 暂停/继续 remains available beside either button. Disposition notes appear as one
   `text-caption` line above the field and fade after 4s.
 - Pending banner (waiting_input / waiting_approval): a warning-50 strip directly above the composer, one line
   summary + "跳到卡片".

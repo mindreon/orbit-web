@@ -6,11 +6,18 @@ import { selectTenant } from "./tenancy/selectTenant";
 describe("U3 tenant selection", () => {
   it("selects remembered membership or first membership, never an invalid or absent tenant", () => {
     const tenants = [{ id: "first" }, { id: "second" }];
-    expect(selectTenant([], null, "stale")).toBeNull();
-    expect(selectTenant(tenants, null, "second")).toBe("second");
-    expect(selectTenant(tenants, "removed", "second")).toBe("second");
-    expect(selectTenant(tenants, null, "removed")).toBe("first");
-    expect(selectTenant(tenants, "first", "second")).toBe("first");
+    expect(selectTenant([], null, null, "stale")).toBeNull();
+    expect(selectTenant(tenants, null, null, "second")).toBe("second");
+    expect(selectTenant(tenants, "removed", null, "second")).toBe("second");
+    expect(selectTenant(tenants, null, null, "removed")).toBe("first");
+    expect(selectTenant(tenants, "first", null, "second")).toBe("first");
+  });
+  it("prefers a default membership over the remembered personal tenant and first membership", () => {
+    const tenants = [{ id: "personal" }, { id: "dev" }];
+    expect(selectTenant(tenants, null, "dev", "personal")).toBe("dev");
+    expect(selectTenant(tenants, "personal", "dev", "dev")).toBe("personal");
+    expect(selectTenant(tenants, null, "removed", "dev")).toBe("dev");
+    expect(selectTenant(tenants, null, "removed", "removed")).toBe("personal");
   });
 });
 it("U9 uses only tenant roles and matches all five role navigation matrices", () => {

@@ -9,6 +9,7 @@ import type { S } from "./types";
 export interface RunEventLike {
   readonly id: string;
   readonly type: string;
+  readonly ts?: string;
   /** The team member the event belongs to; segments are numbered per member. */
   readonly member: string;
   readonly segment: number;
@@ -51,7 +52,7 @@ export interface TimelineTool {
   readonly call?: S["ToolCall"]; readonly result?: S["ToolResult"];
   readonly output: string;
 }
-export interface TimelineOrder { readonly kind: "message" | "tool" | "interaction" | "team"; readonly key: string; }
+export interface TimelineOrder { readonly kind: "message" | "tool" | "interaction" | "team"; readonly key: string; readonly ts?: string; }
 export const emptyRunStream: RunStreamState = { dedup: {}, attempts: {}, messages: [], status: null, error: null, tools: new Map(), interactions: new Map(), artifacts: {}, teamSignal: 0, teamMessages: [], usage: null, order: [] };
 const terminal = new Set(["succeeded", "cancelled", "budget_exhausted", "timed_out", "failed"]);
 
@@ -87,7 +88,7 @@ function upsert(state: RunStreamState, event: RunEventLike, update: (message: St
     return { ...state, messages: state.messages.map((message, i) => (i === index ? update(current) : message)) };
   }
   const created: StreamedMessage = { member, segment: event.segment, attempt: event.attempt, messageId, text: "", reasoning: "", final: false };
-  return { ...addOrder(state, "message", `${member}#${event.segment}#${messageId}`), messages: [...state.messages, update(created)] };
+  return { ...addOrder(state, "message", `${member}#${event.segment}#${messageId}`, event.ts), messages: [...state.messages, update(created)] };
 }
 
 /** Folds one event into the stream state. Pure: the same events in the same order always give the same state. */
@@ -133,9 +134,9 @@ function remember(state: RunStreamState, event: RunEventLike): RunStreamState | 
   return { ...state, dedup: { ...state.dedup, [tuple]: { highWater, sparse: [...sparse].sort((a, b) => a - b) } } };
 }
 
-function addOrder(state: RunStreamState, kind: TimelineOrder["kind"], key: string): RunStreamState {
+function addOrder(state: RunStreamState, kind: TimelineOrder["kind"], key: string, ts?: string): RunStreamState {
   if (state.order.some((item) => item.kind === kind && item.key === key)) return state;
-  return { ...state, order: [...state.order, { kind, key }] };
+  return { ...state, order: [...state.order, { kind, key, ...(ts ? { ts } : {}) }] };
 }
 function reduceOther(state: RunStreamState, event: TypedRunEvent): RunStreamState {
   switch (event.type) {
@@ -148,23 +149,28 @@ function reduceOther(state: RunStreamState, event: TypedRunEvent): RunStreamStat
       if (event.attempt < (state.attempts[segmentKey(event)] ?? -1)) return state;
       state = enterAttempt(state, event);
       const key = event.data.call_id;
-      const old = state.tools.get(key) ?? { member: event.member, segment: event.segment, attempt: event.attempt, output: "" };
-      let tool: TimelineTool = old;
-      if (event.type === "tool.call") tool = { ...old, call: event.data };
-      if (event.type === "tool.result") tool = { ...old, result: event.data };
-      if (event.type === "sandbox.output") tool = { ...old, output: tailUtf8(old.output + event.data.text, 64 * 1024) };
-      return { ...addOrder(state, "tool", key), tools: new Map(state.tools).set(key, tool) };
+      const current = state.tools.get(key);
+      if (event.type === "tool.call") {
+        const tool = current ? { ...current, call: event.data } : { member: event.member, segment: event.segment, attempt: event.attempt, call: event.data, output: "" };
+        return { ...addOrder(state, "tool", key, event.ts), tools: new Map(state.tools).set(key, tool) };
+      }
+      // Tool results and sandbox output only decorate calls already present in the timeline.
+      if (!current || current.member !== event.member || current.segment !== event.segment || current.attempt !== event.attempt) return state;
+      const tool: TimelineTool = event.type === "tool.result"
+        ? { ...current, result: event.data }
+        : { ...current, output: tailUtf8(current.output + event.data.text, 64 * 1024) };
+      return { ...state, tools: new Map(state.tools).set(key, tool) };
     }
     case "interaction.requested": {
       const key = event.data.interaction.interaction_id;
-      return { ...addOrder(state, "interaction", key), interactions: new Map(state.interactions).set(key, { ...state.interactions.get(key), request: event.data }) };
+      return { ...addOrder(state, "interaction", key, event.ts), interactions: new Map(state.interactions).set(key, { ...state.interactions.get(key), request: event.data }) };
     }
     case "interaction.resolved": {
       const key = event.data.interaction_id;
-      return { ...addOrder(state, "interaction", key), interactions: new Map(state.interactions).set(key, { ...state.interactions.get(key), resolution: event.data }) };
+      return { ...addOrder(state, "interaction", key, event.ts), interactions: new Map(state.interactions).set(key, { ...state.interactions.get(key), resolution: event.data }) };
     }
     case "artifact.created": case "artifact.updated": return { ...state, artifacts: { ...state.artifacts, [event.data.artifact.path]: event.data.artifact.digest } };
-    case "team.message": return { ...addOrder(state, "team", event.data.message_id), teamSignal: state.teamSignal + 1, teamMessages: [...state.teamMessages, event.data] };
+    case "team.message": return { ...addOrder(state, "team", event.data.message_id, event.ts), teamSignal: state.teamSignal + 1, teamMessages: [...state.teamMessages, event.data] };
     case "team.task.created": case "team.task.updated": case "team.member.status": return { ...state, teamSignal: state.teamSignal + 1 };
     case "usage.update": return { ...state, usage: event.data };
     default: return state;

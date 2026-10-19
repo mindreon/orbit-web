@@ -8,6 +8,7 @@ export interface IdentityValue {
   principal: Principal | null;
   tenants: readonly Tenant[];
   currentTenant: Tenant | null;
+  defaultTenant: string | null;
   roles: readonly string[];
   platformOperator: boolean;
   rememberedTenant: string | null;

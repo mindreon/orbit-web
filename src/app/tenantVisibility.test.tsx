@@ -9,6 +9,7 @@ import { TenantGate } from "../platform/tenancy/TenantGate";
 
 vi.mock("../platform/useMediaQuery", () => ({ BREAKPOINT: { sm: "640px" }, useMediaQuery: () => true }));
 vi.mock("../platform/tenancy/WorkspaceProvider", () => ({ useWorkspace: () => ({ current: { id: "w", name: "默认工作空间" }, workspaces: [{ id: "w", name: "默认工作空间" }], select: vi.fn() }) }));
+vi.mock("../features/sessions", () => ({ RecentSessions: () => null }));
 afterEach(cleanup);
 const tenant = { id: "t", name: "Internal Tenant Name", slug: "internal" };
 const identity = {
@@ -21,7 +22,7 @@ it.each(["shell", "me", "unprovisioned"] as const)("does not render tenant vocab
   expect(container.textContent).not.toMatch(/租户|组织|Internal Tenant Name/);
   if (page === "shell") {
     expect(screen.getByRole("combobox", { name: "工作空间 默认工作空间" })).toBeTruthy();
-    expect(screen.getByRole("link", { name: "新建会话" }).getAttribute("href")).toBe("/sessions");
+    expect(screen.getByRole("link", { name: "新建会话" }).getAttribute("href")).toBe("/sessions?new=");
   }
   if (page === "unprovisioned") {
     expect(screen.getByText("账号尚未开通，请联系管理员")).toBeTruthy();

@@ -8,6 +8,8 @@ const root = "/project/src/";
 const item = (file, code) => ({ filename: root + file, code });
 new RuleTester({ languageOptions: { parser: tseslint.parser, ecmaVersion: "latest", sourceType: "module" } }).run("module-boundaries", rule, {
   valid: [
+    item("features/interactions/inbox/InboxPage.tsx", 'import { ApprovalCard } from "../ApprovalCard"'),
+    item("features/interactions/inbox/InboxPage.tsx", 'import { describeFailure } from "../../../api/errors"'),
     item("ui/Button.tsx", 'import { cn } from "../lib/cn"'),
     item("components/Card.tsx", 'import type { Asset } from "../api/types"'),
     item("features/sessions/Page.tsx", 'import { TeamBoard } from "../teams"'),
@@ -17,10 +19,14 @@ new RuleTester({ languageOptions: { parser: tseslint.parser, ecmaVersion: "lates
     item("ui/Dialog.tsx", 'import * as Dialog from "@radix-ui/react-dialog"'),
   ],
   invalid: [
+    item("features/interactions/inbox/InboxPage.tsx", 'import { controlInboxSource } from ".."'),
     item("features/assets/Page.tsx", 'import { auth } from "../../platform/client"'),
     item("platform/client.ts", 'export { AuthController } from "./identity/control/controller"'),
-    item("features/interactions/inbox/InboxPage.tsx", 'import { fetchMe } from "../../../api/auth"'),
-    item("features/interactions/inbox/InboxPage.tsx", 'import { ApprovalCard } from "../ApprovalCard"'),
+    item("features/interactions/inbox/InboxPage.tsx", 'import { fetchHistory } from "../../../api/history"'),
+    item("features/interactions/inbox/InboxPage.tsx", 'import { stream } from "../../../api/streams"'),
+    item("features/interactions/inbox/InboxPage.tsx", 'import { resolve } from "../api"'),
+    item("features/interactions/ApprovalCard.tsx", 'import { api } from "../../platform/client"'),
+    item("features/interactions/Cards.tsx", 'import { fetchHistory } from "../../api/history"'),
     item("ui/Thing.tsx", 'import { api } from "../api/client"'),
     item("lib/tool.ts", 'import { Button } from "../ui/Button"'),
     item("api/client.ts", 'import { useState } from "react"'),

@@ -35,7 +35,7 @@ function mount(adapter: IdentityAdapter, memberships = tenants) {
     const tenant = new Headers(init?.headers).get("X-Orbit-Tenant");
     requests.push(tenant);
     if (tenant && !memberships.some((item) => item.id === tenant)) return new Response(JSON.stringify({ error: { code: "FORBIDDEN", message: "not an active member", retryable: false } }), { status: 403 });
-    return new Response(JSON.stringify({ principal: { id: "p", email: "a@b.c", display_name: "A", kind: "user" }, tenants: memberships, current_tenant: tenant, roles: [], platform_operator: false } satisfies Me), { headers: { "Content-Type": "application/json" } });
+    return new Response(JSON.stringify({ principal: { id: "p", email: "a@b.c", display_name: "A", kind: "user" }, tenants: memberships, current_tenant: tenant, default_tenant: null, roles: [], platform_operator: false } satisfies Me), { headers: { "Content-Type": "application/json" } });
   } });
   render(<QueryClientProvider client={cache}><MemoryRouter initialEntries={["/private"]}><IdentityProvider adapter={adapter} client={client}><Routes><Route path="/login" element={<div>login route</div>} /><Route element={<RequireIdentity />}><Route element={<TenantGate />}><Route path="/private" element={<Controls />} /></Route></Route></Routes></IdentityProvider></MemoryRouter></QueryClientProvider>);
   return { cache, requests };

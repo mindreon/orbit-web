@@ -1,4 +1,5 @@
 import { ChevronDown } from "lucide-react";
+import { cloneElement, isValidElement, useId } from "react";
 import type { InputHTMLAttributes, SelectHTMLAttributes, TextareaHTMLAttributes } from "react";
 import { cn } from "../lib/cn";
 
@@ -25,12 +26,29 @@ export function Select({ className, children, ...rest }: SelectHTMLAttributes<HT
   );
 }
 
+/**
+ * A labelled control. A single element child is tied to the label by id, so the label names only the control
+ * (wrapping a select would fold every option's text into its label); other children fall back to a wrapping label.
+ */
 export function Field({ label, error, children }: { label: string; error?: string; children: React.ReactNode }) {
+  const fallbackId = useId();
+  const caption = "mb-1 block text-small font-medium text-gray-700";
+  const message = error ? <span className="mt-1 block text-small text-danger-700">{error}</span> : null;
+  if (!isValidElement<{ id?: string }>(children)) {
+    return (
+      <label className="block text-body">
+        <span className={caption}>{label}</span>
+        {children}
+        {message}
+      </label>
+    );
+  }
+  const id = children.props.id ?? fallbackId;
   return (
-    <label className="block text-body">
-      <span className="mb-1 block text-small font-medium text-gray-700">{label}</span>
-      {children}
-      {error ? <span className="mt-1 block text-small text-danger-700">{error}</span> : null}
-    </label>
+    <div className="block text-body">
+      <label htmlFor={id} className={caption}>{label}</label>
+      {cloneElement(children, { id })}
+      {message}
+    </div>
   );
 }

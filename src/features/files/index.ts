@@ -1,0 +1,1 @@
+export { FileArea } from "./FileArea";

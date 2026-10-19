@@ -14,6 +14,7 @@ import { ErrorBoundary } from "./ErrorBoundary";
 import { MePage } from "./MePage";
 import { NotFoundPage } from "./NotFoundPage";
 import { featureRoutes } from "./routes";
+import { InboxSourceContext, controlInboxSource } from "../features/interactions";
 
 const queryClient = createQueryClient((error) => toast.error(describeFailure("操作失败", error)));
 const SignInPage = defaultIdentity.SignInPage;
@@ -24,7 +25,7 @@ export function App() {
       <Route path="/login" element={<SignInPage />} />
       {CallbackPage ? <Route path="/auth/callback" element={<CallbackPage />} /> : null}
       <Route element={<RequireIdentity />}>
-        <Route element={<TenantGate />}><Route element={<WorkspaceProvider><AppLayout /></WorkspaceProvider>}>
+        <Route element={<TenantGate />}><Route element={<WorkspaceProvider><InboxSourceContext.Provider value={controlInboxSource}><AppLayout /></InboxSourceContext.Provider></WorkspaceProvider>}>
           <Route index element={<Navigate to="/sessions" replace />} />
           {featureRoutes}
           <Route path="me" element={<MePage />} /><Route path="*" element={<NotFoundPage />} />

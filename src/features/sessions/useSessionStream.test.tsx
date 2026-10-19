@@ -1,0 +1,36 @@
+// @vitest-environment jsdom
+import { act, cleanup, renderHook, waitFor } from "@testing-library/react";
+import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import type { ReactNode } from "react";
+import { afterEach, expect, it, vi } from "vitest";
+import { openSessionStream, type StreamOptions } from "../../api/streams";
+import { fetchRunHistory } from "../../api/history";
+import type { Run } from "../../api/types";
+import { qk } from "../../platform/queryKeys";
+import { useSessionStream } from "./useSessionStream";
+vi.mock("../../api/streams", () => ({ openSessionStream: vi.fn(async () => undefined), openRunStream: vi.fn() }));
+vi.mock("../../api/history", () => ({ fetchRunHistory: vi.fn() }));
+vi.mock("../../platform/client", () => ({ api: {} }));
+afterEach(() => { cleanup(); vi.clearAllMocks(); });
+it("cursor expired rebuilds history and resumes; a second expiry is fatal", async () => {
+  const run = { id: "r" } as Run;
+  const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+  client.setQueryData(qk.runs("t", "s"), { items: [run] });
+  const event = (text: string) => ({ id: "r:main:1:0:1", run_id: "r", member: "main", segment: 1, attempt: 0, type: "message.final" as const, data: { message_id: "m", text } });
+  vi.mocked(fetchRunHistory).mockResolvedValueOnce({ events: [event("before")] as never, resumeFrom: "10" }).mockResolvedValueOnce({ events: [event("rebuilt")] as never, resumeFrom: "20" });
+  const wrapper = ({ children }: { children: ReactNode }) => <QueryClientProvider client={client}>{children}</QueryClientProvider>;
+  const view = renderHook(() => useSessionStream("s", "t", [run], "active"), { wrapper });
+  await waitFor(() => expect(openSessionStream).toHaveBeenCalledTimes(1));
+  expect(view.result.current.states.get("r")?.messages[0].text).toBe("before");
+  const args = () => vi.mocked(openSessionStream).mock.calls.at(-1)![0] as StreamOptions;
+  await act(async () => { args().onCursorExpired("10"); });
+  await waitFor(() => expect(openSessionStream).toHaveBeenCalledTimes(2));
+  expect(args().lastEventId).toBe("20");
+  expect(view.result.current.states.get("r")?.messages[0].text).toBe("rebuilt");
+  act(() => { args().onCursorExpired("20"); });
+  expect(view.result.current.stream.status).toBe("fatal");
+  expect(view.result.current.stream).toEqual({ status: "fatal", error: expect.objectContaining({ message: "游标连续过期，请刷新" }) });
+  expect(fetchRunHistory).toHaveBeenCalledTimes(2);
+  expect(openSessionStream).toHaveBeenCalledTimes(2);
+  view.unmount(); client.clear();
+});

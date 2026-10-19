@@ -3,6 +3,7 @@ type TenantId = string | null;
 export const qk = {
   me: (tenant: TenantId) => [tenant, "me"] as const,
   workspaces: (tenant: TenantId) => [tenant, "workspaces"] as const,
+  sessionLists: (tenant: TenantId) => [tenant, "sessions"] as const,
   sessions: (tenant: TenantId, workspace?: string) => [tenant, "sessions", workspace] as const,
   session: (tenant: TenantId, id: string) => [tenant, "session", id] as const,
   messages: (tenant: TenantId, id: string) => [tenant, "session", id, "messages"] as const,

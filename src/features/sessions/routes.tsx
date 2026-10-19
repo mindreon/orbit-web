@@ -1,7 +1,8 @@
 import { lazy } from "react";
 import { Route } from "react-router";
-const Page = lazy(() => import("./Page"));
+const Home = lazy(() => import("./Page"));
+const SessionPage = lazy(() => import("./SessionPage"));
 export const routes = <>
-  <Route path="sessions" element={<Page title="会话" />} />
-  <Route path="sessions/:sessionId" element={<Page title="会话" />} />
+  <Route path="sessions" element={<Home />} />
+  <Route path="sessions/:sessionId" element={<SessionPage />} />
 </>;

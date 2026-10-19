@@ -3,7 +3,15 @@ import { mkdir, readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
 
 interface Seed { tenant_id: string; principal_id: string; workspace_id: string }
-export const test = base.extend<{ seed: Seed; testMcpUrl: string; recordRun(id: string): Promise<void> }>({
+export interface ToolCounts { wait_seconds: { started: number; finished: number }; notify_send: { started: number; finished: number } }
+export const test = base.extend<{ seed: Seed; testMcpUrl: string; readCalls(marker: string): Promise<ToolCounts>; recordRun(id: string): Promise<void> }>({
+  readCalls: async ({ request, testMcpUrl }, use) => {
+    await use(async (marker) => {
+      const response = await request.get(`${testMcpUrl}/__test/calls`, { params: { marker } });
+      expect(response.ok()).toBe(true);
+      return response.json() as Promise<ToolCounts>;
+    });
+  },
   seed: async ({ baseURL: _baseURL }, use) => {
     const file = process.env.ORBIT_E2E_SEED;
     if (!file || !process.env.ORBIT_E2E_BASE_URL) throw new Error("Run through infra scripts/v2-web-e2e.sh: seed and base URL are required");

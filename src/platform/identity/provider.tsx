@@ -46,6 +46,7 @@ export function IdentityProvider({ adapter, client, children }: { adapter: Ident
     principal: me.data?.principal ?? null,
     tenants: me.data?.tenants ?? [],
     currentTenant: me.data?.tenants.find((item) => item.id === me.data.current_tenant) ?? null,
+    defaultTenant: me.data?.default_tenant ?? null,
     roles: me.data?.roles ?? [],
     platformOperator: me.data?.platform_operator ?? false,
     rememberedTenant: adapter.credentials.tenant(),

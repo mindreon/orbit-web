@@ -17,4 +17,4 @@ export async function login(page: import("@playwright/test").Page, email = "dev@
   await page.getByRole("button", { name: "登录", exact: true }).click();
   await expect(page).not.toHaveURL(/\/login$/);
 }
-export const journeyMarker = (journey: number) => `wj${journey}-${crypto.randomUUID()}`;
+export const journeyMarker = (journey: number) => `jw${journey}-${crypto.randomUUID()}`;

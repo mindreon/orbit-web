@@ -1792,6 +1792,8 @@ export interface components {
             platform_operator: boolean;
             /** Format: uuid */
             current_tenant: string | null;
+            /** Format: uuid */
+            default_tenant: string | null;
             principal: components["schemas"]["Principal"];
             roles: string[];
             tenants: components["schemas"]["Tenant"][];
