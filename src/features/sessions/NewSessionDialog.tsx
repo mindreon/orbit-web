@@ -8,6 +8,7 @@ import { Alert } from "../../ui/Alert";
 import { Button } from "../../ui/Button";
 import { Dialog } from "../../ui/Dialog";
 import { Field, Input, Select } from "../../ui/fields";
+import { EntryPicker } from "../../components/EntryPicker";
 import { createSession, useEntries } from "./api";
 export const policyLabels = { queue: "排队", steer: "插话", interrupt: "打断" };
 export function NewSessionDialog({ onClose, onCreated }: { onClose(): void; onCreated(session: Session): void }) {
@@ -27,7 +28,7 @@ export function NewSessionDialog({ onClose, onCreated }: { onClose(): void; onCr
     <Field label="工作空间"><Select className="w-full" value={workspaceId} onChange={(event) => setWorkspaceId(event.target.value)}>{workspace.workspaces.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}</Select></Field>
     <Field label="搜索入口"><Input value={search} onChange={(event) => setSearch(event.target.value)} /></Field>
     <Field label="入口类型"><Select className="w-full" value={kind} disabled={locked} onChange={(event) => { setKind(event.target.value as EntryKind); setEntry(""); }}><option value="agent">专家</option><option value="team">专家团</option></Select></Field>
-    <Field label="入口"><Select className="w-full" required value={entry} onChange={(event) => { setEntry(event.target.value); setKind(event.target.value.split(":")[0] as EntryKind); }}><option value="">选择专家或专家团</option>{(["agent", "team"] as const).map((group) => <optgroup key={group} label={group === "agent" ? "专家" : "专家团"}>{entries.data?.filter((item) => item.kind === group && (!locked || group === kind) && (`${item.publisher}/${item.name}`.includes(search) || entry === `${item.kind}:${item.publisher}/${item.name}`)).map((item) => <option key={item.id} value={`${item.kind}:${item.publisher}/${item.name}`}>{group === "agent" ? "专家" : "专家团"} · {item.publisher}/{item.name}</option>)}</optgroup>)}</Select></Field>
+    <EntryPicker entries={(entries.data ?? []).filter((item) => `${item.publisher}/${item.name}`.includes(search) || entry === `${item.kind}:${item.publisher}/${item.name}`)} value={entry} kind={locked ? kind : undefined} onChange={(value) => { setEntry(value); setKind(value.split(":")[0] as EntryKind); }} />
     <Field label="标题"><Input value={title} onChange={(event) => setTitle(event.target.value)} placeholder="可留空" /></Field>
     <Field label="消息策略"><Select className="w-full" value={policy} onChange={(event) => setPolicy(event.target.value as typeof policy)}>{Object.entries(policyLabels).map(([value, label]) => <option key={value} value={value}>{label}</option>)}</Select></Field>
     <p className="text-caption text-muted-foreground">排队等待当前运行结束；插话加入当前运行；打断停止当前运行后开始。</p>

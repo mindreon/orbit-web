@@ -26,8 +26,9 @@ it.each(["shell", "me", "unprovisioned"] as const)("does not render tenant vocab
   }
   if (page === "unprovisioned") {
     expect(screen.getByText("账号尚未开通，请联系管理员")).toBeTruthy();
-    expect(screen.queryByText("account-id")).toBeNull();
-    expect(screen.getAllByRole("button")).toHaveLength(1);
+    expect(screen.getByText("account-id")).toBeTruthy();
+    expect(screen.getByRole("button", { name: "复制账号 ID" })).toBeTruthy();
+    expect(screen.getAllByRole("button")).toHaveLength(2);
     expect(screen.getByRole("button", { name: "退出登录" })).toBeTruthy();
   }
 });

@@ -1,5 +1,6 @@
-import { useInfiniteQuery, useQuery } from "@tanstack/react-query";
-import type { Asset, Session, S } from "../../api/types";
+import { useInfiniteQuery } from "@tanstack/react-query";
+import type { Session, S } from "../../api/types";
+export { useEntries } from "../../platform/entries";
 import type { RequestOptions } from "../../api/client";
 import { api } from "../../platform/client";
 import { useIdentity } from "../../platform/identity";
@@ -21,13 +22,6 @@ export function useRecentSessions() {
   const { currentTenant } = useIdentity(); const { current } = useWorkspace();
   return useInfiniteQuery({ queryKey: qk.sessions(currentTenant?.id ?? null, current?.id), enabled: Boolean(current), initialPageParam: undefined as string | undefined,
     queryFn: ({ pageParam, signal }) => api.get<Page<Session>>("/sessions", { signal, query: { workspace_id: current?.id, order: "recent", limit: 12, cursor: pageParam } }), getNextPageParam: (page) => page.next_cursor || undefined });
-}
-export function useEntries() {
-  const { currentTenant } = useIdentity();
-  return useQuery({ queryKey: qk.assets(currentTenant?.id ?? null, { entries: true }), queryFn: async ({ signal }) => {
-    const [agents, teams] = await Promise.all([allPages<Asset>("/assets", { signal, query: { kind: "agent" } }, 10), allPages<Asset>("/assets", { signal, query: { kind: "team" } }, 10)]);
-    return [...agents.items, ...teams.items].filter((item) => item.status === "active");
-  } });
 }
 export const createSession = (body: { workspace_id: string; entry_kind: S["EntryKind"]; entry_ref: string; title: string; message_policy: Session["message_policy"] }, key: string) => api.post<Session>("/sessions", body, { idempotencyKey: key });
 export const activeStatus = (status: S["RunState"]) => ["queued", "running", "waiting_input", "waiting_approval", "paused"].includes(status);

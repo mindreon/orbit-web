@@ -181,6 +181,42 @@ A single list of the same cards, 12px apart, `max-w-reading`, each with a top li
 - In the session page the board sits in a collapsible panel above the timeline of a team run (open while the run is
   active, collapsed once it ends); on the replay page it is a full section.
 
+### Schedules (`/schedules`, WP9e)
+
+- List page: header "定时任务" with a primary "新建定时任务" on the right. Rows, not cards: one `bg-card rounded-card`
+  container, 56px rows separated by hairlines. Each row: name (`text-body font-medium`) with the entry under it
+  (kind label · mono ref, `text-caption text-muted-foreground`); the cron's human reading in `text-small` with the raw
+  cron + timezone in mono caption under it; status badge (启用 / 已暂停, plus a muted "同步中" chip); next fire time
+  right-aligned `tabular-nums`. The whole row links to the detail. Phone: the cron and next-fire columns fold under
+  the name; nothing scrolls sideways.
+- Form (`/schedules/new`, edit): a single column `max-w-reading`, grouped into three quiet blocks with
+  `text-small font-medium text-muted-foreground` group labels: 基本 (名称, 描述), 运行 (入口, 提示词 textarea 6 rows),
+  时间 (cron with its live human reading and the next three fire times under it as mono captions; 时区 select;
+  重叠策略; 补跑窗口), 预算 (积分 input showing the millicredit value as a caption). Field errors sit directly under
+  the field in danger-700 `text-small`; the first failing field gets focus. Footer: 取消 (ghost) and the primary
+  submit, right-aligned, sticky at the bottom of the viewport on phones.
+- Detail: header with name, status badge and actions (立即运行 primary; 暂停/恢复; 编辑; 删除 behind a confirm
+  dialog in danger). Then a facts grid like the run replay header (入口, cron reading, 时区, 下次触发, 预算, 重叠策略,
+  补跑窗口), the prompt in a `bg-muted rounded-card` block, and 最近运行 as a table (触发时间, 状态 badge, 耗时,
+  错误码, link 查看运行 → `/runs/:id`, session link).
+
+### Admin (`/admin/*`, WP9e)
+
+- The admin area has its own secondary navigation: a horizontal tab row under the page header on all widths
+  (工作空间 · 成员 · API Key · 服务账号 · 模型 · 密钥 · 额度 · 审计), scrollable on phones; the active tab is
+  `font-medium` with a 2px primary underline. Only tabs the user may see are rendered. The sidebar keeps one
+  "管理" and one "审计" entry that land on these tabs.
+- Every admin list is the same table pattern as the run replay tables. Row actions are a trailing ghost icon
+  button opening a dropdown (改角色, 停用/恢复, 吊销, 删除); destructive items are danger and go through a confirm
+  dialog that names the object.
+- Read-only pages (模型, 密钥, 额度) start with a one-line `bg-muted rounded-control px-3 py-2 text-small` note
+  "只读。修改请使用 `orbit-admin`。" Secret values never appear; the 密钥 table has no value column at all.
+- A one-time secret (new API key) shows in a dialog: the key in a mono `bg-muted` box with a copy button, a
+  warning-tinted line "关闭后无法再次查看", and a single primary "我已保存" button that closes it.
+- 用量 (`/usage`): filters in one wrapping row (范围, 时间段, 粒度, 分组). Results table where the last column
+  carries a CSS bar (`bg-primary-100` track-less bar proportional to the max row, 6px high, under the number).
+  `computed_through` as a muted caption above the table; `dirty_hours>0` adds a warning caption.
+
 ### States
 
 Skeletons mirror the final layout (same heights), gray-100 blocks, no shimmer. Errors use `Alert` inline at the

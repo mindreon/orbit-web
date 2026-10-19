@@ -46,11 +46,16 @@ describe("U14 adapter-independent identity flow", () => {
     expect(screen.queryByText(/protected/)).toBeNull();
     if (status === "anonymous") expect(await screen.findByText("login route")).toBeTruthy();
   });
-  it("blocks an unprovisioned account without redirecting or exposing account details", async () => {
+  it("blocks an unprovisioned account without a welcome route and exposes only its copyable ID", async () => {
+    const copy = vi.fn().mockResolvedValue(undefined); Object.defineProperty(navigator, "clipboard", { configurable: true, value: { writeText: copy } });
     mount(memoryIdentity(), []);
     expect(await screen.findByText("账号尚未开通，请联系管理员")).toBeTruthy();
-    expect(screen.queryByText(/protected|welcome route|刷新|复制账号/)).toBeNull();
-    expect(screen.getByRole("button", { name: "退出登录" })).toBeTruthy();
+    expect(screen.queryByText(/protected|welcome route|刷新|邀请/)).toBeNull();
+    expect(screen.getByText("p")).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: "复制账号 ID" }));
+    await waitFor(() => expect(copy).toHaveBeenCalledWith("p"));
+    fireEvent.click(screen.getByRole("button", { name: "退出登录" }));
+    expect(await screen.findByText("login route")).toBeTruthy();
   });
   it.each([null, "stale", "t2"])("selects membership with remembered tenant %s", async (remembered) => {
     const adapter = memoryIdentity("authenticated", remembered);

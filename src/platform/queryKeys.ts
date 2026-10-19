@@ -19,7 +19,9 @@ export const qk = {
   assets: (tenant: TenantId, filter: Readonly<Record<string, unknown>> = {}) => [tenant, "assets", filter] as const,
   asset: (tenant: TenantId, id: string) => [tenant, "asset", id] as const,
   installs: (tenant: TenantId, workspace?: string) => [tenant, "installs", workspace] as const,
+  scheduleLists: (tenant: TenantId) => [tenant, "schedules"] as const,
   schedules: (tenant: TenantId, workspace?: string) => [tenant, "schedules", workspace] as const,
   schedule: (tenant: TenantId, id: string) => [tenant, "schedule", id] as const,
+  adminRoot: (tenant: TenantId) => [tenant, "admin"] as const,
   admin: (tenant: TenantId, resource: string) => [tenant, "admin", resource] as const,
 };

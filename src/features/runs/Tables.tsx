@@ -1,4 +1,4 @@
-import type { ReactNode } from "react";
+import { DataTable as ReplayTable } from "../../components/DataTable";
 import type { S } from "../../api/types";
 import { StatusBadge } from "../../components/StatusBadge";
 import { groupCosts } from "./costs";
@@ -6,9 +6,6 @@ import { decisionChoiceLabels, interactionKindLabels } from "../interactions";
 import { effectStateLabels, endReasonLabels, interactionStateLabels, segmentStateLabels } from "./labels";
 export const credits = (value: number) => `${value / 1000} 积分`;
 export const dateTime = (value?: string | null) => value ? new Date(value).toLocaleString("zh-CN") : "—";
-export function ReplayTable({ name, headers, children }: { name: string; headers: readonly string[]; children: ReactNode }) {
-  return <div className="min-w-0 overflow-x-auto rounded-card bg-card"><table aria-label={name} className="w-full whitespace-nowrap text-left text-small [&_td]:h-10 [&_td]:px-3 [&_th]:h-10 [&_th]:px-3"><thead className="text-caption font-medium text-muted-foreground"><tr>{headers.map((header) => <th key={header} scope="col">{header}</th>)}</tr></thead><tbody className="divide-y divide-border">{children}</tbody></table></div>;
-}
 const numberCell = "text-right tabular-nums";
 export function SegmentTable({ items }: { items: readonly S["Segment"][] }) {
   if (!items.length) return <p className="text-small text-muted-foreground">没有段记录</p>;
