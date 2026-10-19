@@ -1,27 +1,23 @@
 import type { ApiClient } from "./client";
 import { ApiError } from "./errors";
-import type { RunEventLike } from "./runEvents";
+import type { TypedRunEvent } from "./events";
 import { readEventStream, type EventStreamOptions } from "./sse";
 
-/** Minimal hand-written envelope; WP9 can replace it with the generated contract type. */
-export interface RunEvent extends RunEventLike {
-  readonly v: 1;
-  readonly run_id: string;
-  readonly session_id: string;
-  readonly tenant_id: string;
-  readonly ts: string;
-}
+export type RunEvent = TypedRunEvent;
 
 interface StreamToken {
   readonly stream_token: string;
   readonly expires_in: number;
 }
 
-interface StreamOptions {
+export interface StreamOptions {
   readonly client: ApiClient;
   readonly lastEventId?: string;
   readonly signal: AbortSignal;
-  readonly onEvent: (event: RunEvent) => void;
+  readonly onEvent: (event: RunEvent, streamSeq?: string) => void;
+  readonly onFatal: EventStreamOptions["onFatal"];
+  readonly onReconnect?: EventStreamOptions["onReconnect"];
+  readonly onLive?: () => void;
   readonly onEnd?: EventStreamOptions["onEnd"];
   readonly onCursorExpired: EventStreamOptions["onCursorExpired"];
 }
@@ -44,10 +40,12 @@ function openStream(path: string, options: StreamOptions): Promise<void> {
     },
     lastEventId: options.lastEventId,
     signal: options.signal,
-    onFrame: (frame) => options.onEvent(parseRunEvent(frame.data)),
+    onFrame: (frame) => options.onEvent(parseRunEvent(frame.data), frame.id),
+    onConnected: options.onLive,
     onEnd: options.onEnd ?? (() => undefined),
     onCursorExpired: options.onCursorExpired,
-    onFatal: (error) => { throw error; },
+    onFatal: options.onFatal,
+    onReconnect: options.onReconnect,
   });
 }
 

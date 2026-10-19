@@ -104,6 +104,8 @@ export interface EventStreamOptions {
   readonly onFatal: (error: ApiError, lastEventId: string | undefined) => void;
   /** No bytes (including heartbeats) in this interval: cancel the half-open connection and reconnect. */
   readonly idleTimeoutMs?: number;
+  /** A successful SSE connection has been established. */
+  readonly onConnected?: () => void;
   /** A connection failed or dropped and the next attempt is scheduled. */
   readonly onReconnect?: (info: { attempt: number; delayMs: number; error: unknown }) => void;
   readonly backoff?: BackoffPolicy;
@@ -164,6 +166,7 @@ export async function readEventStream(options: EventStreamOptions): Promise<void
         throw new ApiError(response.status, { code: "INVALID_EVENT_STREAM", message: "响应不是 text/event-stream", retryable: false });
       }
       if (!response.body) throw new Error("响应没有正文");
+      options.onConnected?.();
       const parser = new SseParser();
       const reader = response.body.getReader();
       const decoder = new TextDecoder();

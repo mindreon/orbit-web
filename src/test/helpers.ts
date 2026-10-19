@@ -1,5 +1,5 @@
 /** Shared by the unit tests: small stand-ins for the browser and the identity provider. Not imported by the app. */
-import type { KeyValueStore } from "../app/auth/storage";
+interface KeyValueStore { getItem(key: string): string | null; setItem(key: string, value: string): void; removeItem(key: string): void }
 
 export function memoryStore(initial: Record<string, string> = {}): KeyValueStore & { entries: Map<string, string> } {
   const entries = new Map(Object.entries(initial));

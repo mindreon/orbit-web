@@ -81,3 +81,13 @@ describe("preview registry rendering", () => {
     expect(file.readText).not.toHaveBeenCalled();
   });
 });
+
+it("uses the caller's localized failure formatter without importing API runtime code", async () => {
+  const file = source("denied.txt", "");
+  const error = new Error("permission denied");
+  vi.mocked(file.readText).mockRejectedValueOnce(error);
+  const describeError = vi.fn(() => "打开文件失败：你没有权限执行此操作。");
+  render(<FilePreview source={file} describeError={describeError} />);
+  expect(await screen.findByText("打开文件失败：你没有权限执行此操作。")).toBeTruthy();
+  expect(describeError).toHaveBeenCalledWith(error);
+});

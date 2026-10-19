@@ -24,6 +24,7 @@ export interface RequestOptions {
 
 export interface ApiClient {
   get<T>(path: string, options?: RequestOptions): Promise<T>;
+  getBlob(path: string, options?: RequestOptions): Promise<Blob>;
   post<T>(path: string, body?: unknown, options?: RequestOptions): Promise<T>;
   put<T>(path: string, body?: unknown, options?: RequestOptions): Promise<T>;
   patch<T>(path: string, body?: unknown, options?: RequestOptions): Promise<T>;
@@ -45,9 +46,9 @@ export function createApiClient(config: ApiClientConfig): ApiClient {
   const doFetch = config.fetch ?? ((input, init) => fetch(input, init));
   const newKey = config.newIdempotencyKey ?? (() => crypto.randomUUID());
 
-  async function request<T>(method: Method, path: string, body: unknown, options: RequestOptions = {}): Promise<T> {
+  async function request<T>(method: Method, path: string, body: unknown, options: RequestOptions = {}, blob = false): Promise<T> {
     const authenticated = options.authenticated ?? true;
-    const headers = new Headers({ Accept: "application/json" });
+    const headers = new Headers({ Accept: blob ? "*/*" : "application/json" });
     if (body !== undefined) headers.set("Content-Type", "application/json");
     if (method !== "GET") headers.set("Idempotency-Key", options.idempotencyKey ?? newKey());
     if (authenticated) {
@@ -71,6 +72,7 @@ export function createApiClient(config: ApiClientConfig): ApiClient {
       if (response.status === 401 && authenticated) config.credentials.unauthorized();
       throw error;
     }
+    if (blob) return await response.blob() as T;
     if (response.status === 204) return undefined as T;
     const text = await response.text();
     return (text === "" ? undefined : JSON.parse(text)) as T;
@@ -78,6 +80,7 @@ export function createApiClient(config: ApiClientConfig): ApiClient {
 
   return {
     get: (path, options) => request("GET", path, undefined, options),
+    getBlob: (path, options) => request("GET", path, undefined, options, true),
     post: (path, body, options) => request("POST", path, body, options),
     put: (path, body, options) => request("PUT", path, body, options),
     patch: (path, body, options) => request("PATCH", path, body, options),

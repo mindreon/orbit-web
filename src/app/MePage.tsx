@@ -1,13 +1,11 @@
-import { Button } from "../ui/Button";
 import { PageBody, PageHeader } from "../ui/PageHeader";
 import { StatusBadge } from "../ui/StatusBadge";
 import { panelClass } from "../ui/card";
 import { cn } from "../lib/cn";
-import { useAuth } from "./auth/context";
-import { toast } from "./toast/store";
+import { useIdentity } from "../platform/identity";
 
 export function MePage() {
-  const { principal, tenants, currentTenant, roles, switchTenant } = useAuth();
+  const { principal, roles } = useIdentity();
   if (!principal) return null;
 
   return (
@@ -31,35 +29,6 @@ export function MePage() {
             </dl>
           </section>
 
-          <section className={cn(panelClass, "p-5")}>
-            <h2 className="text-body font-semibold text-foreground">租户</h2>
-            <ul className="mt-3 divide-y divide-border">
-              {tenants.map((tenant) => {
-                const current = tenant.id === currentTenant?.id;
-                return (
-                  <li key={tenant.id} className="flex items-center gap-3 py-2.5">
-                    <div className="min-w-0 flex-1">
-                      <p className="truncate text-body font-medium text-foreground">{tenant.name}</p>
-                      <p className="truncate text-small text-muted-foreground">{tenant.slug}</p>
-                    </div>
-                    {current ? (
-                      <StatusBadge tone="info">当前</StatusBadge>
-                    ) : (
-                      <Button
-                        size="sm"
-                        onClick={() => {
-                          switchTenant(tenant.id);
-                          toast.success(`已切换到 ${tenant.name}`);
-                        }}
-                      >
-                        切换
-                      </Button>
-                    )}
-                  </li>
-                );
-              })}
-            </ul>
-          </section>
         </div>
       </PageBody>
     </>

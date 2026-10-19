@@ -35,10 +35,10 @@ describe("stream adapters", () => {
     const onEvent = vi.fn();
     const onEnd = vi.fn();
     const signal = new AbortController().signal;
-    const done = open({ client, ...ids, lastEventId: "40", signal, onEvent, onEnd, onCursorExpired: vi.fn() });
+    const done = open({ client, ...ids, lastEventId: "40", signal, onEvent, onEnd, onFatal: vi.fn(), onCursorExpired: vi.fn() });
     await vi.runAllTimersAsync();
     await done;
-    expect(onEvent).toHaveBeenCalledExactlyOnceWith(event);
+    expect(onEvent).toHaveBeenCalledExactlyOnceWith(event, "42");
     expect(onEnd).toHaveBeenCalledExactlyOnceWith("run_finished");
     expect(requests.map(({ url }) => url)).toEqual([`${path}/stream-token`, `${path}/events`, `${path}/stream-token`, `${path}/events`]);
     const tokens = requests.filter(({ url }) => url.endsWith("/stream-token"));
@@ -55,7 +55,7 @@ describe("stream adapters", () => {
     const { client, requests } = setup((url) => url.endsWith("/stream-token")
       ? json({ stream_token: `stream-${++token}`, expires_in: 900 })
       : token === 1 ? apiError(401, "TOKEN_INVALID") : stream(end));
-    await openRunStream({ client, runId: "r1", lastEventId: "9", signal: new AbortController().signal, onEvent: vi.fn(), onEnd: vi.fn(), onCursorExpired: vi.fn() });
+    await openRunStream({ client, runId: "r1", lastEventId: "9", signal: new AbortController().signal, onEvent: vi.fn(), onEnd: vi.fn(), onFatal: vi.fn(), onCursorExpired: vi.fn() });
     expect(requests.filter(({ url }) => url.endsWith("/events")).map(({ headers }) => [headers.get("Authorization"), headers.get("Last-Event-ID")])).toEqual([
       ["Bearer stream-1", "9"], ["Bearer stream-2", "9"],
     ]);
@@ -64,21 +64,23 @@ describe("stream adapters", () => {
   it("hands an expired cursor to the caller without reconnecting", async () => {
     const { client, requests } = setup((url) => url.endsWith("/stream-token") ? json({ stream_token: "fresh", expires_in: 900 }) : apiError(409, "EVENT_CURSOR_EXPIRED"));
     const onCursorExpired = vi.fn();
-    await openSessionStream({ client, sessionId: "s1", lastEventId: "12", signal: new AbortController().signal, onEvent: vi.fn(), onCursorExpired });
+    await openSessionStream({ client, sessionId: "s1", lastEventId: "12", signal: new AbortController().signal, onEvent: vi.fn(), onFatal: vi.fn(), onCursorExpired });
     expect(onCursorExpired).toHaveBeenCalledExactlyOnceWith("12");
     expect(requests).toHaveLength(2);
   });
 
   it.each(["token", "gateway"])("propagates a fatal %s refusal", async (source) => {
     const { client, requests } = setup((url) => source === "token" || url.endsWith("/events") ? apiError(403, "STREAM_FORBIDDEN") : json({ stream_token: "fresh", expires_in: 900 }));
-    await expect(openRunStream({ client, runId: "r1", signal: new AbortController().signal, onEvent: vi.fn(), onCursorExpired: vi.fn() })).rejects.toMatchObject({ code: "STREAM_FORBIDDEN", status: 403 });
+    const onFatal = vi.fn();
+    await openRunStream({ client, runId: "r1", signal: new AbortController().signal, onEvent: vi.fn(), onFatal, onCursorExpired: vi.fn() });
+    expect(onFatal).toHaveBeenCalledWith(expect.objectContaining({ code: "STREAM_FORBIDDEN", status: 403 }), undefined);
     expect(requests).toHaveLength(source === "token" ? 1 : 2);
   });
 
   it.each(['{', 'null', '[]', '{"v":2,"type":"message.delta"}', '{"v":1}', '{"v":1,"type":3}'])("rejects malformed event %s without retrying", async (data) => {
     const { client, requests } = setup((url) => url.endsWith("/stream-token") ? json({ stream_token: "fresh", expires_in: 900 }) : stream(`data: ${data}\n\n`));
     const onEvent = vi.fn();
-    const done = openRunStream({ client, runId: "r1", signal: new AbortController().signal, onEvent, onCursorExpired: vi.fn() });
+    const done = openRunStream({ client, runId: "r1", signal: new AbortController().signal, onEvent, onFatal: vi.fn(), onCursorExpired: vi.fn() });
     await expect(done).rejects.toBeInstanceOf(ApiError);
     expect(onEvent).not.toHaveBeenCalled();
     expect(requests).toHaveLength(2);
@@ -87,14 +89,14 @@ describe("stream adapters", () => {
   it("surfaces an onEvent error", async () => {
     const { client, requests } = setup((url) => url.endsWith("/stream-token") ? json({ stream_token: "fresh", expires_in: 900 }) : stream(`data: ${JSON.stringify(event)}\n\n`));
     const error = new Error("handler failed");
-    await expect(openRunStream({ client, runId: "r1", signal: new AbortController().signal, onEvent: () => { throw error; }, onCursorExpired: vi.fn() })).rejects.toBe(error);
+    await expect(openRunStream({ client, runId: "r1", signal: new AbortController().signal, onEvent: () => { throw error; }, onFatal: vi.fn(), onCursorExpired: vi.fn() })).rejects.toBe(error);
     expect(requests).toHaveLength(2);
   });
 
   it("stops while acquiring a token when aborted", async () => {
     const controller = new AbortController();
     const { client, requests } = setup(() => { controller.abort(); return json({ stream_token: "fresh", expires_in: 900 }); });
-    await openRunStream({ client, runId: "r1", signal: controller.signal, onEvent: vi.fn(), onCursorExpired: vi.fn() });
+    await openRunStream({ client, runId: "r1", signal: controller.signal, onEvent: vi.fn(), onFatal: vi.fn(), onCursorExpired: vi.fn() });
     expect(requests).toHaveLength(1);
   });
 });

@@ -1,0 +1,124 @@
+import { afterEach, expect, it, vi } from "vitest";
+import { createStreamController } from "./streamController";
+import { openSessionStream } from "./streams";
+import type { StreamOptions } from "./streams";
+import type { ApiClient } from "./client";
+vi.mock("./streams", () => ({ openSessionStream: vi.fn(async () => undefined), openRunStream: vi.fn(async () => undefined) }));
+afterEach(() => { vi.clearAllMocks(); vi.useRealTimers(); });
+function setup() {
+  let listener: () => void = () => undefined;
+  const visibility = { hidden: false, addEventListener: vi.fn((_type: string, callback: () => void) => { listener = callback; }), removeEventListener: vi.fn() };
+  const onState = vi.fn();
+  const onEvent = vi.fn();
+  const rebuild = vi.fn(async () => "20");
+  const controller = createStreamController({ client: {} as ApiClient, target: { sessionId: "s" }, lastEventId: "10", onEvent, onState, onCursorExpired: rebuild, visibility });
+  return { controller, onState, onEvent, rebuild, visibility, change: () => listener(), args: () => vi.mocked(openSessionStream).mock.calls.at(-1)![0] as StreamOptions };
+}
+it("tracks live/reconnect/end and exposes resume metadata without throwing fatal errors", async () => {
+  const value = setup();
+  value.controller.start();
+  expect(value.args().lastEventId).toBe("10");
+  value.args().onLive?.();
+  expect(value.onState).toHaveBeenLastCalledWith({ status: "live" });
+  value.args().onReconnect?.({ attempt: 2, delayMs: 1, error: "offline" });
+  expect(value.onState).toHaveBeenLastCalledWith({ status: "reconnecting", attempt: 2 });
+  value.args().onEnd?.("done");
+  expect(value.onState).toHaveBeenLastCalledWith({ status: "ended" });
+  value.controller.stop();
+});
+it("rebuilds once and turns consecutive cursor expiry into a recoverable fatal state", async () => {
+  const value = setup();
+  value.controller.start();
+  value.args().onCursorExpired("10");
+  await vi.waitFor(() => expect(openSessionStream).toHaveBeenCalledTimes(2));
+  expect(value.args().lastEventId).toBe("20");
+  value.args().onCursorExpired("20");
+  expect(value.rebuild).toHaveBeenCalledTimes(1);
+  expect(value.onState).toHaveBeenLastCalledWith(expect.objectContaining({ status: "fatal" }));
+  value.controller.stop();
+});
+it("disconnects only after five hidden minutes, reconnects when visible, and disposes listeners", async () => {
+  vi.useFakeTimers();
+  const value = setup();
+  value.controller.start();
+  const initial = value.args();
+  value.visibility.hidden = true;
+  value.change();
+  await vi.advanceTimersByTimeAsync(299999);
+  expect(initial.signal.aborted).toBe(false);
+  await vi.advanceTimersByTimeAsync(1);
+  expect(initial.signal.aborted).toBe(true);
+  value.visibility.hidden = false;
+  value.change();
+  expect(openSessionStream).toHaveBeenCalledTimes(2);
+  value.controller.stop();
+  expect(value.args().signal.aborted).toBe(true);
+  expect(value.visibility.removeEventListener).toHaveBeenCalledOnce();
+});
+it("advances cursor only with SSE metadata and reconnects explicitly after fatal", () => {
+  const value = setup();
+  value.controller.start();
+  value.controller.start();
+  expect(openSessionStream).toHaveBeenCalledTimes(1);
+  const event = { v: 1, id: "r:m:1:1:1", type: "message.delta", run_id: "r", tenant_id: "t", session_id: "s", member: "m", segment: 1, attempt: 1, ts: "now", data: { message_id: "msg", delta: "text" } } as const;
+  value.args().onEvent(event, "9007199254740999");
+  expect(value.controller.cursor()).toBe("9007199254740999");
+  expect(value.onEvent).toHaveBeenCalledWith(event, "9007199254740999");
+  value.args().onFatal(new Error("forbidden") as never, "9007199254740999");
+  expect(value.onState).toHaveBeenLastCalledWith(expect.objectContaining({ status: "fatal" }));
+  value.controller.reconnect();
+  expect(openSessionStream).toHaveBeenCalledTimes(2);
+  expect(value.args().lastEventId).toBe("9007199254740999");
+  value.controller.stop();
+});
+it("reports history rebuild rejection as fatal rather than an unhandled rejection", async () => {
+  const value = setup();
+  value.rebuild.mockRejectedValueOnce(new Error("history failed"));
+  value.controller.start();
+  value.args().onCursorExpired("10");
+  await vi.waitFor(() => expect(value.onState).toHaveBeenLastCalledWith(expect.objectContaining({ status: "fatal" })));
+  value.controller.stop();
+});
+
+it("allows another cursor rebuild after a successful connection without events", async () => {
+  const value = setup();
+  value.controller.start();
+  value.args().onCursorExpired("10");
+  await vi.waitFor(() => expect(openSessionStream).toHaveBeenCalledTimes(2));
+  value.args().onLive?.();
+  value.args().onCursorExpired("20");
+  await vi.waitFor(() => expect(openSessionStream).toHaveBeenCalledTimes(3));
+  expect(value.rebuild).toHaveBeenCalledTimes(2);
+  expect(value.onState).not.toHaveBeenCalledWith(expect.objectContaining({ status: "fatal" }));
+  value.controller.stop();
+});
+it("reports a hidden-tab disconnection instead of keeping the live state", async () => {
+  vi.useFakeTimers();
+  const value = setup();
+  value.controller.start();
+  value.args().onLive?.();
+  value.visibility.hidden = true;
+  value.change();
+  await vi.advanceTimersByTimeAsync(300000);
+  expect(value.onState).toHaveBeenLastCalledWith({ status: "reconnecting" });
+  value.controller.stop();
+});
+it("keeps a rebuilt cursor when the hidden-tab timer aborts its connection", async () => {
+  vi.useFakeTimers();
+  const value = setup();
+  let complete!: (cursor: string) => void;
+  value.rebuild.mockImplementationOnce(() => new Promise<string>((resolve) => { complete = resolve; }));
+  value.controller.start();
+  value.args().onCursorExpired("10");
+  value.visibility.hidden = true;
+  value.change();
+  await vi.advanceTimersByTimeAsync(300000);
+  complete("30");
+  await Promise.resolve();
+  expect(value.controller.cursor()).toBe("30");
+  expect(openSessionStream).toHaveBeenCalledTimes(1);
+  value.visibility.hidden = false;
+  value.change();
+  expect(value.args().lastEventId).toBe("30");
+  value.controller.stop();
+});

@@ -1,3 +1,5 @@
+import { errorMessage } from "./errorMessages";
+
 /** The error body every `/v1` refusal carries: `{"error": {code, message, retryable, details}}` (design §9.1). */
 export interface ApiErrorBody {
   readonly code: string;
@@ -66,7 +68,7 @@ export function isRetryable(error: unknown): boolean {
 
 /** A user-facing sentence for a failed action. */
 export function describeFailure(action: string, error: unknown): string {
-  if (error instanceof ApiError) return `${action}：${error.message}`;
+  if (error instanceof ApiError) return `${action}：${errorMessage(error.code, error.message)}`;
   if (error instanceof NetworkError) return `${action}：连不上服务器，请检查网络后重试。`;
   return `${action}：${error instanceof Error ? error.message : "未知错误"}`;
 }

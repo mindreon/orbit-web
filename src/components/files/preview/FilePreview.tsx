@@ -1,6 +1,5 @@
 import { ArrowLeft, Check, ChevronRight, Copy, Download, RotateCw } from "lucide-react";
 import { Suspense, useEffect, useState } from "react";
-import { describeFailure } from "../../../api/errors";
 import { cn } from "../../../lib/cn";
 import { formatSize } from "../../../lib/format";
 import { Alert } from "../../../ui/Alert";
@@ -10,6 +9,7 @@ import { CODE, findPreviewer, languageOf } from "./registry";
 import type { FileSource, PreviewProps, Previewer } from "./types";
 
 const ACTION = "flex h-7 w-7 shrink-0 items-center justify-center rounded-control text-gray-500 hover:bg-gray-200";
+const defaultDescribeError = (error: unknown) => `打开文件失败：${error instanceof Error ? error.message : "未知错误"}`;
 const NO_PREVIEW = "此格式暂不支持预览，请下载查看";
 
 /** 路径在最后一个斜杠处分成「所在目录」和文件名；文件在根上时目录为空。 */
@@ -93,7 +93,7 @@ function Fallback({ message, onDownload }: { message: string; onDownload: () => 
  * 怎么画一种格式由 `registry.ts` 里的预览器决定（第一个匹配的赢，没有匹配就只给下载）。
  * `source` 要稳定（useMemo）：它一变就重新读取内容。
  */
-export function FilePreview({ source, assumeText = false, hideFrontmatter = false, pending = false, onBack }: { source: FileSource; assumeText?: boolean; hideFrontmatter?: boolean; pending?: boolean; onBack?: () => void }) {
+export function FilePreview({ source, assumeText = false, hideFrontmatter = false, pending = false, onBack, describeError = defaultDescribeError }: { source: FileSource; assumeText?: boolean; hideFrontmatter?: boolean; pending?: boolean; onBack?: () => void; describeError?: (error: unknown) => string }) {
   const previewer = findPreviewer(source.name, source.mediaType, assumeText);
   const tooLarge = Boolean(previewer?.maxBytes && source.size !== undefined && source.size > previewer.maxBytes);
   const runnable = previewer !== null && !tooLarge && !pending;
@@ -107,11 +107,11 @@ export function FilePreview({ source, assumeText = false, hideFrontmatter = fals
     let gone = false;
     setState({ status: "loading" });
     const read = kind === "text" ? source.readText().then((text) => ({ text })) : source.readBlob().then((blob) => ({ blob }));
-    read.then((loaded) => !gone && setState({ status: "ready", loaded })).catch((err: unknown) => !gone && setState({ status: "error", message: describeFailure("打开文件失败", err) }));
+    read.then((loaded) => !gone && setState({ status: "ready", loaded })).catch((err: unknown) => !gone && setState({ status: "error", message: describeError(err) }));
     return () => {
       gone = true;
     };
-  }, [source, runnable, kind, attempt]);
+  }, [source, runnable, kind, attempt, describeError]);
 
   const canToggle = Boolean(previewer?.hasSource) && state.status === "ready" && runnable;
   return (

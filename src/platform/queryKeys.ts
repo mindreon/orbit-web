@@ -1,0 +1,24 @@
+type TenantId = string | null;
+/** Every cached resource is scoped to the selected tenant, including the tenant-optional profile. */
+export const qk = {
+  me: (tenant: TenantId) => [tenant, "me"] as const,
+  workspaces: (tenant: TenantId) => [tenant, "workspaces"] as const,
+  sessions: (tenant: TenantId, workspace?: string) => [tenant, "sessions", workspace] as const,
+  session: (tenant: TenantId, id: string) => [tenant, "session", id] as const,
+  messages: (tenant: TenantId, id: string) => [tenant, "session", id, "messages"] as const,
+  runs: (tenant: TenantId, id: string) => [tenant, "session", id, "runs"] as const,
+  artifacts: (tenant: TenantId, id: string) => [tenant, "session", id, "artifacts"] as const,
+  run: (tenant: TenantId, id: string) => [tenant, "run", id] as const,
+  runInteractions: (tenant: TenantId, id: string) => [tenant, "run", id, "interactions"] as const,
+  team: (tenant: TenantId, id: string) => [tenant, "run", id, "team"] as const,
+  segments: (tenant: TenantId, id: string) => [tenant, "run", id, "segments"] as const,
+  effects: (tenant: TenantId, id: string) => [tenant, "run", id, "effects"] as const,
+  cost: (tenant: TenantId, id: string) => [tenant, "run", id, "cost"] as const,
+  inbox: (tenant: TenantId) => [tenant, "inbox"] as const,
+  assets: (tenant: TenantId, filter: Readonly<Record<string, unknown>> = {}) => [tenant, "assets", filter] as const,
+  asset: (tenant: TenantId, id: string) => [tenant, "asset", id] as const,
+  installs: (tenant: TenantId, workspace?: string) => [tenant, "installs", workspace] as const,
+  schedules: (tenant: TenantId, workspace?: string) => [tenant, "schedules", workspace] as const,
+  schedule: (tenant: TenantId, id: string) => [tenant, "schedule", id] as const,
+  admin: (tenant: TenantId, resource: string) => [tenant, "admin", resource] as const,
+};
