@@ -20,6 +20,8 @@ export const qk = {
   assets: (tenant: TenantId, filter: Readonly<Record<string, unknown>> = {}) => [tenant, "assets", filter] as const,
   asset: (tenant: TenantId, id: string) => [tenant, "asset", id] as const,
   assetVersion: (tenant: TenantId, asset: string, version: string, part = "detail") => [tenant, "asset", asset, "version", version, part] as const,
+  reviews: (tenant: TenantId) => [tenant, "reviews"] as const,
+  review: (tenant: TenantId, id: string, asset?: string | null) => asset === undefined ? [tenant, "review", id] as const : [tenant, "review", id, asset] as const,
   installs: (tenant: TenantId, workspace?: string) => [tenant, "installs", workspace] as const,
   scheduleLists: (tenant: TenantId) => [tenant, "schedules"] as const,
   schedules: (tenant: TenantId, workspace?: string) => [tenant, "schedules", workspace] as const,

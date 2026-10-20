@@ -1,7 +1,8 @@
 import { lazy } from "react";
 import { Route } from "react-router";
 const Page = lazy(() => import("./Page"));
+const ReviewPage = lazy(() => import("./ReviewPage"));
 export const routes = <>
-  <Route path="reviews" element={<Page title="审核" />} />
-  <Route path="reviews/:versionId" element={<Page title="审核详情" />} />
+  <Route path="reviews" element={<Page />} />
+  <Route path="reviews/:versionId" element={<ReviewPage />} />
 </>;

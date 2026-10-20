@@ -26,6 +26,7 @@ export interface ApiClient {
   get<T>(path: string, options?: RequestOptions): Promise<T>;
   getBlob(path: string, options?: RequestOptions): Promise<Blob>;
   post<T>(path: string, body?: unknown, options?: RequestOptions): Promise<T>;
+  postBinary<T>(path: string, body: Blob, options?: RequestOptions): Promise<T>;
   put<T>(path: string, body?: unknown, options?: RequestOptions): Promise<T>;
   patch<T>(path: string, body?: unknown, options?: RequestOptions): Promise<T>;
   delete<T>(path: string, options?: RequestOptions & { readonly body?: unknown }): Promise<T>;
@@ -46,10 +47,10 @@ export function createApiClient(config: ApiClientConfig): ApiClient {
   const doFetch = config.fetch ?? ((input, init) => fetch(input, init));
   const newKey = config.newIdempotencyKey ?? (() => crypto.randomUUID());
 
-  async function request<T>(method: Method, path: string, body: unknown, options: RequestOptions = {}, blob = false): Promise<T> {
+  async function request<T>(method: Method, path: string, body: unknown, options: RequestOptions = {}, blob = false, binary = false): Promise<T> {
     const authenticated = options.authenticated ?? true;
     const headers = new Headers({ Accept: blob ? "*/*" : "application/json" });
-    if (body !== undefined) headers.set("Content-Type", "application/json");
+    if (body !== undefined) headers.set("Content-Type", binary ? "application/octet-stream" : "application/json");
     if (method !== "GET") headers.set("Idempotency-Key", options.idempotencyKey ?? newKey());
     if (authenticated) {
       const token = await config.credentials.token();
@@ -61,7 +62,7 @@ export function createApiClient(config: ApiClientConfig): ApiClient {
 
     let response: Response;
     try {
-      response = await doFetch(url(baseUrl, path, options.query), { method, headers, body: body === undefined ? undefined : JSON.stringify(body), signal: options.signal });
+      response = await doFetch(url(baseUrl, path, options.query), { method, headers, body: body === undefined ? undefined : binary ? body as Blob : JSON.stringify(body), signal: options.signal });
     } catch (error) {
       if (options.signal?.aborted) throw error;
       throw new NetworkError(error);
@@ -82,6 +83,7 @@ export function createApiClient(config: ApiClientConfig): ApiClient {
     get: (path, options) => request("GET", path, undefined, options),
     getBlob: (path, options) => request("GET", path, undefined, options, true),
     post: (path, body, options) => request("POST", path, body, options),
+    postBinary: (path, body, options) => request("POST", path, body, options, false, true),
     put: (path, body, options) => request("PUT", path, body, options),
     patch: (path, body, options) => request("PATCH", path, body, options),
     delete: (path, options) => request("DELETE", path, options?.body, options),

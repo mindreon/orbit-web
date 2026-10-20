@@ -21,9 +21,10 @@ export function useAssetScopeList<T = unknown>(path: string) {
 }
 export function useDependents(id: string, kind = "agent") { return useAssetList<AssetDependent>(id, "dependents", { kind, limit: 50 }); }
 export interface AssetDependent { asset: Asset; versions: { id: string; version: string; state: S["AssetVersion"]["state"] }[] }
-export function useAssetMutation(id: string) {
+export function useAssetMutation(id: string, beforeInvalidate?: (result: unknown) => void) {
   const cache = useQueryClient(); const { currentTenant } = useIdentity(); const tenant = currentTenant?.id ?? null;
-  return useMutation({ mutationFn: (action: () => Promise<unknown>) => action(), onSuccess: async () => {
+  return useMutation({ mutationFn: (action: () => Promise<unknown>) => action(), onSuccess: async (result) => {
+    beforeInvalidate?.(result);
     await Promise.all([cache.invalidateQueries({ queryKey: qk.asset(tenant, id) }), cache.invalidateQueries({ predicate: ({ queryKey }) => queryKey[0] === tenant && ["assets", "installs"].includes(String(queryKey[1])) })]);
   } });
 }
@@ -37,4 +38,4 @@ export const setChannel = (asset: string, channel: string, version_id: string, k
 export const changeGrant = (id: string, grant: S["GrantInput"], revoke: boolean, key: string) => revoke ? api.delete(`/assets/${id}/grants`, { idempotencyKey: key, body: grant }) : api.post(`/assets/${id}/grants`, grant, { idempotencyKey: key });
 export const installAsset = (asset: string, constraint: string, scope: "workspace" | "tenant", workspace: string | undefined, channel: string, key: string) => api.post(scope === "workspace" ? `/workspaces/${workspace}/installs` : "/installs", { asset_id: asset, version_constraint: constraint, channel }, { idempotencyKey: key });
 export const uninstallAsset = (id: string, key: string) => api.delete(`/installs/${id}`, { idempotencyKey: key });
-export const assetFile = (asset: string, version: string, path: string) => api.getBlob(`/assets/${asset}/versions/${version}/file`, { query: { path } });
+export const assetFile = (asset: string, version: string, path: string, signal?: AbortSignal) => api.getBlob(`/assets/${asset}/versions/${version}/file`, { query: { path }, signal });

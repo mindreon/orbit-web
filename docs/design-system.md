@@ -247,6 +247,34 @@ A single list of the same cards, 12px apart, `max-w-reading`, each with a top li
 - Version actions (提交, 撤回, 弃用/停用/下架/恢复) live in the version header; every transition opens a confirm dialog
   that states the consequence in one sentence.
 
+### Version editor (`/assets/:assetId/versions/new`, WP9h)
+
+- A working surface, not a form: PageHeader \"新版本 · <asset name>\" with the version field (mono input, prefilled with the
+  next patch number) and the primary \"上传版本\" on the right; a ghost \"上传压缩包\" next to it opens a file picker
+  (`.tar.gz`/`.tgz`) and skips the editor.
+- Body ≥1024px: left 240px file list (`bg-card rounded-card`, same row style as the version file tree; changed files
+  carry a 6px warning dot, new files a \"新增\" caption, deleted files struck through with an undo), \"新建文件\" ghost
+  row at the bottom with an inline path input. Right: the editor — a plain `textarea` in mono `text-small`, full
+  height, `bg-card rounded-card p-4`, no syntax colouring, tab inserts two spaces. A one-line caption above it shows the
+  path and \"基于 1.0.0\" (or \"模板\" for a first version). Phone: file list becomes a select above the editor.
+- JSON files (`agent.json`, `team.json`, `mcp.json`) validate on blur: a danger caption under the editor names the
+  line; the upload button stays enabled (the server is the judge) but the list row shows a danger dot.
+- Upload result: success navigates to the new version detail; a server error shows a danger Alert above the editor
+  with the error code in mono.
+
+### Reviews (`/reviews`, WP9h)
+
+- List: the shared DataTable — asset (kind chip + name + mono ref), version (mono), submitted by, submitted at, check
+  summary (counts of 通过/警告/失败 as tinted chips). Rows link to the review. Empty: \"没有待审核的版本\".
+- Review page: two columns ≥1024px. Left (flexible): a summary line (\"新增 3 个文件 · 修改 1 个 · 删除 0 个\" in
+  `text-small`), then per-file diffs: a sticky file header (path mono + 新增/修改/删除 chip, collapse toggle), unified
+  diff lines in mono `text-caption` with a 3-column gutter (old no., new no., sign); added lines `bg-success-50`,
+  removed `bg-danger-50`, sign coloured, context unstyled; long unchanged runs fold to \"展开 n 行\". Right (320px,
+  sticky): the decision panel — 通过 (primary), 要求修改, 拒绝 (danger ghost) as a vertical stack, a comment textarea
+  above them, then check report and permission comparison (old → new per field, changed values highlighted with a
+  warning-50 background). Phone: one column, decision panel last and sticky at the bottom as a compact bar.
+- Own asset: the decision panel is replaced by a muted note \"不能审核自己的资产\" and disabled buttons stay visible.
+
 ### States
 
 Skeletons mirror the final layout (same heights), gray-100 blocks, no shimmer. Errors use `Alert` inline at the
