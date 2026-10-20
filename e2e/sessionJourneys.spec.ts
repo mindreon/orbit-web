@@ -183,7 +183,7 @@ test.describe("WJ2 team collaboration", () => {
     await login(page); sessions.push(await createFromCatalog(page, "dev/review-team", marker, false, "team"));
     // Same J2 instruction, except /outputs: /workspace is not scanned for artifacts (WP9d step 0).
     await send(page, "Create two independent tasks, assigned to writer-1 and writer-2. Each writer must write " +
-      "one short file under /outputs (writer-1.txt and writer-2.txt), about safe retries and " +
+      "one short file at exactly /outputs/writer-1.txt and /outputs/writer-2.txt (not under /workspace), about safe retries and " +
       "idempotency respectively. Have reviewer inspect both files and submit verdicts. " +
       "Wait for review before calling team_finish with a summary of both deliverables.");
     const run = await currentRun(page, recordRun);
@@ -204,7 +204,8 @@ test.describe("WJ2 team collaboration", () => {
     await expect(board.getByRole("heading", { name: "总结", exact: true })).toBeVisible();
     await page.getByRole("button", { name: "文件", exact: true }).click();
     const file = page.getByRole("treeitem").filter({ hasText: /writer-[12]\.txt/ }).first();
-    await expect(file).toBeVisible(); await file.click();
+    // Only /outputs is synced; a writer that picks another path is a model failure, not a platform one.
+    await expectModel(() => expect(file).toBeVisible({ timeout: 15_000 }), "写手没有把文件写到 /outputs"); await file.click();
     await expect(page.getByTestId("file-preview")).toBeVisible();
     await expect(page.getByTestId("file-preview").locator("pre")).not.toHaveText("");
     await run.section.getByRole("link", { name: "查看运行" }).click();

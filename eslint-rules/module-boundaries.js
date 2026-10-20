@@ -19,7 +19,7 @@ function reachesClient(resolved, root, seen = new Set()) {
   });
 }
 
-export const featureEdges = ["sessions>teams", "sessions>interactions", "sessions>files", "sessions>runs", "runs>teams", "runs>interactions", "assets>files", "reviews>assets", "reviews>files"];
+export const featureEdges = ["sessions>teams", "sessions>interactions", "sessions>files", "sessions>runs", "runs>teams", "runs>interactions", "reviews>assets"];
 const ranks = { lib: 0, ui: 1, api: 1, components: 2, platform: 3, features: 4, app: 5, test: 6 };
 export default {
   meta: { type: "problem", schema: [], messages: { boundary: "Disallowed module dependency: {{from}} → {{to}}" } },

@@ -281,6 +281,56 @@ Skeletons mirror the final layout (same heights), gray-100 blocks, no shimmer. E
 place of the failed content, never a full-page takeover except 404. Empty states are one sentence plus at most
 one action.
 
+## 新增组件（WP9）
+
+Only implemented components are listed here; feature-specific cards and boards stay in their owning feature.
+
+| Path / component | Use |
+| --- | --- |
+| `src/ui/Popover.tsx`, `DropdownMenu.tsx`, `Tabs.tsx`, `Select.tsx` | Token-styled Radix wrappers; `Dialog.tsx` also uses Radix. Only `ui/` imports Radix directly. |
+| `src/components/AssetCard.tsx`, `EntryPicker.tsx` | Shared asset card and entry selector for experts / expert teams. |
+| `src/components/DataTable.tsx`, `Pager.tsx` | Accessible named tables and explicit “加载更多” pagination. |
+| `src/components/ConfirmDialog.tsx` | Confirmation for consequential actions. |
+| `src/components/StatusBadge.tsx`, `StreamStatus.tsx` | Business-state labels and stream connection / reconnect feedback. |
+| `src/components/files/FileTree.tsx` | Shared hierarchical file navigation above the existing preview registry. |
+
+## W49 术语表
+
+界面文案使用下表；协议字段、错误码、引用（如 `dev/echo-agent`）与工具名保留原标识。词表来源为 `src/components/kindLabels.ts` 与 `src/features/*/labels.ts`；同一协议值在不同上下文的中文可能不同。
+
+| 界面用语 | 协议标识 / 上下文 |
+| --- | --- |
+| 专家 / 专家团 / 技能 / MCP 服务 | `agent` / `team` / `skill` / `mcp_server` |
+| 私有 / 工作空间 / 全员可见 | visibility: `private` / `workspace` / `tenant` |
+| 提交人 | `uploaded_by`（版本上传者，不等同于资产所有者） |
+| 负责人 / 成员 / 评审 | team role: `leader` / `teammate` / `reviewer` |
+| 所有者 / 管理员 / 审计员 / 审核员 / 成员 | `tenant.owner` / `tenant.admin` / `tenant.auditor` / `tenant.reviewer` / `tenant.member`；界面不加“租户”前缀 |
+| 管理员 / 编辑者 / 成员 / 查看者 | workspace role: `ws.admin` / `ws.editor` / `ws.member` / `ws.viewer` |
+| 正常 / 未激活 / 已停用 | member status: `active` / `invited` / `suspended`；未激活是历史状态，不提供邀请入口 |
+| 目录同步 / 历史导入 / 首次登录 / 直接加入 | member source: `scim` / `invite` / `jit` / `direct` |
+| 用户 / 服务账号 / 成员组 / 工作空间 / 全员 | grantee: `user` / `service` / `group` / `workspace` / `tenant` |
+| 使用 / 维护 | grant permission: `use` / `maintain` |
+| 草稿 / 已提交 / 检查中 / 检查失败 / 待审核 / 需修改 / 已批准 / 已发布 / 已弃用 / 已停用 / 已下架 / 已拒绝 | version state: `draft` / `submitted` / `checking` / `check_failed` / `in_review` / `changes_requested` / `approved` / `published` / `deprecated` / `suspended` / `yanked` / `rejected` |
+| 可用 / 已停用 / 已归档 | asset status: `active` / `suspended` / `archived` |
+| 结构 / 兼容性 / 密钥声明 / 静态检查 / 注入检查 / 权限变化 | check kind: `structure` / `compat` / `secrets` / `static` / `injection` / `permission_diff` |
+| 通过 / 警告 / 失败 | check status: `pass` / `warn` / `fail` |
+| 返回草稿 / 弃用 / 停用 / 下架 / 恢复 | version transition: `draft` / `deprecated` / `suspended` / `yanked` / `published` |
+| 工具审批 / 提问 / 结果未知的操作 | interaction kind: `tool_approval` / `ask_user` / `effect_uncertain` |
+| 允许一次 / 本会话允许 / 始终允许 / 拒绝 / 视为已完成 / 重试 / 放弃 | decision: `allow_once` / `allow_session` / `allow_always` / `deny` / `treat_as_done` / `retry` / `abandon` |
+| 待处理 / 已升级 / 处理中 / 已解决 / 已过期 / 已取消 | interaction status: `pending` / `escalated` / `resolving` / `resolved` / `expired` / `cancelled` |
+| 排队中 / 运行中 / 等待输入 / 等待审批 / 已暂停 / 已完成 / 失败 / 已取消 / 预算已用完 / 已超时 | run state: `queued` / `running` / `waiting_input` / `waiting_approval` / `paused` / `succeeded` / `failed` / `cancelled` / `budget_exhausted` / `timed_out` |
+| 运行中 / 已完成 / 已中断 / 已让出 / 失败 | segment status: `running` / `completed` / `interrupted` / `yielded` / `failed` |
+| 已开始 / 已完成 / 失败 / 结果未知 | effect status: `started` / `completed` / `failed` / `unknown` |
+| 用户消息 / 定时任务 / 接口调用 / 渠道 / 恢复 | run trigger: `user_message` / `schedule` / `api` / `channel` / `resume` |
+| 已完成 / 达到迭代上限 / 达到时长上限 / 外部写入边界 / 预算软限制 / 已取消 / 继续目标 / 上下文已压缩 | segment end reason: `completed` / `iteration_cap` / `wall_cap` / `effect_boundary` / `budget_soft` / `cancel` / `goal_continue` / `compacted` |
+| 等待工具审批 / 等待用户输入 / 副作用待确认 / 专家错误 / 模型错误 / 检测到循环 / 沙箱错误 / 工具策略错误 / 运行已终止 | segment end reason: `tool_approval` / `ask_user` / `effect_uncertain` / `agent_error` / `model_error` / `loop_detected` / `sandbox_error` / `tool_policy_error` / `run_terminated` |
+| 待开始 / 等待依赖 / 进行中 / 评审中 / 已完成 / 已取消 / 失败 | task status: `pending` / `blocked` / `in_progress` / `in_review` / `completed` / `cancelled` / `failed` |
+| 空闲 / 工作中 / 等待输入 / 等待审批 / 已结束 | team member status: `idle` / `working` / `waiting_input` / `waiting_approval` / `finished` |
+| 通过 / 驳回 | review verdict: `approve` / `reject` |
+| 启用 / 已暂停 / 已删除 | schedule status: `active` / `paused` / `deleted` |
+| 运行中 / 已完成 / 失败 / 已取消 / 预算耗尽 / 超时 / 已跳过 | schedule run status: `running` / `succeeded` / `failed` / `cancelled` / `budget_exhausted` / `timed_out` / `skipped` |
+| 跳过本次 / 保留一次待运行 | overlap policy: `skip` / `buffer_one` |
+
 ## Lint
 
 `eslint-rules/design-tokens.js` (rule `orbit/design-tokens`) fails on arbitrary font sizes, retired Tailwind sizes,
@@ -290,12 +340,10 @@ A legitimate exception takes `// eslint-disable-next-line orbit/design-tokens --
 ## Checks
 
 - `pnpm lint`: enforces the design token rules in all application components.
-- `pnpm test`: includes stylesheet contrast and lint-rule checks, Markdown XSS/rendering regressions,
-  every previewer's lazy rendering, and auth component states under jsdom.
+- `pnpm test`: runs the U12 feature-graph equality check and lint-rule / script tooling tests only. Frontend unit and
+  component tests and the coverage threshold were removed by the user's 2026-10-20 decision (W66); do not add new ones.
+- Page behaviour is covered only by Playwright WJ1–WJ5 against the compose stack: run `bash scripts/v2-web-e2e.sh`
+  from orbit-infra, using `--project=stack --project=stack-mobile`.
 - `pnpm licenses:check`: verifies the root NOTICE against the direct runtime dependencies in package.json and
   their installed license metadata/text. `pnpm licenses:write` regenerates it for review after a dependency change.
 - `pnpm typecheck` and `pnpm build`: check all TypeScript components and the production bundle.
-
-The Markdown and preview tests use real sanitizers and renderers. Mermaid output and PDF/Office SDK boundaries
-are controlled fixtures because jsdom has no canvas, workers or Office layout engine; these tests verify the component
-integration and fallback paths. WP9 adds browser layout and full application journeys against the development stack.

@@ -5,7 +5,7 @@ import { expect, it } from "vitest";
 
 // @ts-expect-error The lint policy is an ESM JavaScript module, shared directly with this test.
 import { featureEdges } from "../../eslint-rules/module-boundaries.js";
-it("U12 actual feature imports are a subset of the nine allowed edges until WP9i", () => {
+it("U12 actual feature imports equal the seven allowed edges", () => {
   const root = path.resolve("src/features");
   const edges = new Set<string>();
   function scan(dir: string) {
@@ -32,7 +32,6 @@ it("U12 actual feature imports are a subset of the nine allowed edges until WP9i
     }
   }
   scan(root);
-  expect([...edges].filter((edge) => !featureEdges.includes(edge))).toEqual([]);
+  expect([...edges].sort()).toEqual([...featureEdges].sort());
   expect([...edges].some((edge) => edge.startsWith("catalog>"))).toBe(false);
-  // Allowed-edge equality is intentionally deferred until WP9i (lead ruling).
 });
