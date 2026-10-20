@@ -1,0 +1,10 @@
+import type { Asset, S } from "../../api/types";
+export const versionStateLabels = { draft: "草稿", submitted: "已提交", checking: "检查中", check_failed: "检查失败", in_review: "待审核", changes_requested: "需修改", approved: "已批准", published: "已发布", deprecated: "已弃用", suspended: "已停用", yanked: "已下架", rejected: "已拒绝" } as const satisfies Record<S["AssetVersion"]["state"], string>;
+export const assetStatusLabels = { active: "可用", suspended: "已停用", archived: "已归档" } as const satisfies Record<Asset["status"], string>;
+export const checkLabels = { structure: "结构", compat: "兼容性", secrets: "密钥声明", static: "静态检查", injection: "注入检查", permission_diff: "权限变化" } as const satisfies Record<S["AssetCheckKind"], string>;
+export const checkStatusLabels = { pass: "通过", warn: "警告", fail: "失败" } as const;
+export const transitionLabels = { draft: "返回草稿", deprecated: "弃用", suspended: "停用", yanked: "下架", published: "恢复" } as const;
+export const transitionConsequences = { draft: "返回草稿，以便修改后重新提交", deprecated: "弃用此版本；已有引用仍可使用，但不再推荐新安装", suspended: "停用此版本；它将不能用于新的运行", yanked: "下架此版本；它将不可使用且不能恢复", published: "恢复此版本；它将重新可用于运行" } as const;
+export const granteeLabels = { user: "用户", service: "服务账号", group: "成员组", workspace: "工作空间", tenant: "全员" } as const;
+export const grantPermissionLabels = { use: "使用", maintain: "维护" } as const;
+export const teamRoleLabels = { leader: "负责人", teammate: "成员", reviewer: "评审" } as const;

@@ -22,7 +22,7 @@ it("C11 empty catalog uses the kind-specific sentence", () => {
   expect(screen.getByText("还没有可用的专家团")).toBeTruthy();
 });
 
-it.each([["private", "私有"], ["workspace", "工作空间"], ["tenant", "租户"]] as const)("labels %s visibility next to the asset name", (visibility, label) => {
+it.each([["private", "私有"], ["workspace", "工作空间"], ["tenant", "全员可见"]] as const)("labels %s visibility next to the asset name", (visibility, label) => {
   useCatalog.mockReturnValue({ data: { items: [{ asset: { id: "a", name: "alpha", publisher: "dev", visibility }, installed: false }] } });
   render(<MemoryRouter><CatalogPage kind="agent" /></MemoryRouter>);
   expect(screen.getByRole("heading", { level: 2 }).parentElement?.contains(screen.getByText(label))).toBe(true);

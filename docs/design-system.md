@@ -217,6 +217,36 @@ A single list of the same cards, 12px apart, `max-w-reading`, each with a top li
   carries a CSS bar (`bg-primary-100` track-less bar proportional to the max row, 6px high, under the number).
   `computed_through` as a muted caption above the table; `dirty_hours>0` adds a warning caption.
 
+### Assets (`/assets`, WP9f)
+
+- 资产中心 and 我的 share one page frame (PageHeader + PageBody). Under the header: a segmented row of kind chips
+  (全部 · 专家 · 专家团 · 技能 · MCP 服务; active chip `bg-gray-200 font-medium`) and a search input on the right;
+  我的 is a second header tab next to 资产中心, not a separate sidebar entry. Primary "新建资产" sits in the header.
+- Asset cards reuse the catalog card exactly (monogram, name, chips, mono `publisher/name`, two-line description),
+  adding a kind chip (gray-100) and a status badge only when the asset is not active. Grid 1/2/3 columns.
+- New asset (`/assets/new`): single `max-w-reading` column like the schedule form. 类型 is four radio cards in a
+  2×2 grid (icon-free, label + one muted line explaining the kind), then 名称 with the rule as a caption
+  ("小写字母、数字、连字符，3–64 位") and live inline validation, 可见性 (radio row), 工作空间 only when needed.
+  After creation the detail opens with a quiet primary-50 banner "创建第一个版本" + button.
+- Detail: header row = monogram (40px) + display name (`text-heading`) + mono ref + chips (kind, visibility, status),
+  actions right (开始对话 primary for 专家/专家团; a "更多" dropdown for 修改可见性 / 停用·恢复 / 归档). The description
+  paragraph sits under the header at reading width. Then underline tabs (same style as the admin tabs):
+  版本 · 通道 · 共享 · 安装 (+ 被哪些专家使用 for 技能 / MCP 服务). Tab content uses the shared DataTable.
+  Channels: one row per channel with the pinned version as a mono link and the rollback action in the row menu.
+- Version detail: back link to the asset, then title "版本 1.0.2" + status badge, and a horizontal status timeline
+  (steps as small dots joined by a hairline; done = success-500, current = primary-500, future = gray-300, failed =
+  danger-500; labels in caption under each dot; on phones it becomes a vertical list). `release_error` as a danger Alert.
+  Then two columns ≥1024px: left (reading width) = 清单摘要, 技能与 MCP, 有效权限, 检查报告; right (320px) = 文件树
+  + preview opening in the existing file preview panel. Phone: one column, files last.
+- 技能与 MCP: a list, one row per entry: a kind chip (技能 / 内置技能 / MCP 服务 / 直连 MCP), the name, then mono ref and
+  constraint muted. Resolved refs are links; unresolved ones show the ref plus a muted "无权查看或不存在"; 直连 shows only
+  the host and the caption "直连，不是资产", never a link. 被哪些专家使用 uses the same row shape: expert link +
+  version chips ("1.0.2（草稿）").
+- Check report: one row per check with a status icon + label (通过 / 警告 / 失败 tinted success/warning/danger), the
+  check name, and findings indented under it in `text-small`, collapsed when more than 3.
+- Version actions (提交, 撤回, 弃用/停用/下架/恢复) live in the version header; every transition opens a confirm dialog
+  that states the consequence in one sentence.
+
 ### States
 
 Skeletons mirror the final layout (same heights), gray-100 blocks, no shimmer. Errors use `Alert` inline at the
