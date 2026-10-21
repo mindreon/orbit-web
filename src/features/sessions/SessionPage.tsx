@@ -60,14 +60,14 @@ function RunTurn({ run, state, messages, archived, team }: { run: Run; state?: R
     <div className="flex items-center gap-3 py-2 text-caption text-muted-foreground"><span aria-hidden="true" className="h-px flex-1 bg-border" /><span className="flex flex-wrap items-baseline justify-center gap-x-1.5"><span data-run-status={status}>{runStateLabels[status]}</span>{duration ? <><span aria-hidden="true">·</span><span>{duration}</span></> : null}<span aria-hidden="true">·</span><span>{(timeline?.usage?.cost_millicredits ?? run.used_millicredits) / 1000} 积分</span><span aria-hidden="true">·</span><Link to={`/runs/${run.id}`} className="hover:text-foreground hover:underline">查看运行</Link></span><span aria-hidden="true" className="h-px flex-1 bg-border" /></div>
   </section>;
 }
-function SessionHeader({ session, stream, reconnect, onFiles, scrolled }: { session: Session; stream: ReturnType<typeof useSessionStream>["stream"]; reconnect(): void; onFiles(): void; scrolled: boolean }) {
+function SessionHeader({ session, stream, reconnect, onFiles }: { session: Session; stream: ReturnType<typeof useSessionStream>["stream"]; reconnect(): void; onFiles(): void }) {
   const { currentTenant } = useIdentity(); const tenant = currentTenant?.id ?? null; const client = useQueryClient();
   const [editing, setEditing] = useState(false); const [title, setTitle] = useState(session.title); const [archive, setArchive] = useState(false);
   const intent = useIdempotencyIntent({ title });
   const mutation = useMutation({ mutationFn: async (body: { title?: string; message_policy?: Session["message_policy"] }) => api.patch<Session>(`/sessions/${session.id}`, body, { idempotencyKey: body.title !== undefined ? intent.key : crypto.randomUUID() }), onSuccess: (value) => { client.setQueryData(qk.session(tenant, session.id), value); void client.invalidateQueries({ queryKey: qk.sessionLists(tenant) }); intent.succeeded(); setEditing(false); } });
   const archiveIntent = useIdempotencyIntent(session.id);
   const archiveMutation = useMutation({ mutationFn: () => api.post(`/sessions/${session.id}/archive`, undefined, { idempotencyKey: archiveIntent.key }), onSuccess: () => { archiveIntent.succeeded(); client.setQueryData<Session>(qk.session(tenant, session.id), (item) => item ? { ...item, status: "archived" } : item); void client.invalidateQueries({ queryKey: qk.sessionLists(tenant) }); setArchive(false); } });
-  return <><header className={`flex min-h-12 shrink-0 flex-wrap items-center gap-2 px-4 py-2 sm:px-6 ${scrolled ? "border-b border-border" : ""}`}>
+  return <><header className="flex min-h-14 shrink-0 flex-wrap items-center gap-2 border-b border-border bg-card px-4 py-2 sm:h-14 sm:flex-nowrap sm:gap-3 sm:px-6 sm:py-0">
     {editing ? <form className="min-w-0 flex-1" onSubmit={(event) => { event.preventDefault(); mutation.mutate({ title }); }}><Input autoFocus aria-label="会话标题" value={title} onChange={(event) => setTitle(event.target.value)} onKeyDown={(event) => { if (event.key === "Escape") { setTitle(session.title); setEditing(false); } }} onBlur={() => { if (title !== session.title) mutation.mutate({ title }); else setEditing(false); }} /></form> : <h1 className="min-w-0 flex-1 truncate text-title font-semibold"><button className="max-w-full truncate text-left" disabled={session.status === "archived"} onClick={() => setEditing(true)}>{session.title || "未命名会话"}</button></h1>}
     <span className="hidden max-w-48 truncate text-small text-muted-foreground md:block">{entryKindLabels[session.entry_kind]} · {session.entry_ref}</span>
     <div className="flex max-w-full flex-wrap items-center gap-2">{session.status !== "archived" ? stream.status !== "live" ? <StreamStatus {...stream} onReconnect={reconnect} /> : <span role="status" aria-label="实时" className="h-1.5 w-1.5 rounded-full bg-primary-500" /> : null}
@@ -95,7 +95,7 @@ export default function SessionPage() {
     observer.observe(root, { childList: true, subtree: true });
     return () => observer.disconnect();
   });
-  const wide = useMediaQuery("(min-width: 1280px)"); const [files, setFiles] = useState(false); const [scrolled, setScrolled] = useState(false);
+  const wide = useMediaQuery("(min-width: 1280px)"); const [files, setFiles] = useState(false);
   const [older, setOlder] = useState<Run[]>([]); const [olderCursor, setOlderCursor] = useState<string | null>(null); const [loadingOlder, setLoadingOlder] = useState(false);
   const session = useQuery({ queryKey: qk.session(tenant, sessionId), queryFn: ({ signal }) => api.get<Session>(`/sessions/${sessionId}`, { signal }) });
   const messages = useQuery({ queryKey: qk.messages(tenant, sessionId), queryFn: ({ signal }) => allPages<Message>(`/sessions/${sessionId}/messages`, { signal }, 20) });
@@ -116,8 +116,8 @@ export default function SessionPage() {
   if (failure) return <div className="p-6"><Alert>{describeFailure("读取会话失败", failure)}<Button onClick={() => { void session.refetch(); void messages.refetch(); void runs.refetch(); }}>重试</Button></Alert></div>;
   if (!session.data || messages.isPending || runs.isPending) return <div className="space-y-6 p-6"><Skeleton className="h-12" /><Skeleton className="mx-auto h-48 max-w-reading" /><Skeleton className="mx-auto h-24 max-w-reading" /></div>;
   const archived = session.data.status === "archived";
-  return <><SessionHeader session={session.data} stream={live.stream} reconnect={live.reconnect} onFiles={() => setFiles((value) => !value)} scrolled={scrolled} /><div className="flex min-h-0 flex-1 bg-background"><div className="flex min-w-0 flex-1 flex-col">
-    <div className="min-h-0 flex-1 overflow-auto px-4 py-6 sm:px-6" onScroll={(event) => setScrolled(event.currentTarget.scrollTop > 0)}><div ref={timelineRoot} className="mx-auto max-w-reading space-y-6">
+  return <><SessionHeader session={session.data} stream={live.stream} reconnect={live.reconnect} onFiles={() => setFiles((value) => !value)} /><div className="flex min-h-0 flex-1 bg-card"><div className="flex min-w-0 flex-1 flex-col">
+    <div className="min-h-0 flex-1 overflow-auto px-4 py-6 sm:px-6"><div ref={timelineRoot} className="mx-auto max-w-reading space-y-6">
       {messages.data?.capped ? <p className="text-caption text-muted-foreground">更早的消息未加载</p> : null}
       {cursor ? <Button size="sm" disabled={loadingOlder} onClick={() => { setLoadingOlder(true); void api.get<{ items: Run[]; next_cursor?: string }>(`/sessions/${sessionId}/runs`, { query: { order: "desc", limit: 100, cursor } }).then((page) => { setOlder((items) => [...items, ...page.items]); setOlderCursor(page.next_cursor || ""); }).finally(() => setLoadingOlder(false)); }}>加载更多</Button> : null}
       {[
@@ -129,5 +129,5 @@ export default function SessionPage() {
     <div className="shrink-0 px-4 pb-4 sm:px-6"><div className="mx-auto max-w-reading">{waiting ? <div className="mb-2 flex flex-wrap items-baseline justify-between gap-2 rounded-control bg-warning-50 px-3 py-2 text-small text-warning-700"><span>{activeRunStatus === "waiting_approval" ? "有工具调用等待你审批" : "有问题等待你回答"}</span><button onClick={() => { if (pending) document.getElementById(`interaction-${pending[0]}`)?.scrollIntoView({ block: "center" }); }}>跳到卡片</button></div> : null}
       <Composer actionPending={action.isPending} archived={archived} active={Boolean(active) && !archived} status={activeRunStatus} onStop={() => action.mutate("cancel")} onPause={() => action.mutate(activeRunStatus === "paused" ? "resume" : "pause")} onSend={async (text, key) => { const result = await api.post<SendResult>(`/sessions/${sessionId}/messages`, { text }, { idempotencyKey: key }); await Promise.all([client.invalidateQueries({ queryKey: qk.messages(tenant, sessionId) }), client.invalidateQueries({ queryKey: qk.runs(tenant, sessionId) })]); return result; }} />
     </div></div>
-  </div>{files && wide ? <aside aria-label="文件区" className="flex w-80 shrink-0 flex-col bg-gray-50 p-4"><h2 className="mb-4 text-small font-medium text-muted-foreground">文件</h2><FileArea sessionId={sessionId} /></aside> : null}</div>{files && !wide ? <Dialog wide title="文件" onClose={() => setFiles(false)}><div className="flex h-96 flex-col"><FileArea sessionId={sessionId} /></div></Dialog> : null}</>;
+  </div>{files && wide ? <aside aria-label="文件区" className="flex w-80 shrink-0 flex-col bg-muted"><h2 className="flex h-10 shrink-0 items-center px-4 text-small font-medium text-muted-foreground">文件</h2><div className="min-h-0 flex-1 overflow-auto px-4 pb-4"><FileArea sessionId={sessionId} /></div></aside> : null}</div>{files && !wide ? <Dialog wide title="文件" onClose={() => setFiles(false)}><div className="flex h-96 flex-col"><FileArea sessionId={sessionId} /></div></Dialog> : null}</>;
 }

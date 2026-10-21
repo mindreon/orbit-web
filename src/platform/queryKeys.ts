@@ -28,4 +28,5 @@ export const qk = {
   schedule: (tenant: TenantId, id: string) => [tenant, "schedule", id] as const,
   adminRoot: (tenant: TenantId) => [tenant, "admin"] as const,
   admin: (tenant: TenantId, resource: string) => [tenant, "admin", resource] as const,
+  market: (tenant: TenantId, kind: string, filter: Readonly<Record<string, unknown>> = {}) => [tenant, "market", kind, filter] as const,
 };

@@ -85,20 +85,19 @@ streaming cursor and the live-status dot.
 
 ### Shell
 
-- Sidebar 240px, `bg-gray-50` with a `border-border` right edge (it separates the sidebar from the content in both themes); the main area is `bg-background`. Items are 32px rows,
-  `rounded-control`, `text-body`; the active item is `bg-gray-200 font-medium`, hover `bg-gray-100`.
-- Order: brand row (24px primary monogram + "Orbit") → workspace switcher (one row, chevron; the tenant is never shown in the
-  UI) → primary "新建会话" button (full width, the only primary fill in the sidebar) → navigation in three groups (unlabelled
-  main group, then "资源" and "系统" with `text-small font-medium text-muted-foreground` labels, 16px between groups) →
+- Sidebar 256px, `bg-sidebar`, no right border; the page frame is `bg-card` and list pages put a gray `bg-muted` body under a white bar. Items are 36px rows with a 16px icon,
+  `rounded-control`, `text-body font-medium text-gray-800`; the active item is `bg-sidebar-accent font-medium text-primary-700`, hover `bg-gray-200`. Wide screens can collapse it to a 48px rail; phones open it as a drawer.
+- Order: brand row (28px primary monogram + "Orbit", search, collapse) → workspace switcher → "新建会话" as a nav row → navigation in three groups (unlabelled
+  main group, then "资源" and "系统" with `text-caption font-medium text-gray-500` labels, 16px between groups) →
   最近会话 (section label, max 12 rows, single-line truncated titles, a 6px status dot on the right: primary-500 运行中,
-  warning-500 等待你处理, none when idle) → "我" pinned to the bottom above a hairline.
-- Page header: `text-title font-semibold`, optional `text-small text-muted-foreground` subline, actions right-aligned
-  and baseline-aligned. 24px top padding, 16px under the header. No breadcrumb.
+  warning-500 等待你处理, none when idle) → "我" and sign-out pinned at the bottom.
+- Page header: a 56px `bg-card` bar. Title `text-title font-semibold` on the left, search or the primary action on the right. The scrolling body is `bg-muted` with `px-4 py-5`. No breadcrumb.
 
 ### Catalog (专家 / 专家团)
 
-- Responsive grid of cards: 1 column < 640, 2 ≥ 640, 3 ≥ 1024; 12px gap. Card `bg-card rounded-card p-4`, no border
-  on the gray page; hover lifts to `bg-gray-50` background change only.
+- Responsive grid of cards: 1 column < 640, 2 ≥ 640, 3 ≥ 1024; 16px gap. Card `bg-card rounded-card p-4 shadow-sm`, no border
+  on the gray page; hover deepens the shadow (`hover:shadow-md`). A round monogram sits beside the name; an expert team adds a primary "专家团" chip. "开始对话" is a text link on the footer.
+- New conversation (`/sessions`) is the same centered composer as the main task home: heading "Orbit，我帮你", example pills, a shadowed input card. The toolbar holds an 专家 / 专家团 picker and a round send button. Choosing one from a catalog card still opens the "新建会话" dialog.
 - Inside: line 1 title (`display_name` or `name`) `text-body font-semibold` + "已安装" chip (`bg-success-50
   text-success-700 text-caption rounded-control px-1.5`) on the baseline; line 2 description, 2 lines clamped,
   `text-small text-muted-foreground` (empty line kept so cards align); line 3 `publisher/name` in mono `text-caption
@@ -108,9 +107,9 @@ streaming cursor and the live-status dot.
 
 - Three zones: timeline column (`max-w-reading`, centered in the free space), composer pinned to the bottom of that
   column, file area as a 320px right panel ≥ 1280 (toggle button in the header), drawer below.
-- Header: one row, 48px, title (inline edit on click, same size), then `text-small text-muted-foreground`
-  "专家 · 名称", then right side: stream status (dot + word only when not live), message-policy select, "…" menu
-  with 归档. A hairline under the header only after the timeline scrolls.
+- Header: one row, 56px, `border-b border-border bg-card`, title (inline edit on click, same size), then `text-small text-muted-foreground`
+  "专家 · 名称", then right side: stream status (dot + word only when not live), message-policy select, "文件", "…" menu
+  with 归档. The hairline stays under the header. The message column itself keeps the conversation layout below.
 - Rhythm: 24px between turns, 8px between items within one assistant turn. A run divider is a quiet centered row
   (`text-caption text-muted-foreground`: status · 耗时 · 成本 · 查看运行) between two `bg-border` hairlines that fill
   the reading column, so each run reads as closed.
