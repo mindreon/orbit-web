@@ -1,4 +1,5 @@
 import type { ApiClient } from "./client";
+import { BASE_PATH } from "../lib/basePath";
 import { ApiError } from "./errors";
 import type { TypedRunEvent } from "./events";
 import { readEventStream, type EventStreamOptions } from "./sse";
@@ -31,9 +32,9 @@ export function openSessionStream(options: StreamOptions & { readonly sessionId:
 }
 
 function openStream(path: string, options: StreamOptions): Promise<void> {
-  // Browser SSE uses same-origin /v1 via the gateway proxy and global fetch; ApiClient only exposes JSON requests.
+  // Browser SSE uses the same-origin prefixed /v1 via the gateway proxy and global fetch; ApiClient only exposes JSON requests.
   return readEventStream({
-    url: `/v1${path}/events`,
+    url: `${BASE_PATH}/v1${path}/events`,
     headers: async () => {
       const token = await options.client.get<StreamToken>(`${path}/stream-token`, { signal: options.signal });
       return { Authorization: `Bearer ${token.stream_token}` };

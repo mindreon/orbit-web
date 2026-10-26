@@ -1,3 +1,4 @@
+import { BASE_PATH } from "../lib/basePath";
 import { ApiError, NetworkError } from "./errors";
 
 /**
@@ -33,7 +34,7 @@ export interface ApiClient {
 }
 
 export interface ApiClientConfig {
-  /** Same-origin by default: the dev server and Caddy both forward `/v1` to control. */
+  /** Same-origin by default: the dev server and Caddy both forward `${BASE_PATH}/v1` to control. */
   readonly baseUrl?: string;
   readonly credentials: Credentials;
   readonly fetch?: typeof fetch;
@@ -43,7 +44,7 @@ export interface ApiClientConfig {
 type Method = "GET" | "POST" | "PUT" | "PATCH" | "DELETE";
 
 export function createApiClient(config: ApiClientConfig): ApiClient {
-  const baseUrl = (config.baseUrl ?? "/v1").replace(/\/+$/, "");
+  const baseUrl = (config.baseUrl ?? `${BASE_PATH}/v1`).replace(/\/+$/, "");
   const doFetch = config.fetch ?? ((input, init) => fetch(input, init));
   const newKey = config.newIdempotencyKey ?? (() => crypto.randomUUID());
 

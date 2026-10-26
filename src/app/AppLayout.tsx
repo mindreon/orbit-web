@@ -9,6 +9,7 @@ import { NavLink, Outlet, useLocation } from "react-router";
 import { describeFailure } from "../api/errors";
 import { cn } from "../lib/cn";
 import { api } from "../platform/client";
+import { isEmbeddedInWujie, WujieMenuBridge, type WujieMenuSection } from "../platform/embed";
 import { qk } from "../platform/queryKeys";
 import { BREAKPOINT, useMediaQuery } from "../platform/useMediaQuery";
 import { useIdempotencyIntent } from "../platform/useIdempotencyIntent";
@@ -17,6 +18,7 @@ import { Alert } from "../ui/Alert";
 import { Button } from "../ui/Button";
 import { Dialog } from "../ui/Dialog";
 import { Field, Input } from "../ui/fields";
+import { Popover } from "../ui/Popover";
 import { ErrorBoundary } from "./ErrorBoundary";
 import { RecentSessions } from "../features/sessions";
 
@@ -24,28 +26,30 @@ const ITEM = "flex h-9 items-center gap-2.5 rounded-control px-3 text-body";
 const ACTIVE = "bg-sidebar-accent font-medium text-primary-700 hover:bg-sidebar-accent";
 const REAL = "font-medium text-gray-800 hover:bg-gray-200";
 
+/** iconName 必须是基座 sub-app-nav MENU_ICONS 里的 lucide 名：嵌入态菜单由基座按名渲染。 */
 const NAV = [
   { group: "", items: [
-    { to: "/experts", label: "专家", permission: "catalog", icon: Bot },
-    { to: "/expert-teams", label: "专家团", permission: "catalog", icon: Users },
-    { to: "/skills", label: "技能", permission: "catalog", icon: Sparkles },
-    { to: "/mcp", label: "MCP", permission: "catalog", icon: Plug },
-    { to: "/inbox", label: "收件箱", permission: "inbox", icon: Inbox },
+    { to: "/sessions", label: "新建对话", exact: true, icon: SquarePen, iconName: "SquarePen" },
+    { to: "/experts", label: "专家", permission: "catalog", icon: Bot, iconName: "Bot" },
+    { to: "/expert-teams", label: "专家团", permission: "catalog", icon: Users, iconName: "Users" },
+    { to: "/skills", label: "技能", permission: "catalog", icon: Sparkles, iconName: "Sparkles" },
+    { to: "/mcp", label: "MCP", permission: "catalog", icon: Plug, iconName: "Plug" },
+    { to: "/inbox", label: "收件箱", permission: "inbox", icon: Inbox, iconName: "Inbox" },
   ] },
   { group: "资源", items: [
-    { to: "/assets", label: "资产中心", permission: "assets", icon: Library },
-    { to: "/reviews", label: "审核", permission: "reviews", icon: ShieldCheck },
-    { to: "/schedules", label: "定时任务", permission: "schedules", icon: Clock },
-    { to: "/usage", label: "用量", icon: BarChart3 },
+    { to: "/assets", label: "资产中心", permission: "assets", icon: Library, iconName: "Library" },
+    { to: "/reviews", label: "审核", permission: "reviews", icon: ShieldCheck, iconName: "ShieldCheck" },
+    { to: "/schedules", label: "定时任务", permission: "schedules", icon: Clock, iconName: "Clock" },
+    { to: "/usage", label: "用量", icon: BarChart3, iconName: "BarChart3" },
   ] },
   { group: "系统", items: [
-    { to: "/admin/workspaces", label: "管理", permission: "admin", icon: Settings },
-    { to: "/admin/audit", label: "审计", permission: "audit", icon: ScrollText },
+    { to: "/admin/workspaces", label: "管理", permission: "admin", icon: Settings, iconName: "Settings" },
+    { to: "/admin/audit", label: "审计", permission: "audit", icon: ScrollText, iconName: "ScrollText" },
   ] },
 ] as const;
 
-function WorkspacePicker() {
-  const { roles, currentTenant } = useIdentity();
+function WorkspacePicker({ compact = false }: { compact?: boolean }) {
+  const { roles, currentTenant, authMode } = useIdentity();
   const workspace = useWorkspace();
   const client = useQueryClient();
   const [creating, setCreating] = useState(false);
@@ -54,6 +58,18 @@ function WorkspacePicker() {
   const [error, setError] = useState<unknown>();
   const intent = useIdempotencyIntent(name);
   const canCreate = canNavigate(roles, "workspaceCreate");
+  // iam 模式下工作空间就是 baize 项目：不创建、不切换。无项目时嵌入态也要给出提示；嵌入态隐藏的只是只读项目名（切换在 baize 顶栏）。
+  if (authMode === "iam") {
+    if (workspace.error) return <p className="text-caption text-danger-700">工作空间读取失败</p>;
+    if (!workspace.loading && !workspace.current) return <p className="text-caption text-muted-foreground">当前账号没有 baize 项目，请先在 baize 中加入项目</p>;
+    if (isEmbeddedInWujie()) return null;
+    return (
+      <div className={compact ? "flex items-center gap-2" : "space-y-1"}>
+        <span className="shrink-0 text-small text-muted-foreground">工作空间</span>
+        <span className="min-w-0 truncate text-body text-foreground">{workspace.current?.name}</span>
+      </div>
+    );
+  }
   async function submit(event: FormEvent) {
     event.preventDefault();
     setBusy(true);
@@ -73,9 +89,15 @@ function WorkspacePicker() {
   if (workspace.error) return <p className="text-caption text-danger-700">工作空间读取失败</p>;
   if (!workspace.loading && workspace.workspaces.length === 0) {
     return (
-      <div className="space-y-1">
-        <span className="text-small text-muted-foreground">工作空间</span>
-        {canCreate ? <button type="button" className="flex h-9 w-full items-center justify-center rounded-control bg-primary px-3 text-body font-medium text-primary-foreground hover:bg-primary-hover" onClick={() => setCreating(true)}>创建工作空间</button> : <p className="text-caption text-muted-foreground">还没有工作空间</p>}
+      <div className={compact ? "flex items-center" : "space-y-1"}>
+        {compact ? null : <span className="text-small text-muted-foreground">工作空间</span>}
+        {canCreate ? (
+          compact ? (
+            <Button size="sm" variant="primary" onClick={() => setCreating(true)}>创建工作空间</Button>
+          ) : (
+            <button type="button" className="flex h-9 w-full items-center justify-center rounded-control bg-primary px-3 text-body font-medium text-primary-foreground hover:bg-primary-hover" onClick={() => setCreating(true)}>创建工作空间</button>
+          )
+        ) : <p className="text-caption text-muted-foreground">还没有工作空间</p>}
         {creating ? (
           <Dialog title="创建工作空间" onClose={() => { if (!busy) setCreating(false); }}>
             <form className="space-y-4" onSubmit={(event) => void submit(event)}>
@@ -88,12 +110,12 @@ function WorkspacePicker() {
       </div>
     );
   }
-  return <Select label="工作空间" value={workspace.current?.id ?? ""} disabled={!workspace.workspaces.length} onValueChange={workspace.select} options={workspace.workspaces.map((item) => ({ value: item.id, label: item.name }))} />;
+  return <Select label="工作空间" inline={compact} value={workspace.current?.id ?? ""} disabled={!workspace.workspaces.length} onValueChange={workspace.select} options={workspace.workspaces.map((item) => ({ value: item.id, label: item.name }))} />;
 }
 
-function NavEntry({ to, label, icon: Icon }: { to: string; label: string; icon: LucideIcon }) {
+function NavEntry({ to, label, icon: Icon, exact = false }: { to: string; label: string; icon: LucideIcon; exact?: boolean }) {
   return (
-    <NavLink to={to} className={({ isActive }) => cn(ITEM, REAL, isActive && ACTIVE)}>
+    <NavLink to={to} end={exact} className={({ isActive }) => cn(ITEM, REAL, isActive && ACTIVE)}>
       <Icon aria-hidden="true" className="h-4 w-4" />
       {label}
     </NavLink>
@@ -123,10 +145,6 @@ function Sidebar({ onCollapse, query, setQuery, searching, setSearching }: { onC
         <WorkspacePicker />
       </div>
       <nav aria-label="主导航" className="flex shrink-0 flex-col gap-0.5 px-3">
-        <NavLink to="/sessions" end className={({ isActive }) => cn(ITEM, REAL, isActive && ACTIVE)}>
-          <SquarePen aria-hidden="true" className="h-4 w-4" />
-          新建对话
-        </NavLink>
         {NAV.map(({ group, items }) => {
           const visible = items.filter((item) => !("permission" in item) || canNavigate(roles, item.permission));
           if (!visible.length) return null;
@@ -134,7 +152,7 @@ function Sidebar({ onCollapse, query, setQuery, searching, setSearching }: { onC
             <div key={group || "main"} role="group" className={group ? "mt-4 flex flex-col gap-0.5" : "flex flex-col gap-0.5"}>
               {group ? <p className="mb-1 px-3 text-caption font-medium text-gray-500">{group}</p> : null}
               {visible.map((item) => (
-                <NavEntry key={item.to} to={item.to} label={item.label} icon={item.icon} />
+                <NavEntry key={item.to} to={item.to} label={item.label} icon={item.icon} exact={"exact" in item && item.exact} />
               ))}
             </div>
           );
@@ -157,6 +175,16 @@ function Sidebar({ onCollapse, query, setQuery, searching, setSearching }: { onC
   );
 }
 
+/** The sidebar navigation the base renders when orbit is embedded (NAV, permission-filtered; iconName is the lucide name). */
+function useWujieMenuSections(): WujieMenuSection[] {
+  const { roles } = useIdentity();
+  return NAV.flatMap(({ group, items }) => {
+    const visible = items.filter((item) => !("permission" in item) || canNavigate(roles, item.permission));
+    if (!visible.length) return [];
+    return [{ group: group || "main", groupTitle: group, items: visible.map((item) => ({ key: item.to, href: item.to, title: item.label, icon: item.iconName, ...("exact" in item ? { exact: item.exact } : {}) })) }];
+  });
+}
+
 /** The signed-in frame: sidebar (a drawer on phones) around the page. */
 export function AppLayout() {
   const wide = useMediaQuery(BREAKPOINT.sm);
@@ -164,10 +192,34 @@ export function AppLayout() {
   const [searching, setSearching] = useState(false);
   const [query, setQuery] = useState("");
   const { pathname } = useLocation();
+  const menuSections = useWujieMenuSections();
 
   useEffect(() => {
     if (!window.matchMedia(BREAKPOINT.sm).matches) setCollapsed(true);
   }, [pathname]);
+
+  if (isEmbeddedInWujie()) {
+    // 嵌入态侧栏/顶栏归基座：菜单经 bus 上报，这里只留内容区和一条放工作空间选择器的细栏。
+    return (
+      <>
+        <WujieMenuBridge prefix="orbit" sections={menuSections} />
+        <div className="flex h-full min-h-0 flex-col bg-card text-foreground">
+          <div className="flex h-12 shrink-0 items-center gap-3 border-b border-border bg-card px-4">
+            <WorkspacePicker compact />
+            <Popover trigger={<Button size="sm" variant="ghost"><Clock aria-hidden="true" className="h-4 w-4" />最近会话</Button>} contentClassName="w-80 max-h-[min(32rem,70vh)] overflow-y-auto">
+              <input autoFocus value={query} placeholder="搜索会话" aria-label="搜索会话标题" className="mb-2 h-8 w-full rounded-control border border-input bg-card px-2.5 text-body outline-none placeholder:text-muted-foreground focus:border-primary-500" onChange={(event) => setQuery(event.target.value)} />
+              <RecentSessions query={query} />
+            </Popover>
+          </div>
+          <ErrorBoundary resetKey={pathname}>
+            <div key={pathname} className="page-enter flex min-h-0 flex-1 flex-col">
+              <Outlet />
+            </div>
+          </ErrorBoundary>
+        </div>
+      </>
+    );
+  }
 
   const drawerOpen = !wide && !collapsed;
   return (

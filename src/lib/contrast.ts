@@ -44,8 +44,8 @@ function blockVars(css: string, selector: RegExp): Record<string, string> {
 
 /** Every custom property of a theme with `var(--x)` aliases resolved. Dark inherits what it does not redefine. */
 export function resolveTokens(css: string, theme: Theme): Record<string, string> {
-  const light = blockVars(css, /:root\s*\{/);
-  const raw = theme === "dark" ? { ...light, ...blockVars(css, /html\[data-theme="dark"\]\s*\{/) } : light;
+  const light = blockVars(css, /:root[^{]*\{/);
+  const raw = theme === "dark" ? { ...light, ...blockVars(css, /html\[data-theme="dark"\][^{]*\{/) } : light;
   const resolve = (name: string, depth = 0): string => {
     const value = raw[name];
     if (value === undefined) throw new Error(`unknown token ${name}`);

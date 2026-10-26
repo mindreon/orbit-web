@@ -9,8 +9,8 @@ const VARIANTS = {
 } as const;
 
 const SIZES = {
-  sm: "h-8 px-3 text-small",
-  md: "h-9 px-4 text-body",
+  sm: "h-11 px-3 text-small md:h-8",
+  md: "h-11 px-4 text-body md:h-9",
 } as const;
 
 export type ButtonProps = ButtonHTMLAttributes<HTMLButtonElement> & {

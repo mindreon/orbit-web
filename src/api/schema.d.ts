@@ -1728,7 +1728,7 @@ export interface components {
             client_id?: string;
             issuer?: string;
             /** @enum {unknown} */
-            mode: "dev" | "oidc";
+            mode: "dev" | "iam" | "oidc";
             scopes?: string[];
         };
         CreateWorkspace: {

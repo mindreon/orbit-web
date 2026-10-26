@@ -21,24 +21,24 @@
  * Space   Tailwind's 4px grid. Separate with spacing and background difference before reaching for a border.
  * Reading max-w-reading = 48rem (768px), about 54 CJK characters per line at text-body; the conversation and composer column.
  */
-:root {
+:root, :host {
   --gray-50: 220 20% 98%;
-  --gray-100: 220 16% 96%;
-  --gray-200: 220 14% 92%;
-  --gray-300: 220 13% 85%;
-  --gray-400: 220 9% 62%;
-  --gray-500: 220 9% 42%;
-  --gray-600: 220 10% 33%;
-  --gray-700: 222 13% 25%;
-  --gray-800: 224 16% 16%;
-  --gray-900: 225 20% 9%;
+  --gray-100: 220 14% 96%;
+  --gray-200: 220 13% 91%;
+  --gray-300: 216 12% 84%;
+  --gray-400: 218 11% 65%;
+  --gray-500: 220 9% 46%;
+  --gray-600: 215 14% 34%;
+  --gray-700: 217 19% 27%;
+  --gray-800: 215 28% 17%;
+  --gray-900: 221 39% 11%;
 
-  --primary-50: 217 100% 97%;
-  --primary-100: 218 96% 93%;
-  --primary-200: 218 92% 85%;
-  --primary-500: 219 90% 56%;
-  --primary-600: 219 80% 50%;
-  --primary-700: 219 78% 42%;
+  --primary-50: 217 100% 98%;
+  --primary-100: 218 100% 96%;
+  --primary-200: 217 100% 92%;
+  --primary-500: 219 92% 57%;
+  --primary-600: 220 76% 50%;
+  --primary-700: 221 78% 43%;
 
   --success-50: 152 70% 95%;
   --success-100: 152 65% 89%;
@@ -61,31 +61,31 @@
   --danger-600: 356 72% 48%;
   --danger-700: 356 78% 38%;
 
-  /* semantic aliases */
+  /* semantic aliases. Values follow baize (themes/common.css light block + tailwind.common.config.mjs ramps). */
   --background: 0 0% 100%;
-  --foreground: var(--gray-900);
+  --foreground: 225 17% 8%;
   --card: 0 0% 100%;
-  --card-foreground: var(--gray-900);
-  --primary: var(--primary-600);
-  --primary-hover: var(--primary-700);
+  --card-foreground: 225 17% 8%;
+  --primary: 219 92% 57%;
+  --primary-hover: 220 76% 50%;
   --primary-foreground: 0 0% 100%;
-  --secondary: var(--gray-100);
-  --secondary-foreground: var(--gray-800);
-  --muted: var(--gray-50);
-  --muted-foreground: var(--gray-500);
-  --accent: var(--primary-50);
-  --accent-foreground: var(--primary-700);
-  --destructive: var(--danger-600);
+  --secondary: 210 40% 98%;
+  --secondary-foreground: 225 14% 17%;
+  --muted: 210 32% 98%;
+  --muted-foreground: 218 10% 41%;
+  --accent: 217 100% 97%;
+  --accent-foreground: 219 76% 50%;
+  --destructive: 356 78% 58%;
   --destructive-foreground: 0 0% 100%;
   --success: var(--success-500);
   --warning: var(--warning-500);
-  --border: var(--gray-200);
-  --input: var(--gray-300);
-  --ring: var(--primary-500);
-  --sidebar-background: var(--gray-100);
-  --sidebar-foreground: var(--gray-800);
-  --sidebar-accent: var(--primary-100);
-  --sidebar-border: var(--gray-200);
+  --border: 220 23% 92%;
+  --input: 220 23% 92%;
+  --ring: 219 92% 57%;
+  --sidebar-background: 220 27% 98%;
+  --sidebar-foreground: 225 14% 17%;
+  --sidebar-accent: 217 100% 95%;
+  --sidebar-border: 220 23% 90%;
 
   --radius-control: 0.5rem;
   --radius-card: 0.75rem;
@@ -100,7 +100,7 @@
   color-scheme: light;
 }
 
-html[data-theme="dark"] {
+html[data-theme="dark"], :host([data-theme="dark"]) {
   --gray-50: 240 6% 9%;
   --gray-100: 240 6% 13%;
   --gray-200: 240 5% 18%;
@@ -140,10 +140,29 @@ html[data-theme="dark"] {
   --danger-600: 356 70% 50%;
   --danger-700: 356 90% 76%;
 
+  /* semantic aliases. Dark follows baize (themes/common.css dark block); the ramps above keep their orbit roles. */
+  --background: 225 18% 8%;
+  --foreground: 210 40% 98%;
+  --card: 225 15% 11%;
+  --card-foreground: 210 40% 98%;
+  --primary: 219 92% 64%;
   --primary-hover: 219 80% 44%;
-  --background: 240 6% 11%;
-  --card: 240 6% 14%;
-  --sidebar-background: var(--gray-50);
+  --primary-foreground: 0 0% 100%;
+  --secondary: 225 12% 15%;
+  --secondary-foreground: 210 40% 98%;
+  --muted: 225 12% 15%;
+  --muted-foreground: 218 14% 70%;
+  --accent: 222 45% 18%;
+  --accent-foreground: 219 92% 72%;
+  --destructive: 356 72% 55%;
+  --destructive-foreground: 0 0% 100%;
+  --border: 225 12% 18%;
+  --input: 225 12% 18%;
+  --ring: 219 92% 64%;
+  --sidebar-background: 225 17% 9%;
+  --sidebar-foreground: 210 40% 96%;
+  --sidebar-accent: 225 12% 15%;
+  --sidebar-border: 225 12% 18%;
   color-scheme: dark;
 }
 

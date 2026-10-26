@@ -26,7 +26,7 @@ async function createFromCatalog(page: Page, ref: string, marker: string, mobile
   await expect(dialog.getByLabel("入口类型")).toBeDisabled();
   await dialog.getByLabel("标题", { exact: true }).fill(marker);
   await dialog.getByRole("button", { name: "创建会话" }).click();
-  await expect(page).toHaveURL(/\/sessions\/[^/?]+$/);
+  await expect(page).toHaveURL(/\/orbit\/sessions\/[^/?]+$/);
   return new URL(page.url()).pathname.split("/").pop()!;
 }
 async function send(page: Page, text: string) {
@@ -47,23 +47,23 @@ async function complete(section: Locator) { await expect(section.getByText("已�
 /** Cleanup is preparation/teardown only, never an API assertion of page behaviour. */
 async function cleanup(request: APIRequestContext, tenant: string, sessions: readonly string[]) {
   if (!sessions.length) return;
-  const auth = await request.post("/v1/auth/dev/token", { data: { email: "dev@orbit.local" } });
+  const auth = await request.post("/orbit/v1/auth/dev/token", { data: { email: "dev@orbit.local" } });
   expect(auth.ok()).toBe(true);
   const token = await auth.json() as { access_token: string };
   const headers = { Authorization: `Bearer ${token.access_token}`, "X-Orbit-Tenant": tenant };
   for (const session of sessions) {
     let cursor: string | undefined;
     do {
-      const response = await request.get(`/v1/sessions/${session}/runs`, { headers, params: { limit: 100, ...(cursor ? { cursor } : {}) } });
+      const response = await request.get(`/orbit/v1/sessions/${session}/runs`, { headers, params: { limit: 100, ...(cursor ? { cursor } : {}) } });
       expect(response.ok()).toBe(true);
       const page = await response.json() as { items: { id: string; status: string }[]; next_cursor?: string };
       for (const run of page.items) if (["queued", "running", "waiting_input", "waiting_approval", "paused"].includes(run.status)) {
-        const result = await request.post(`/v1/runs/${run.id}/cancel`, { headers: { ...headers, "Idempotency-Key": crypto.randomUUID() } });
+        const result = await request.post(`/orbit/v1/runs/${run.id}/cancel`, { headers: { ...headers, "Idempotency-Key": crypto.randomUUID() } });
         if (!result.ok()) { const failure = await result.json() as { error: { code: string } }; expect(["RUN_FINISHED", "RUN_NOT_ACTIVE"]).toContain(failure.error.code); }
       }
       cursor = page.next_cursor || undefined;
     } while (cursor);
-    const archive = await request.post(`/v1/sessions/${session}/archive`, { headers: { ...headers, "Idempotency-Key": crypto.randomUUID() } });
+    const archive = await request.post(`/orbit/v1/sessions/${session}/archive`, { headers: { ...headers, "Idempotency-Key": crypto.randomUUID() } });
     expect(archive.ok()).toBe(true);
   }
 }
@@ -73,7 +73,7 @@ test.describe("WJ1 single expert delivery", () => {
   test.afterAll(async ({ request }) => cleanup(request, tenant, sessions));
   test("WJ1 tool history survives refresh, cancellation and continued conversation", async ({ page, seed, readCalls, recordRun }) => {
     tenant = seed.tenant_id; const marker = journeyMarker(1);
-    await login(page); await expect(page).toHaveURL(/\/sessions$/);
+    await login(page); await expect(page).toHaveURL(/\/orbit\/sessions$/);
     await expect(page.getByRole("combobox", { name: /工作空间.*dev/ })).toBeVisible();
     await expect(page.getByRole("navigation").getByRole("link", { name: "专家", exact: true })).toBeVisible();
     await expect(page.getByRole("navigation").getByRole("link", { name: "专家团", exact: true })).toBeVisible();
@@ -89,7 +89,7 @@ test.describe("WJ1 single expert delivery", () => {
     await complete(first.section);
     await expectModel(() => expect(first.section).toContainText("READY"));
     await first.section.getByRole("link", { name: "查看运行" }).click();
-    await expect(page).toHaveURL(new RegExp(`/runs/${first.id}$`));
+    await expect(page).toHaveURL(new RegExp(`/orbit/runs/${first.id}$`));
     const segments = page.getByRole("table", { name: "段", exact: true }).locator("tbody tr");
     await expect(segments.first()).toBeVisible();
     await expect(segments.last()).toContainText("已完成");
@@ -120,7 +120,7 @@ async function approveJourney(page: Page, readCalls: ReadCalls, marker: string, 
   await navigate(page, "收件箱", mobile);
   const item = page.locator(`section[data-run-id="${run.id}"]`);
   await expect(item).toBeVisible();
-  await expect(item.getByRole("link", { name: /在会话中查看/ })).toHaveAttribute("href", /\/sessions\//);
+  await expect(item.getByRole("link", { name: /在会话中查看/ })).toHaveAttribute("href", /\/orbit\/sessions\//);
   if (mobile) {
     expect(await item.evaluate((element) => element.scrollWidth <= element.clientWidth)).toBe(true);
     expect(await page.evaluate(() => document.documentElement.scrollWidth <= document.documentElement.clientWidth)).toBe(true);
@@ -146,7 +146,7 @@ test.describe("WJ3 tool approval", () => {
     await login(page); sessions.push(await createFromCatalog(page, "dev/notify-agent", marker));
     const first = await approveJourney(page, readCalls, marker, recordRun, false);
     await first.section.getByRole("link", { name: "查看运行" }).click();
-    await expect(page).toHaveURL(new RegExp(`/runs/${first.id}$`));
+    await expect(page).toHaveURL(new RegExp(`/orbit/runs/${first.id}$`));
     const records = page.getByRole("list", { name: "审批记录", exact: true }).getByRole("listitem");
     await expect(records).toHaveCount(1); await expect(records.first()).toContainText("已解决"); await expect(records.first()).toContainText("允许一次");
     const effects = page.getByRole("table", { name: "工具副作用", exact: true }).locator("tbody tr");
@@ -209,7 +209,7 @@ test.describe("WJ2 team collaboration", () => {
     await expect(page.getByTestId("file-preview")).toBeVisible();
     await expect(page.getByTestId("file-preview").locator("pre")).not.toHaveText("");
     await run.section.getByRole("link", { name: "查看运行" }).click();
-    await expect(page).toHaveURL(new RegExp(`/runs/${run.id}$`));
+    await expect(page).toHaveURL(new RegExp(`/orbit/runs/${run.id}$`));
     const segmentMembers = page.getByRole("table", { name: "段", exact: true }).locator("tbody tr td:first-child");
     for (const member of ["leader", "writer-1", "writer-2", "reviewer"]) await expect(segmentMembers.filter({ hasText: new RegExp(`^${member}$`) }).first()).toBeVisible();
     const events = page.getByTestId("replay-timeline").locator("[data-timeline-member]");

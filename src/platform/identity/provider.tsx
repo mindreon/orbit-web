@@ -49,6 +49,7 @@ export function IdentityProvider({ adapter, client, children }: { adapter: Ident
     defaultTenant: me.data?.default_tenant ?? null,
     roles: me.data?.roles ?? [],
     platformOperator: me.data?.platform_operator ?? false,
+    authMode: snapshot.config?.mode ?? null,
     rememberedTenant: adapter.credentials.tenant(),
     signOut, adapter,
     retry: () => { if (snapshot.status === "anonymous") void adapter.initialize(); else void me.refetch(); },

@@ -2,8 +2,9 @@ import type { AuthorizationServer } from "oauth4webapi";
 import type { AuthConfig, DevTokenRequest, DevTokenResponse } from "../../../api/auth";
 import type { Credentials } from "../../../api/client";
 import { describeFailure } from "../../../api/errors";
+import { BASE_PATH } from "../../../lib/basePath";
 import { requireOidcConfig, beginAuthorization, completeAuthorization, discover, endSessionUrl, refreshTokens, revokeRefreshToken, type OidcConfig, type OidcOptions } from "./oidc";
-import { STORAGE_KEYS, type KeyValueStore, type TokenSet } from "./storage";
+import { STORAGE_KEYS, type KeyValueStore, type TokenSet } from "../storage";
 
 export type AuthStatus = "initializing" | "anonymous" | "authenticated";
 
@@ -159,7 +160,7 @@ export class AuthController implements Credentials {
     // Ending the IdP session too, or the next "sign in" would silently sign the same user back in.
     const server = await this.authorizationServer(requireOidcConfig(config)).catch(() => null);
     if (server) await revokeRefreshToken(server, requireOidcConfig(config), tokens, this.oidcOptions()).catch(() => undefined);
-    const url = server && endSessionUrl(server, requireOidcConfig(config), tokens, `${this.deps.origin}${LOGIN_PATH}`);
+    const url = server && endSessionUrl(server, requireOidcConfig(config), tokens, `${this.deps.origin}${BASE_PATH}${LOGIN_PATH}`);
     if (url) this.deps.redirect(url.toString());
   }
 
@@ -261,6 +262,6 @@ export class AuthController implements Credentials {
   }
 
   private redirectUri(): string {
-    return `${this.deps.origin}${CALLBACK_PATH}`;
+    return `${this.deps.origin}${BASE_PATH}${CALLBACK_PATH}`;
   }
 }

@@ -1,6 +1,6 @@
 import * as oauth from "oauth4webapi";
 import type { AuthConfig } from "../../../api/auth";
-import { STORAGE_KEYS, type KeyValueStore, type TokenSet } from "./storage";
+import { STORAGE_KEYS, type KeyValueStore, type TokenSet } from "../storage";
 
 export type OidcConfig = AuthConfig & Required<Pick<AuthConfig, "issuer" | "client_id">>;
 export function requireOidcConfig(config: AuthConfig): OidcConfig {

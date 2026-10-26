@@ -1,8 +1,9 @@
 import type { IdentityAdapter } from "../index";
 import { api } from "../../client";
 import { fetchAuthConfig, requestDevToken } from "../../../api/auth";
+import { toRouterPath } from "../../../lib/basePath";
 import { AuthController } from "./controller";
-import { browserStore } from "./storage";
+import { browserStore } from "../storage";
 import { createElement } from "react";
 import { ControlSignInProvider } from "./AuthProvider";
 import { LoginPage } from "./LoginPage";
@@ -15,7 +16,8 @@ export const auth = new AuthController({
   store: browserStore(),
   redirect: (url) => window.location.assign(url),
   origin: window.location.origin,
-  currentPath: () => window.location.pathname + window.location.search + window.location.hash,
+  // Router paths for returnTo: the URL carries BASE_PATH, navigate() under the same basename would double it.
+  currentPath: () => toRouterPath(window.location.pathname + window.location.search + window.location.hash),
 });
 export const controlIdentity: IdentityAdapter = {
   subscribe: (listener) => auth.subscribe(listener),

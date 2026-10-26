@@ -7,7 +7,7 @@ const FIELD =
   "w-full rounded-control border border-input bg-card px-3 text-body text-foreground outline-none placeholder:text-muted-foreground hover:border-gray-400 focus:border-primary-500 focus:ring-2 focus:ring-primary-100 disabled:opacity-50";
 
 export function Input({ className, ...rest }: InputHTMLAttributes<HTMLInputElement>) {
-  return <input className={cn(FIELD, "h-9", className)} {...rest} />;
+  return <input className={cn(FIELD, "h-11 md:h-9", className)} {...rest} />;
 }
 
 export function Textarea({ className, ...rest }: TextareaHTMLAttributes<HTMLTextAreaElement>) {
@@ -18,7 +18,7 @@ export function Textarea({ className, ...rest }: TextareaHTMLAttributes<HTMLText
 export function Select({ className, children, ...rest }: SelectHTMLAttributes<HTMLSelectElement>) {
   return (
     <span className={cn("relative inline-block", className)}>
-      <select className={cn(FIELD, "h-9 appearance-none pr-8")} {...rest}>
+      <select className={cn(FIELD, "h-11 appearance-none pr-8 md:h-9")} {...rest}>
         {children}
       </select>
       <ChevronDown aria-hidden="true" className="pointer-events-none absolute right-2.5 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />

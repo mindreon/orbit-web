@@ -11,6 +11,8 @@ export interface IdentityValue {
   defaultTenant: string | null;
   roles: readonly string[];
   platformOperator: boolean;
+  /** `/auth/config` 的 mode；null 表示配置还没读到。iam 模式下工作空间 = baize 项目，orbit 不再创建或管理它。 */
+  authMode: "dev" | "iam" | "oidc" | null;
   rememberedTenant: string | null;
   signOut(): Promise<void>;
   retry(): void;
