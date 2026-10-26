@@ -10,6 +10,7 @@ import { Markdown } from "../../components/markdown/Markdown";
 import { kindLabels, visibilityLabels } from "../../components/kindLabels";
 import { assetFile, useAssetList } from "./api";
 import { assetTitle } from "../../components/assetText";
+import { parseRosterNotes } from "../../lib/teamForm";
 import { teamRoleLabels } from "./labels";
 import { VersionRefs } from "./VersionDetail";
 import { itemsOf, QueryContent } from "./shared";
@@ -73,7 +74,7 @@ function Profile({ asset, versionId, tab }: { asset: Asset; versionId: string; t
   const manifest = version.data.manifest;
   if (tab === "概述") return <Overview asset={asset} versionId={versionId} manifest={manifest} />;
   if (tab === "提示词") return <Prompts asset={asset} versionId={versionId} />;
-  if (tab === "成员") return <Members manifest={manifest} />;
+  if (tab === "成员") return <Members assetId={asset.id} versionId={versionId} manifest={manifest} />;
   if (tab === "配置") return <Config manifest={manifest} />;
   return <QueryContent query={files} empty="还没有文件">{itemsOf(files).length ? <FileTree entries={itemsOf(files).map((file) => ({ ...file, size: file.size_bytes }))} onOpen={() => undefined} /> : null}</QueryContent>;
 }
@@ -117,24 +118,32 @@ function Prompts({ asset, versionId }: { asset: Asset; versionId: string }) {
   );
 }
 
-function Members({ manifest }: { manifest: S["AssetVersion"]["manifest"] }) {
+function Members({ assetId, versionId, manifest }: { assetId: string; versionId: string; manifest: S["AssetVersion"]["manifest"] }) {
+  const notes = useBundleText(assetId, versionId, "members.json");
   const roles = manifest.team?.roles ?? [];
   if (!roles.length) return <p className="py-16 text-center text-body text-muted-foreground">这个专家团还没有成员</p>;
+  const byName = new Map(parseRosterNotes(notes.data ?? "").map((note) => [note.name, note]));
+  const titleOf = (name: string) => byName.get(name)?.label || name;
   const leader = roles.find((member) => member.role === "leader");
   return (
     <section>
       <p className="mb-4 flex items-center gap-3 text-small text-muted-foreground">
         <Users aria-hidden="true" className="h-4 w-4" />
-        领队 {leader?.name ?? "未指定"} · {roles.length} 位成员：{roles.map((member) => member.name).join("、")}
+        领队 {leader ? titleOf(leader.name) : "未指定"} · {roles.length} 位成员：{roles.map((member) => titleOf(member.name)).join("、")}
       </p>
       <ul className="space-y-2">
-        {roles.map((member) => (
-          <li key={member.name} className="rounded-control bg-muted px-4 py-2.5">
-            <span className="text-body font-medium text-foreground">{member.name}</span>
-            <span className="ml-2 text-small text-muted-foreground">{member.role === "leader" ? "领队" : teamRoleLabels[member.role]}</span>
-            <p className="mt-1 font-mono text-small text-muted-foreground">{member.agent}</p>
-          </li>
-        ))}
+        {roles.map((member) => {
+          const note = byName.get(member.name);
+          return (
+            <li key={member.name} className="rounded-control bg-muted px-4 py-2.5">
+              <span className="text-body font-medium text-foreground">{note?.label || member.name}</span>
+              <span className="ml-2 text-small text-muted-foreground">{member.role === "leader" ? "领队" : teamRoleLabels[member.role]}</span>
+              {note?.label && note.label !== member.name ? <span className="ml-2 font-mono text-caption text-muted-foreground">{member.name}</span> : null}
+              {note?.description ? <p className="mt-1 text-small text-gray-700">{note.description}</p> : null}
+              <p className="mt-1 font-mono text-small text-muted-foreground">{member.agent}</p>
+            </li>
+          );
+        })}
       </ul>
     </section>
   );
